@@ -20,12 +20,13 @@ from .forms import (
     CustomerAccountEntryForm,
     CustomerForm,
     InventoryAdjustmentForm,
+    MovementHeaderForm,
+    MovementLineForm,
     ProductForm,
     SaleForm,
     SaleItemFormSet,
     SaleAdjustmentItemForm,
     SaleReturnItemForm,
-    StockMovementForm,
 )
 from .models import (
     Brand,
@@ -588,31 +589,56 @@ def record_movement(request):
     view_site = site_context["active_site"]
     action_site = site_context["action_site"]
     site_locked = bool(action_site and not request.user.is_superuser)
+    MovementLineFormSet = formset_factory(  # type: ignore
+        MovementLineForm,
+        extra=1,
+        can_delete=True,
+    )
     if request.method == "POST":
-        form = StockMovementForm(
+        header_form = MovementHeaderForm(
             request.POST,
             current_site=action_site or view_site,
             site_locked=site_locked,
+            user=request.user,
         )
-        if form.is_valid():
-            movement = form.save(commit=False)
-            if site_locked and action_site:
-                movement.site = action_site
-            if request.user.is_authenticated:
-                movement.performed_by = request.user
-            if movement.site is None:
-                movement_site = action_site or view_site or get_default_site()
-                if movement_site is None:
-                    messages.error(request, "Aucun site configuré pour enregistrer le mouvement.")
-                    return redirect(reverse("inventory:record_movement"))
-                movement.site = movement_site
-            movement.save()
-            messages.success(request, "Le mouvement a été enregistré avec succès.")
-            return redirect(reverse("inventory:dashboard"))
+        line_formset = MovementLineFormSet(request.POST, prefix="lines")
+        if header_form.is_valid() and line_formset.is_valid():
+            line_forms = [
+                form
+                for form in line_formset
+                if form.cleaned_data.get("product")
+                and form.cleaned_data.get("quantity")
+                and not form.cleaned_data.get("DELETE")
+            ]
+            if not line_forms:
+                messages.error(request, "Ajoutez au moins un produit à déplacer.")
+            else:
+                with transaction.atomic():
+                    created = 0
+                    for form in line_forms:
+                        StockMovement.objects.create(
+                            product=form.cleaned_data["product"],
+                            movement_type=header_form.cleaned_data["movement_type"],
+                            quantity=form.cleaned_data["quantity"],
+                            site=header_form.cleaned_data["site"],
+                            movement_date=header_form.cleaned_data["movement_date"],
+                            document_number=header_form.cleaned_data.get("document_number", ""),
+                            comment=header_form.cleaned_data.get("comment", ""),
+                            performed_by=request.user if request.user.is_authenticated else None,
+                        )
+                        created += 1
+                messages.success(request, f"{created} mouvement(s) ont été enregistrés avec succès.")
+                return redirect(reverse("inventory:dashboard"))
     else:
-        form = StockMovementForm(current_site=action_site or view_site, site_locked=site_locked)
+        header_form = MovementHeaderForm(
+            current_site=action_site or view_site,
+            site_locked=site_locked,
+            user=request.user,
+        )
+        line_formset = MovementLineFormSet(prefix="lines")
     context = {
-        "form": form,
+        "header_form": header_form,
+        "line_formset": line_formset,
     }
     context.update(site_context)
     return render(request, "inventory/movement_form.html", context)
@@ -648,16 +674,12 @@ def inventory_overview(request):
             products = filtered
             scan_message = f"Résultat du scan : {scan_code}"
         else:
-            new_product = _create_product_from_scan(scan_code)
-            products = Product.objects.with_stock_quantity(site=view_site).filter(
-                pk=new_product.pk
-            )
             scan_message = (
-                f"Nouveau produit {new_product.sku} créé automatiquement pour le code {scan_code}."
+                "Produit introuvable pour ce code. Veuillez le créer depuis la page Produits."
             )
-            messages.success(
+            messages.error(
                 request,
-                f"Le produit {new_product.name} a été créé. Vous pouvez maintenant enregistrer un mouvement.",
+                "Aucun produit ne correspond à ce scan. Créez-le depuis la page d'ajout de produit avant de poursuivre.",
             )
 
     adjustment_form = InventoryAdjustmentForm(
@@ -1584,20 +1606,19 @@ def lookup_product(request):
         .for_scan_code(code)
         .first()
     )
-    created = False
     if not product:
-        product = _create_product_from_scan(code)
-        created = True
-        # Reload with annotations for consistent response
-        product = (
-            Product.objects.with_stock_quantity(site=active_site)
-            .select_related("brand", "category")
-            .get(pk=product.pk)
+        return JsonResponse(
+            {
+                "found": False,
+                "created": False,
+                "error": "Produit introuvable. Créez-le avant d'enregistrer un mouvement.",
+            },
+            status=404,
         )
     return JsonResponse(
         {
             "found": True,
-            "created": created,
+            "created": False,
             "product": {
                 "id": product.id,
                 "name": product.name,
