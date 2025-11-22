@@ -1,3 +1,4 @@
+from django.contrib.auth.decorators import login_required
 from django.urls import path
 
 from . import views
@@ -5,28 +6,48 @@ from . import views
 app_name = "inventory"
 
 urlpatterns = [
-    path("", views.dashboard, name="dashboard"),
-    path("analyses/", views.analytics, name="analytics"),
-    path("clients/", views.customers_list, name="customer_list"),
-    path("clients/nouveau/", views.customer_create, name="customer_create"),
-    path("clients/<int:pk>/", views.customer_detail, name="customer_detail"),
-    path("clients/<int:pk>/modifier/", views.customer_update, name="customer_update"),
-    path("devis/", views.quotes_list, name="quotes_list"),
-    path("devis/nouveau/", views.quote_create, name="quote_create"),
-    path("devis/<int:pk>/", views.quote_detail, name="quote_detail"),
-    path("devis/<int:pk>/confirmer/", views.quote_confirm, name="quote_confirm"),
-    path("mouvements/nouveau/", views.record_movement, name="record_movement"),
-    path("produits/<int:pk>/", views.product_detail, name="product_detail"),
-    path("versions/<int:version_id>/revert/", views.version_revert, name="version_revert"),
-    path("inventaire/", views.inventory_overview, name="inventory_overview"),
-    path("ventes/", views.sales_list, name="sales_list"),
-    path("ventes/nouvelle/", views.sale_create, name="sale_create"),
-    path("ventes/<int:pk>/retour/", views.sale_return, name="sale_return"),
-    path("ventes/<int:pk>/ajuster/", views.sale_adjust, name="sale_adjust"),
-    path("documents/<int:pk>/<str:doc_type>/", views.sale_document_preview, name="sale_document_preview"),
-    path("documents/<int:pk>/<str:doc_type>/pdf/", views.sale_document_pdf, name="sale_document_pdf"),
-    path("api/products/scan/", views.lookup_product, name="lookup_product"),
-    path("api/sales/scan/", views.scan_sale_product, name="scan_sale_product"),
-    path("produits/import/", views.import_products, name="import_products"),
-    path("produits/import/modele/", views.export_import_template, name="export_import_template"),
+    path("", login_required(views.dashboard), name="dashboard"),
+    path("analyses/", login_required(views.analytics), name="analytics"),
+    path("clients/", login_required(views.customers_list), name="customer_list"),
+    path("clients/nouveau/", login_required(views.customer_create), name="customer_create"),
+    path("clients/<int:pk>/", login_required(views.customer_detail), name="customer_detail"),
+    path(
+        "clients/<int:pk>/modifier/",
+        login_required(views.customer_update),
+        name="customer_update",
+    ),
+    path("devis/", login_required(views.quotes_list), name="quotes_list"),
+    path("devis/nouveau/", login_required(views.quote_create), name="quote_create"),
+    path("devis/<int:pk>/", login_required(views.quote_detail), name="quote_detail"),
+    path("devis/<int:pk>/confirmer/", login_required(views.quote_confirm), name="quote_confirm"),
+    path("mouvements/nouveau/", login_required(views.record_movement), name="record_movement"),
+    path("produits/<int:pk>/", login_required(views.product_detail), name="product_detail"),
+    path(
+        "versions/<int:version_id>/revert/",
+        login_required(views.version_revert),
+        name="version_revert",
+    ),
+    path("inventaire/", login_required(views.inventory_overview), name="inventory_overview"),
+    path("ventes/", login_required(views.sales_list), name="sales_list"),
+    path("ventes/nouvelle/", login_required(views.sale_create), name="sale_create"),
+    path("ventes/<int:pk>/retour/", login_required(views.sale_return), name="sale_return"),
+    path("ventes/<int:pk>/ajuster/", login_required(views.sale_adjust), name="sale_adjust"),
+    path(
+        "documents/<int:pk>/<str:doc_type>/",
+        login_required(views.sale_document_preview),
+        name="sale_document_preview",
+    ),
+    path(
+        "documents/<int:pk>/<str:doc_type>/pdf/",
+        login_required(views.sale_document_pdf),
+        name="sale_document_pdf",
+    ),
+    path("api/products/scan/", login_required(views.lookup_product), name="lookup_product"),
+    path("api/sales/scan/", login_required(views.scan_sale_product), name="scan_sale_product"),
+    path("produits/import/", login_required(views.import_products), name="import_products"),
+    path(
+        "produits/import/modele/",
+        login_required(views.export_import_template),
+        name="export_import_template",
+    ),
 ]

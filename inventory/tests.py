@@ -159,6 +159,7 @@ class InventoryViewTests(TestCase):
             email="gestion@example.com",
         )
         SiteAssignment.objects.create(user=self.user, site=self.site)
+        self.client.force_login(self.user)
 
     def test_dashboard_renders(self):
         response = self.client.get(reverse("inventory:dashboard"))
@@ -244,6 +245,12 @@ class ImportViewTests(TestCase):
             code="RECEPTION_IMPORT",
             direction=MovementType.MovementDirection.ENTRY,
         )
+        self.user = get_user_model().objects.create_user(
+            username="importer",
+            password="pass-import",
+            email="import@example.com",
+        )
+        self.client.force_login(self.user)
 
     def test_import_creates_products_and_stock(self):
         csv_content = (
@@ -353,6 +360,12 @@ class SalesWorkflowTests(TestCase):
             quantity=20,
             movement_date=timezone.now(),
         )
+        self.user = get_user_model().objects.create_user(
+            username="salesman",
+            password="strong-pass",
+            email="sales@example.com",
+        )
+        self.client.force_login(self.user)
 
     def test_sale_confirmation_creates_exit_movements(self):
         sale = Sale.objects.create(
@@ -652,6 +665,12 @@ class CustomerViewTests(TestCase):
             company_name="VueCorp",
             email="vue@example.com",
         )
+        self.user = get_user_model().objects.create_user(
+            username="customer-user",
+            password="password123",
+            email="customer@example.com",
+        )
+        self.client.force_login(self.user)
 
     def test_customer_list_view(self):
         response = self.client.get(reverse("inventory:customer_list"))
