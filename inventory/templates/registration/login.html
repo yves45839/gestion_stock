@@ -1,0 +1,125 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Connexion</title>
+    <style>
+        :root {
+            --accent: #0f7c90;
+            --border: #e5e7eb;
+            --text: #1f2933;
+            --muted: #6b7280;
+        }
+        * {
+            box-sizing: border-box;
+            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f7f8fa;
+            color: var(--text);
+        }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 2rem;
+            width: min(420px, 92vw);
+            box-shadow: 0 12px 30px rgba(15, 124, 144, 0.08);
+            border: 1px solid rgba(15, 124, 144, 0.08);
+        }
+        h1 {
+            margin: 0 0 0.5rem;
+            font-size: 1.5rem;
+        }
+        p {
+            margin: 0 0 1.5rem;
+            color: var(--muted);
+        }
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+            color: var(--muted);
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        button {
+            width: 100%;
+            padding: 0.9rem 1rem;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #0f7c90, #1f97b4);
+            color: #fff;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.1s ease, box-shadow 0.2s ease;
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(15, 124, 144, 0.15);
+        }
+        .help {
+            margin-top: 1rem;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+        .errorlist {
+            list-style: none;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+            margin: 0 0 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Connexion</h1>
+        <p>Identifiez-vous pour accéder à l'application.</p>
+        {% if form.non_field_errors %}
+            <ul class="errorlist">
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <label for="id_username">Nom d'utilisateur</label>
+            <input type="text" name="username" autofocus required id="id_username" value="{{ form.username.value|default:'' }}">
+            {% if form.username.errors %}
+                <ul class="errorlist">{% for error in form.username.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+            {% endif %}
+
+            <label for="id_password">Mot de passe</label>
+            <input type="password" name="password" required id="id_password">
+            {% if form.password.errors %}
+                <ul class="errorlist">{% for error in form.password.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+            {% endif %}
+
+            <button type="submit">Se connecter</button>
+            <input type="hidden" name="next" value="{{ next }}">
+        </form>
+        <div class="help">
+            Besoin d'un compte ? Contactez votre administrateur.
+        </div>
+    </div>
+</body>
+</html>
