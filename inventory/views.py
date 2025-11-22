@@ -1075,7 +1075,7 @@ def sale_return(request, pk):
             if not processed_items:
                 messages.warning(request, "Sélectionnez au moins un article à retourner.")
             else:
-                movement_site = _get_active_site(request) or sale.site or get_default_site()
+                movement_site = _get_action_site(request) or sale.site or get_default_site()
                 if movement_site is None:
                     messages.error(
                         request, "Aucun site configuré pour enregistrer le retour."
