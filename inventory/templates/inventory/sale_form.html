@@ -1,0 +1,363 @@
+﻿{% extends "inventory/base.html" %}
+{% block title %}{{ form_title|default:"Nouvelle vente" }} - Gestion de stock{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+        <div>
+            <h1 style="margin:0;font-size:1.5rem;">{{ form_title|default:"Nouvelle vente" }}</h1>
+            <p style="margin:0.25rem 0 0;color:var(--muted);">
+                {{ form_description|default:"Ajoutez vos lignes puis enregistrez pour mettre à jour le stock." }}
+            </p>
+        </div>
+        <a href="{{ cancel_url|default:request.path }}" class="btn secondary">Retour</a>
+    </div>
+</div>
+<form method="post" id="sale-form">
+    {% csrf_token %}
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));gap:1.5rem;">
+        <div class="card">
+            <h2 style="margin-top:0;">Informations generales</h2>
+            {% if sale_form.non_field_errors %}
+                <div class="message error">
+                    {{ sale_form.non_field_errors }}
+                </div>
+            {% endif %}
+            {% for field in sale_form %}
+                <div style="margin-bottom:1rem;">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}
+                        <small style="color:var(--muted);">{{ field.help_text }}</small>
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <div class="field-error">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="card" style="grid-column: span 2;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:1rem;">
+                <div>
+                    <h2 style="margin:0;">Lignes de vente</h2>
+                    <small style="color:var(--muted);">Une seule ligne apparait d'abord. Ajoutez autant de produits, sections ou notes que necessaire.</small>
+                </div>
+                <div class="line-buttons">
+                    <button type="button" class="btn secondary small" data-add-line="product">+ Ajouter un produit</button>
+                    <button type="button" class="btn secondary small" data-add-line="section">Ajouter une section</button>
+                    <button type="button" class="btn secondary small" data-add-line="note">Ajouter une note</button>
+                </div>
+            </div>
+            {% if formset.non_form_errors %}
+                <div class="message error">
+                    {{ formset.non_form_errors }}
+                </div>
+            {% endif %}
+            {{ formset.management_form }}
+            <div class="table-wrapper">
+                <table class="sale-lines-table">
+                    <thead>
+                        <tr>
+                            <th style="width:45%;">Produit / Texte</th>
+                            <th style="width:12%;">Quantite</th>
+                            <th style="width:15%;">Prix unitaire</th>
+                            <th style="width:15%;">Montant</th>
+                            <th style="width:13%;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sale-lines-body">
+                        {% for form in formset.forms %}
+                            {% include "inventory/partials/sale_line_row.html" with form=form row_index=forloop.counter0 %}
+                        {% empty %}
+                            {% include "inventory/partials/sale_line_row.html" with form=formset.empty_form row_index=0 %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="sale-summary">
+                <span>Total</span>
+                <strong id="sale-total-display">0.00</strong>
+            </div>
+        </div>
+    </div>
+    <div style="margin-top:1.5rem;text-align:right;">
+        <a href="{{ cancel_url|default:request.path }}" class="btn secondary" style="margin-right:0.5rem;">Annuler</a>
+        <button type="submit" class="btn">{{ submit_label|default:"Enregistrer" }}</button>
+    </div>
+</form>
+<template id="sale-line-template">
+    {% include "inventory/partials/sale_line_row.html" with form=formset.empty_form row_index="__prefix__" %}
+</template>
+{{ product_dataset|json_script:"product-dataset" }}
+<datalist id="product-options"></datalist>
+<style>
+.sale-lines-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.sale-lines-table th,
+.sale-lines-table td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem;
+    vertical-align: top;
+}
+.sale-lines-table input,
+.sale-lines-table select {
+    width: 100%;
+}
+.field-error {
+    color: #b91c1c;
+    font-size: 0.8rem;
+}
+.sale-line.text-line .quantity-cell,
+.sale-line.text-line .price-cell,
+.sale-line.text-line .amount-cell {
+    display: none;
+}
+.sale-line .note-fields { display: none; }
+.sale-line.text-line .product-fields { display: none; }
+.sale-line.text-line .note-fields { display: block; }
+.line-buttons .btn { margin-left: 0.35rem; }
+.btn.small { padding: 0.3rem 0.85rem; font-size: 0.85rem; }
+.sale-summary {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+    font-size: 1.1rem;
+}
+.sale-summary strong {
+    font-size: 1.4rem;
+}
+.product-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.product-search {
+    width: 100%;
+}
+</style>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const body = document.getElementById("sale-lines-body");
+    const template = document.getElementById("sale-line-template").innerHTML.trim();
+    const totalInput = document.getElementById("id_items-TOTAL_FORMS");
+    const totalDisplay = document.getElementById("sale-total-display");
+    const productDataset = JSON.parse(document.getElementById("product-dataset").textContent || "[]");
+    const priceMap = {};
+    const productMap = {};
+    const productOptions = document.getElementById("product-options");
+
+    const formatProductLabel = (item) => {
+        const ref = item.sku ? ` (${item.sku})` : "";
+        return `${item.name}${ref} [${item.id}]`;
+    };
+
+    function fillProductOptions() {
+        if (!productOptions || productOptions.children.length) {
+            return;
+        }
+        productDataset.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = formatProductLabel(item);
+            option.dataset.productId = item.id;
+            productOptions.appendChild(option);
+        });
+    }
+
+    productDataset.forEach((item) => {
+        priceMap[item.id.toString()] = parseFloat(item.sale_price) || 0;
+        productMap[item.id.toString()] = item;
+    });
+    fillProductOptions();
+
+    function findProductFromInput(value) {
+        const normalized = (value || "").toLowerCase().trim();
+        if (!normalized) {
+            return null;
+        }
+        let match = productDataset.find(
+            (item) => formatProductLabel(item).toLowerCase() === normalized
+        );
+        if (match) {
+            return match;
+        }
+        match = productDataset.find((item) => {
+            const name = (item.name || "").toLowerCase();
+            const sku = (item.sku || "").toLowerCase();
+            return name.includes(normalized) || sku.includes(normalized);
+        });
+        return match || null;
+    }
+
+    function updateRowMode(row, type) {
+        row.dataset.lineType = type;
+        row.classList.toggle("text-line", type !== "product");
+        const label = row.querySelector("[data-line-label]");
+        if (label) {
+            label.textContent = type === "section" ? "Section" : (type === "note" ? "Note" : "Produit");
+        }
+        const typeInput = row.querySelector(".line-type-input");
+        if (typeInput) {
+            typeInput.value = type;
+        }
+    }
+
+    function updateLineTotal(row) {
+        let total = 0;
+        if (row.dataset.lineType === "product") {
+            const qty = parseFloat(row.querySelector(".quantity-input").value) || 0;
+            const price = parseFloat(row.querySelector(".unit-price-input").value) || 0;
+            total = qty * price;
+        }
+        const target = row.querySelector("[data-line-total]");
+        if (target) {
+            target.textContent = total.toFixed(2);
+        }
+    }
+
+    function updateSummary() {
+        let total = 0;
+        body.querySelectorAll(".sale-line").forEach((row) => {
+            if (row.dataset.lineType === "product") {
+                const qty = parseFloat(row.querySelector(".quantity-input").value) || 0;
+                const price = parseFloat(row.querySelector(".unit-price-input").value) || 0;
+                total += qty * price;
+            }
+        });
+        totalDisplay.textContent = total.toFixed(2);
+    }
+
+    function attachEvents(row) {
+        const productSelect = row.querySelector(".product-select");
+        const qtyInput = row.querySelector(".quantity-input");
+        const priceInput = row.querySelector(".unit-price-input");
+        const removeBtn = row.querySelector("[data-action='remove-line']");
+        const productSearch = row.querySelector(".product-search");
+
+        function setProduct(product) {
+            if (!productSelect || !product) return;
+            productSelect.value = product.id;
+            if (productSearch) {
+                productSearch.value = formatProductLabel(product);
+            }
+            if (priceInput) {
+                const price = priceMap[product.id.toString()] || 0;
+                priceInput.value = price.toFixed(2);
+            }
+            if (qtyInput && (!qtyInput.value || parseFloat(qtyInput.value) <= 0)) {
+                qtyInput.value = "1";
+            }
+            updateLineTotal(row);
+            updateSummary();
+        }
+
+        function syncSearchLabel() {
+            if (!productSelect || !productSearch) return;
+            const product = productMap[productSelect.value];
+            if (product) {
+                productSearch.value = formatProductLabel(product);
+            }
+        }
+
+        if (productSelect) {
+            productSelect.addEventListener("change", () => {
+                const product = productMap[productSelect.value];
+                if (!product) {
+                    return;
+                }
+                setProduct(product);
+            });
+        }
+        if (productSearch) {
+            productSearch.addEventListener("change", () => {
+                const product = findProductFromInput(productSearch.value);
+                if (product) {
+                    setProduct(product);
+                } else if (productSelect) {
+                    productSelect.value = "";
+                    if (priceInput) {
+                        priceInput.value = "";
+                    }
+                    updateLineTotal(row);
+                    updateSummary();
+                }
+            });
+            productSearch.addEventListener("blur", syncSearchLabel);
+        }
+        if (qtyInput) {
+            qtyInput.addEventListener("input", () => {
+                updateLineTotal(row);
+                updateSummary();
+            });
+        }
+        if (priceInput) {
+            priceInput.addEventListener("input", () => {
+                updateLineTotal(row);
+                updateSummary();
+            });
+        }
+        if (removeBtn) {
+            removeBtn.addEventListener("click", () => {
+                row.remove();
+                refreshIndexes();
+            });
+        }
+        syncSearchLabel();
+        updateLineTotal(row);
+    }
+
+    function refreshIndexes() {
+        const rows = Array.from(body.querySelectorAll(".sale-line"));
+        rows.forEach((row, index) => {
+            row.dataset.formIndex = index;
+            row.querySelectorAll("input, select").forEach((input) => {
+                if (!input.name) {
+                    return;
+                }
+                input.name = input.name.replace(/items-\d+-/, `items-${index}-`);
+                if (input.id) {
+                    input.id = input.id.replace(/id_items-\d+-/, `id_items-${index}-`);
+                }
+            });
+        });
+        totalInput.value = rows.length;
+        updateSummary();
+    }
+
+    function addLine(type) {
+        const newIndex = body.querySelectorAll(".sale-line").length;
+        let html = template.replace(/__prefix__/g, newIndex);
+        const wrapper = document.createElement("tbody");
+        wrapper.innerHTML = html.trim();
+        const row = wrapper.querySelector(".sale-line");
+        row.querySelectorAll("input, select").forEach((input) => {
+            if (input.name) {
+                input.name = input.name.replace(/__prefix__/, newIndex);
+            }
+            if (input.id) {
+                input.id = input.id.replace(/__prefix__/, newIndex);
+            }
+        });
+        updateRowMode(row, type);
+        body.appendChild(row);
+        attachEvents(row);
+        refreshIndexes();
+    }
+
+    body.querySelectorAll(".sale-line").forEach((row) => {
+        const typeInput = row.querySelector(".line-type-input");
+        updateRowMode(row, (typeInput && typeInput.value) || "product");
+        attachEvents(row);
+    });
+    refreshIndexes();
+
+    document.querySelectorAll("[data-add-line]").forEach((button) => {
+        button.addEventListener("click", () => {
+            addLine(button.getAttribute("data-add-line") || "product");
+        });
+    });
+});
+</script>
+{% endblock %}

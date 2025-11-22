@@ -1,0 +1,223 @@
+{% extends "inventory/base.html" %}
+{% block title %}Compte client - {{ customer.display_name }}{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+        <div>
+            <h1 style="margin:0;font-size:1.5rem;">{{ customer.display_name }}</h1>
+            <p style="margin:0.25rem 0 0;color:var(--muted);">
+                Référence {{ customer.reference }}{% if customer.company_name %} · {{ customer.company_name }}{% endif %}
+            </p>
+        </div>
+        <div style="display:flex;gap:0.5rem;">
+            <a href="{% url 'inventory:customer_update' customer.pk %}" class="btn secondary">Modifier</a>
+            <a href="{% url 'inventory:customer_list' %}" class="btn secondary">Retour</a>
+        </div>
+    </div>
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));margin-top:1.5rem;">
+        <div>
+            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Solde actuel</p>
+            <p class="value" style="margin:0;">{{ customer.balance|floatformat:2 }} FCFA</p>
+        </div>
+        <div>
+            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Plafond de crédit</p>
+            <p class="value" style="margin:0;">{{ customer.credit_limit|floatformat:2 }} FCFA</p>
+        </div>
+        <div>
+            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Contact</p>
+            <p class="value" style="margin:0;font-size:1rem;">
+                {{ customer.email|default:"—" }}<br>
+                {{ customer.phone|default:"—" }}
+            </p>
+        </div>
+    </div>
+</div>
+<div class="grid" style="grid-template-columns: 1.2fr 0.8fr;gap:1.5rem;margin-bottom:1.5rem;">
+    <div class="card">
+        <h2 style="margin-top:0;">Historique du compte</h2>
+        {% if entries %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Libellé</th>
+                        <th>Type</th>
+                        <th>Montant</th>
+                        <th>Solde</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                        <tr>
+                            <td>{{ entry.occurred_at|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                {{ entry.label }}
+                                {% if entry.sale %}
+                                    <br><small style="color:var(--muted);">Vente {{ entry.sale.reference }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if entry.entry_type == 'debit' %}warn{% else %}safe{% endif %}">
+                                    {{ entry.get_entry_type_display }}
+                                </span>
+                            </td>
+                            <td>{{ entry.amount|floatformat:2 }} FCFA</td>
+                            <td>{{ entry.running_balance|floatformat:2 }} FCFA</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="margin:0;">Aucun mouvement encore enregistré pour ce client.</p>
+        {% endif %}
+    </div>
+        <div class="card">
+            <h2 style="margin-top:0;">Ajouter un mouvement</h2>
+            <form method="post">
+                <input type="hidden" name="form_type" value="entry">
+                {% csrf_token %}
+                {% if entry_form.non_field_errors %}
+                    <div class="message error">{{ entry_form.non_field_errors }}</div>
+            {% endif %}
+            {% for field in entry_form %}
+                <div style="margin-bottom:1rem;">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}
+                        <div class="field-error">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+            <button type="submit" class="btn" style="width:100%;">Enregistrer</button>
+            </form>
+            <p style="font-size:0.85rem;color:var(--muted);margin-top:1rem;">
+                Utilisez un débit pour facturer (augmente la dette) ou un crédit pour enregistrer un paiement.
+            </p>
+        </div>
+    </div>
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));gap:1.5rem;">
+        <div class="card">
+            <h2 style="margin-top:0;">Modifier le client</h2>
+            <form method="post" style="margin-top:1rem;">
+                <input type="hidden" name="form_type" value="customer">
+                {% csrf_token %}
+                {% if customer_form.non_field_errors %}
+                    <div class="message error" style="margin-bottom:1rem;">
+                        {{ customer_form.non_field_errors|join:", " }}
+                    </div>
+                {% endif %}
+                <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+                    <div>
+                        {{ customer_form.reference.label_tag }}
+                        {{ customer_form.reference }}
+                        {% for error in customer_form.reference.errors %}
+                            <div class="field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        {{ customer_form.name.label_tag }}
+                        {{ customer_form.name }}
+                        {% for error in customer_form.name.errors %}
+                            <div class="field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        {{ customer_form.company_name.label_tag }}
+                        {{ customer_form.company_name }}
+                        {% for error in customer_form.company_name.errors %}
+                            <div class="field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        {{ customer_form.email.label_tag }}
+                        {{ customer_form.email }}
+                        {% for error in customer_form.email.errors %}
+                            <div class="field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        {{ customer_form.phone.label_tag }}
+                        {{ customer_form.phone }}
+                        {% for error in customer_form.phone.errors %}
+                            <div class="field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        {{ customer_form.credit_limit.label_tag }}
+                        {{ customer_form.credit_limit }}
+                        {% for error in customer_form.credit_limit.errors %}
+                            <div class="field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-top:1rem;">
+                    {% with field=customer_form.address %}
+                        <div>
+                            {{ field.label_tag }}
+                            {{ field }}
+                            {% for error in field.errors %}
+                                <div class="field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endwith %}
+                    {% with field=customer_form.notes %}
+                        <div>
+                            {{ field.label_tag }}
+                            {{ field }}
+                            {% for error in field.errors %}
+                                <div class="field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endwith %}
+                </div>
+                <div style="margin-top:1rem;">
+                    <button type="submit" class="btn">Enregistrer les modifications</button>
+                </div>
+            </form>
+        </div>
+        <div class="card">
+            <h2 style="margin-top:0;">Historique des versions</h2>
+            {% if versions %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Action</th>
+                            <th>Utilisateur</th>
+                            <th>Nom</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for version in versions %}
+                            <tr>
+                                <td>{{ version.created_at|date:"d/m/Y H:i" }}</td>
+                                <td>{{ version.get_action_display }}</td>
+                                <td>
+                                    {% if version.user %}
+                                        {{ version.user.get_full_name|default:version.user.username }}
+                                    {% else %}
+                                        Système
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ version.snapshot.name|default:version.snapshot.company_name|default:"-" }}
+                                </td>
+                                <td>
+                                    <form method="post" action="{% url 'inventory:version_revert' version.pk %}" style="margin:0;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn secondary" style="padding:0.35rem 0.85rem;">
+                                            Restaurer
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="margin:0;">Aucune version enregistrée pour ce client.</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

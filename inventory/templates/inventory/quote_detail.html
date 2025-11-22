@@ -1,0 +1,74 @@
+{% extends "inventory/base.html" %}
+{% block title %}Devis {{ sale.reference }}{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+        <div>
+            <h1 style="margin:0;font-size:1.5rem;">Devis {{ sale.reference }}</h1>
+            <p style="margin:0.25rem 0 0;color:var(--muted);">Client : {{ sale.customer_display_name }}</p>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <a href="{% url 'inventory:sale_document_preview' sale.pk 'quote' %}" class="btn secondary">Prévisualiser</a>
+            <a href="{% url 'inventory:sale_document_pdf' sale.pk 'quote' %}" class="btn secondary">Exporter PDF</a>
+            {% if can_confirm %}
+                <form method="post" action="{% url 'inventory:quote_confirm' sale.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn">Convertir en facture</button>
+                </form>
+            {% else %}
+                <span class="badge safe">Déjà converti</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<div class="card" style="margin-bottom:1.5rem;">
+    <h2 style="margin-top:0;">Lignes du devis</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Description</th>
+                <th>Quantité</th>
+                <th>Prix unitaire</th>
+                <th>Montant</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+                <tr>
+                    <td>{{ item.get_line_type_display }}</td>
+                    <td>
+                        {% if item.product %}
+                            {{ item.product.name }}
+                        {% else %}
+                            {{ item.description }}
+                        {% endif %}
+                    </td>
+                    <td>{{ item.quantity }}</td>
+                    <td>
+                        {% if item.line_type == item.LineType.PRODUCT %}
+                            {{ item.unit_price|floatformat:2 }} FCFA
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ item.total_amount|floatformat:2 }} FCFA</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div style="text-align:right;margin-top:1rem;">
+        <strong>Total : {{ sale.total_amount|floatformat:2 }} FCFA</strong>
+    </div>
+</div>
+<div class="card">
+    <h2 style="margin-top:0;">Documents</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:0.75rem;">
+        <a href="{% url 'inventory:sale_document_preview' sale.pk 'quote' %}" class="btn secondary">Devis</a>
+        {% if sale.status == 'confirmed' %}
+            <a href="{% url 'inventory:sale_document_preview' sale.pk 'invoice' %}" class="btn secondary">Facture</a>
+            <a href="{% url 'inventory:sale_document_preview' sale.pk 'delivery' %}" class="btn secondary">Bon de livraison</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

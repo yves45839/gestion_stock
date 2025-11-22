@@ -1,0 +1,222 @@
+{% extends "inventory/base.html" %}
+{% block title %}Tableau de bord{% endblock %}
+{% block content %}
+<style>
+    .dashboard-shell { display: flex; flex-direction: column; gap: 1.25rem; }
+    .panel {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 1.4rem 1.6rem;
+        box-shadow: 0 18px 35px rgba(15, 124, 144, 0.08);
+    }
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: center;
+    }
+    .eyebrow {
+        margin: 0;
+        color: var(--muted);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 0.78rem;
+    }
+    .h1 {
+        margin: 0.2rem 0 0.25rem;
+        font-size: 1.6rem;
+    }
+    .cta-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.4rem 0.75rem;
+        border-radius: 999px;
+        background: #eef2f7;
+        color: var(--text);
+        border: 1px solid var(--border);
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .kpi-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .kpi {
+        border-radius: 14px;
+        padding: 1rem 1.1rem;
+        border: 1px dashed var(--border);
+        background: linear-gradient(145deg, #f9fbfc, #ffffff);
+    }
+    .kpi .label { margin: 0; color: var(--muted); font-size: 0.85rem; }
+    .kpi .value { margin: 0.35rem 0; font-size: 1.6rem; font-weight: 700; }
+    .kpi .hint { margin: 0; color: var(--muted); font-size: 0.85rem; }
+    .split { display: grid; gap: 1rem; grid-template-columns: 1.4fr 1fr; }
+    .site-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .table-compact th, .table-compact td { padding: 0.65rem 0.5rem; }
+    .status-badge { padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+    .status-in { background: #ecfdf5; color: #047857; }
+    .status-out { background: #fff4e6; color: #b45309; }
+    .table-compact thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
+    @media (max-width: 960px) { .panel-header { flex-direction: column; align-items: flex-start; } .split { grid-template-columns: 1fr; } }
+</style>
+
+<div class="dashboard-shell">
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Vue {{ active_site.name|default:"globale" }}</p>
+                <h1 class="h1">Tableau de bord stock</h1>
+                <p style="margin:0;color:var(--muted);">Etat des stocks, ventes confirmees et mouvements recents.</p>
+            </div>
+            <div class="cta-row">
+                <a class="btn" href="{% url 'inventory:sale_create' %}">+ Nouvelle vente</a>
+                <a class="btn secondary" href="{% url 'inventory:record_movement' %}">Mouvement stock</a>
+                <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Inventaire</a>
+            </div>
+        </div>
+        {% if can_switch_site %}
+            <form method="get" style="margin-top:0.8rem; display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                <label for="site-select" class="eyebrow" style="margin:0;">Selection site</label>
+                <select id="site-select" name="site" class="form-control" style="max-width:220px;">
+                    <option value="">Vue globale</option>
+                    {% for site in sites %}
+                        <option value="{{ site.pk }}" {% if selected_site == site.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ site.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn secondary" style="padding:0.45rem 1.1rem;">Appliquer</button>
+            </form>
+        {% endif %}
+    </section>
+
+    <section class="kpi-grid">
+        <div class="kpi">
+            <p class="label">References actives</p>
+            <p class="value">{{ total_products }}</p>
+            <p class="hint">Catalogue exploitable</p>
+        </div>
+        <div class="kpi">
+            <p class="label">Stock global</p>
+            <p class="value">{{ total_stock|floatformat:0 }}</p>
+            <p class="hint">Quantite disponible</p>
+        </div>
+        <div class="kpi">
+            <p class="label">Ventes confirmees</p>
+            <p class="value">{{ sales_summary.count }}</p>
+            <p class="hint">{{ sales_summary.amount|floatformat:2 }} FCFA encaisses</p>
+        </div>
+        <div class="kpi">
+            <p class="label">Retours</p>
+            <p class="value">{{ returns_summary.quantity }}</p>
+            <p class="hint">{{ returns_summary.amount|floatformat:2 }} FCFA re-integres</p>
+        </div>
+        <div class="kpi">
+            <p class="label">Mouvements</p>
+            <p class="value">{{ movement_count }}</p>
+            <p class="hint">Historique cumule</p>
+        </div>
+        <div class="kpi">
+            <p class="label">Flux du jour</p>
+            <p class="value">{{ totals_by_direction.IN|default:0 }} / {{ totals_by_direction.OUT|default:0 }}</p>
+            <p class="hint">Entrees / Sorties</p>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header" style="margin-bottom:0.75rem;">
+            <h2 class="h1" style="font-size:1.1rem;">Implantations</h2>
+            <div class="pill">Vue par site</div>
+        </div>
+        <div class="site-grid">
+            {% for summary in site_breakdown %}
+                <div class="card">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
+                        <div>
+                            <h3 style="margin:0 0 0.3rem;">{{ summary.site.name }}</h3>
+                            <p style="margin:0;color:var(--muted);font-size:0.85rem;">{{ summary.product_count }} references | {{ summary.movement_count }} mouvements</p>
+                            <p style="margin:0;color:var(--muted);font-size:0.8rem;">{{ summary.confirmed_sales_count }} ventes | {{ summary.confirmed_sales_amount|floatformat:2 }} FCFA</p>
+                        </div>
+                        <div style="font-size:1.4rem;font-weight:700;">{{ summary.total_stock|floatformat:0 }}</div>
+                    </div>
+                </div>
+            {% empty %}
+                <p style="margin:0;">Aucun site configure.</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="split">
+        <div class="panel">
+            <div class="panel-header" style="margin-bottom:0.65rem;">
+                <h2 class="h1" style="font-size:1.1rem;">Derniers mouvements</h2>
+                <a class="btn secondary" href="{% url 'inventory:record_movement' %}">+ Ajouter</a>
+            </div>
+            <table class="table-compact" aria-label="Derniers mouvements">
+                <thead>
+                    <tr>
+                        <th>Produit</th>
+                        <th>Type</th>
+                        <th>Quantite</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for movement in recent_movements %}
+                        <tr>
+                            <td>{{ movement.product.name }}</td>
+                            <td>
+                                {% if movement.movement_type.direction == "OUT" %}
+                                    <span class="status-badge status-out">{{ movement.direction_label }}</span>
+                                {% else %}
+                                    <span class="status-badge status-in">{{ movement.direction_label }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if movement.movement_type.direction == "OUT" %}
+                                    -{{ movement.quantity }}
+                                {% else %}
+                                    +{{ movement.quantity }}
+                                {% endif %}
+                            </td>
+                            <td>{{ movement.movement_date|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="4">Aucun mouvement enregistre.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="panel">
+            <div class="panel-header" style="margin-bottom:0.65rem;">
+                <h2 class="h1" style="font-size:1.1rem;">Alertes stock bas</h2>
+                <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Inventaire</a>
+            </div>
+            <table class="table-compact" aria-label="Alertes de stock">
+                <thead>
+                    <tr>
+                        <th>Produit</th>
+                        <th>Stock</th>
+                        <th>Min</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in low_stock %}
+                        <tr>
+                            <td>{{ product.name }}</td>
+                            <td><span class="badge warn">{{ product.stock_quantity }}</span></td>
+                            <td>{{ product.minimum_stock }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="3">Aucune alerte en cours.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

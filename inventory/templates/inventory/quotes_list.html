@@ -1,0 +1,104 @@
+{% extends "inventory/base.html" %}
+{% block title %}Devis - Gestion de stock{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+        <div>
+            <h1 style="margin:0;font-size:1.5rem;">Devis</h1>
+            <p style="margin:0.25rem 0 0;color:var(--muted);">
+                Liste des devis en attente de confirmation.
+            </p>
+            {% if active_site %}
+                <p style="margin:0;color:var(--muted);font-size:0.8rem;">Vue site : {{ active_site.name }}</p>
+            {% else %}
+                <p style="margin:0;color:var(--muted);font-size:0.8rem;">Vue globale</p>
+            {% endif %}
+        </div>
+        <a href="{% url 'inventory:quote_create' %}" class="btn">Nouveau devis</a>
+    </div>
+    <form method="get" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-top:1.25rem;">
+        <div>
+            <label for="quote-search">Recherche</label>
+            <input id="quote-search"
+                   type="text"
+                   name="q"
+                   class="form-control"
+                   placeholder="Référence ou client"
+                   value="{{ search }}">
+        </div>
+        <div>
+            <label for="quote-start">Date de début</label>
+            <input id="quote-start" type="date" name="start" value="{{ start_input }}" class="form-control">
+        </div>
+        <div>
+            <label for="quote-end">Date de fin</label>
+            <input id="quote-end" type="date" name="end" value="{{ end_input }}" class="form-control">
+        </div>
+        {% if can_switch_site %}
+            <div>
+                <label for="quote-site">Site</label>
+                <select id="quote-site" name="site" class="form-control">
+                    <option value="" {% if selected_site == "" %}selected{% endif %}>Vue globale</option>
+                    {% for site in sites %}
+                        <option value="{{ site.pk }}" {% if selected_site == site.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ site.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% else %}
+            <input type="hidden" name="site" value="{{ selected_site }}">
+        {% endif %}
+        <div style="align-self:flex-end;">
+            <button type="submit" class="btn">Filtrer</button>
+        </div>
+    </form>
+    <div class="grid grid-3" style="margin-top:1.5rem;">
+        <div>
+            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Nombre de devis</p>
+            <p class="value" style="margin:0;">{{ quote_count }}</p>
+        </div>
+        <div>
+            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Montant total</p>
+            <p class="value" style="margin:0;">{{ total_amount|floatformat:2 }} FCFA</p>
+        </div>
+        <div>
+            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Montant moyen</p>
+            <p class="value" style="margin:0;">{{ average_amount|floatformat:2 }} FCFA</p>
+        </div>
+    </div>
+</div>
+<div class="card">
+    {% if quotes %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Référence</th>
+                    <th>Date</th>
+                    <th>Client</th>
+                    <th>Lignes</th>
+                    <th>Montant</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for quote in quotes %}
+                    <tr data-href="{% url 'inventory:quote_detail' quote.pk %}" role="button">
+                        <td style="font-weight:600;">{{ quote.reference }}</td>
+                        <td>{{ quote.sale_date|date:"d/m/Y H:i" }}</td>
+                        <td>{{ quote.customer_display_name }}</td>
+                        <td>{{ quote.items.count }}</td>
+                        <td>{{ quote.total_amount|floatformat:2 }} FCFA</td>
+                        <td>
+                            <a href="{% url 'inventory:quote_detail' quote.pk %}" class="btn secondary" style="padding:0.35rem 0.85rem;">Ouvrir</a>
+                            <a href="{% url 'inventory:sale_document_preview' quote.pk 'quote' %}" class="btn secondary" style="padding:0.35rem 0.85rem;">PDF</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="margin:0;">Aucun devis en attente pour le moment.</p>
+    {% endif %}
+</div>
+{% endblock %}

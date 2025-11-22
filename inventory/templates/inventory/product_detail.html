@@ -1,0 +1,217 @@
+{% extends "inventory/base.html" %}
+{% block title %}{{ product.name }} - Détail{% endblock %}
+{% block content %}
+<section class="card">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:2rem;flex-wrap:wrap;">
+        {% if product.image %}
+            <div
+                style="flex:0 0 180px;border:1px solid var(--border);border-radius:8px;padding:0.5rem;background:#fff;"
+            >
+                <img
+                    src="{{ product.image.url }}"
+                    alt="Image de {{ product.name }}"
+                    style="width:100%;height:auto;display:block;border-radius:4px;"
+                    loading="lazy"
+                />
+            </div>
+        {% endif %}
+        <div>
+            <p style="margin:0;color:var(--muted);font-size:0.85rem;">Référence</p>
+            <h1 style="margin:0;font-size:2rem;">{{ product.sku }}</h1>
+            <p style="margin:0.25rem 0 0;color:var(--muted);">
+                {{ product.manufacturer_reference|default:"Aucune référence fabricant" }}
+            </p>
+        </div>
+        <div style="text-align:right;">
+            <p style="margin:0;color:var(--muted);font-size:0.85rem;">Stock actuel</p>
+            <div style="font-size:2rem;font-weight:600;">
+                {% if product.stock_quantity < 0 %}-{% endif %}{{ product.stock_quantity }}
+            </div>
+            {% if product.is_below_minimum %}
+                <div class="badge warn" style="margin-top:0.35rem;">Sous le minimum</div>
+            {% elif product.minimum_stock > 0 %}
+                <div class="badge safe" style="margin-top:0.35rem;">Minimum respecté</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="grid" style="margin-top:1.5rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+        <div>
+            <p class="muted-label">Nom</p>
+            <p style="margin:0;font-weight:600;">{{ product.name }}</p>
+        </div>
+        <div>
+            <p class="muted-label">Catégorie</p>
+            <p style="margin:0;">{{ product.category.name }}</p>
+        </div>
+        <div>
+            <p class="muted-label">Marque</p>
+            <p style="margin:0;">{{ product.brand.name }}</p>
+        </div>
+        <div>
+            <p class="muted-label">Prix d'achat</p>
+            <p style="margin:0;">{{ product.purchase_price|default:"-" }} FCFA</p>
+        </div>
+        <div>
+            <p class="muted-label">Prix de vente</p>
+            <p style="margin:0;">{{ product.sale_price|default:"-" }} FCFA</p>
+        </div>
+        <div>
+            <p class="muted-label">Stock minimum</p>
+            <p style="margin:0;">{{ product.minimum_stock }} unité(s)</p>
+        </div>
+    </div>
+    {% if product.description %}
+        <div style="margin-top:1.5rem;">
+            <p class="muted-label">Description</p>
+            <p style="margin:0;">{{ product.description }}</p>
+        </div>
+    {% endif %}
+</section>
+
+<section class="card" style="margin-top:1.5rem;">
+    <h3 style="margin-top:0;">Modifier le produit</h3>
+    <form method="post" enctype="multipart/form-data" style="margin-top:1rem;">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="message error" style="margin-bottom:1rem;">
+                {{ form.non_field_errors|join:", " }}
+            </div>
+        {% endif %}
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+            <div>
+                {{ form.sku.label_tag }}
+                {{ form.sku }}
+                {% for error in form.sku.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.manufacturer_reference.label_tag }}
+                {{ form.manufacturer_reference }}
+                {% for error in form.manufacturer_reference.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.name.label_tag }}
+                {{ form.name }}
+                {% for error in form.name.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.brand.label_tag }}
+                {{ form.brand }}
+                {% for error in form.brand.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.category.label_tag }}
+                {{ form.category }}
+                {% for error in form.category.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.barcode.label_tag }}
+                {{ form.barcode }}
+                {% for error in form.barcode.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.minimum_stock.label_tag }}
+                {{ form.minimum_stock }}
+                {% for error in form.minimum_stock.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.purchase_price.label_tag }}
+                {{ form.purchase_price }}
+                {% for error in form.purchase_price.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.sale_price.label_tag }}
+                {{ form.sale_price }}
+                {% for error in form.sale_price.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div style="margin-top:1rem;">
+            {{ form.image.label_tag }}
+            {{ form.image }}
+            {% for error in form.image.errors %}
+                <div class="field-error">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div style="margin-top:1rem;">
+            {{ form.description.label_tag }}
+            {{ form.description }}
+            {% for error in form.description.errors %}
+                <div class="field-error">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <div style="margin-top:1rem;">
+            <button type="submit" class="btn">Enregistrer les modifications</button>
+        </div>
+    </form>
+</section>
+
+<section class="card" style="margin-top:1.5rem;">
+    <h3 style="margin-top:0;">Historique des versions</h3>
+    {% if versions %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Action</th>
+                    <th>Utilisateur</th>
+                    <th>Nom</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for version in versions %}
+                    <tr>
+                        <td>{{ version.created_at|date:"d/m/Y H:i" }}</td>
+                        <td>{{ version.get_action_display }}</td>
+                        <td>
+                            {% if version.user %}
+                                {{ version.user.get_full_name|default:version.user.username }}
+                            {% else %}
+                                Système
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ version.snapshot.name|default:version.snapshot.sku|default:"-" }}
+                        </td>
+                        <td>
+                            <form
+                                method="post"
+                                action="{% url 'inventory:version_revert' version.pk %}"
+                                style="margin:0;"
+                            >
+                                {% csrf_token %}
+                                <button
+                                    type="submit"
+                                    class="btn secondary"
+                                    style="padding:0.35rem 0.85rem;"
+                                >
+                                    Restaurer
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="margin:0;">Aucune version enregistrée pour ce produit.</p>
+    {% endif %}
+</section>
+{% endblock %}

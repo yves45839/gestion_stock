@@ -1,0 +1,360 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}Gestion de stock{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --accent: #0f7c90;
+            --accent-light: #e1f2f5;
+            --text: #1f2933;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+        }
+        * {
+            box-sizing: border-box;
+            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        body {
+            margin: 0;
+            background: #f7f8fa;
+            color: var(--text);
+        }
+        header {
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            backdrop-filter: blur(6px);
+        }
+        .navbar {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+        }
+        .context-bar {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.5rem;
+            gap: 0.75rem;
+            border-top: 1px solid var(--border);
+        }
+        .context-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 999px;
+            background: #eef2f7;
+            color: var(--text);
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+        }
+        .navbar a {
+            text-decoration: none;
+            color: var(--muted);
+            margin-right: 1rem;
+            font-weight: 500;
+        }
+        .navbar a.active, .navbar a:hover {
+            color: var(--accent);
+        }
+        .container {
+            max-width: 1100px;
+            margin: 2rem auto;
+            padding: 0 1.5rem 4rem;
+        }
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+        .grid-3 {
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+        .card {
+            background: #fff;
+            border-radius: 18px;
+            padding: 1.5rem;
+            box-shadow: 0 15px 30px rgba(15, 124, 144, 0.08);
+            border: 1px solid rgba(15, 124, 144, 0.08);
+        }
+        .card h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: var(--muted);
+        }
+        .card .value {
+            margin-top: 0.5rem;
+            font-size: 2rem;
+            font-weight: 600;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 0.75rem 0.5rem;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        th {
+            color: var(--muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        tr:hover {
+            background: #f9fbfc;
+        }
+        tr[data-href] {
+            cursor: pointer;
+        }
+        tr[data-href]:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: -1px;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 0.65rem 1.4rem;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        .btn.secondary {
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+        }
+        .btn:hover {
+            box-shadow: 0 10px 20px rgba(15, 124, 144, 0.2);
+            transform: translateY(-1px);
+        }
+        .badge {
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge.warn {
+            background: #fff4e6;
+            color: #b45309;
+        }
+        .badge.safe {
+            background: #ecfdf5;
+            color: #047857;
+        }
+        .messages {
+            margin-bottom: 1rem;
+        }
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .message.success {
+            background: #ecfdf5;
+            color: #047857;
+        }
+        .message.error {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        .message.info {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+        form .form-control, form select, form textarea {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.95rem;
+        }
+        form label {
+            font-size: 0.85rem;
+            color: var(--muted);
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+        .muted-label {
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-bottom: 0.15rem;
+        }
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .module-card {
+            position: relative;
+            overflow: hidden;
+            border: none;
+            border-radius: 22px;
+            padding: 1.5rem;
+            min-height: 180px;
+            color: #fff;
+            box-shadow: 0 25px 45px rgba(15, 124, 144, 0.35);
+            background: linear-gradient(135deg, #0f7c90, #1c9cbc);
+            transition: transform 0.35s ease, box-shadow 0.35s ease;
+        }
+        .module-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.25), transparent 45%);
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .module-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 35px 60px rgba(15, 124, 144, 0.45);
+        }
+        .module-card .module-icon {
+            font-size: 2rem;
+            margin-bottom: 0.75rem;
+            display: inline-flex;
+            animation: float 3s ease-in-out infinite;
+        }
+        .module-card .module-label {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.8);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+        }
+        .module-card .module-value {
+            margin: 0.4rem 0;
+            font-size: 2.1rem;
+            font-weight: 600;
+        }
+        .module-card .module-description {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        .module-card .btn {
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.45);
+        }
+        .module-card .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .module-card.module-product {
+            background: linear-gradient(135deg, #0f7c90, #1f97b4);
+        }
+        .module-card.module-sales {
+            background: linear-gradient(135deg, #8b5cf6, #ec4899);
+        }
+        .module-card.module-customers {
+            background: linear-gradient(135deg, #047857, #059669);
+        }
+        .module-card.module-inventory {
+            background: linear-gradient(135deg, #c084fc, #6366f1);
+        }
+        @keyframes float {
+            0% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-7px);
+            }
+            100% {
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="navbar">
+            <div class="logo" style="font-weight:700;color:var(--accent);">Flux<span style="color:var(--text);font-weight:400;">Stock</span></div>
+            <nav>
+                {% with current=request.resolver_match.url_name %}
+                    <a href="{% url 'inventory:dashboard' %}" class="{% if current == 'dashboard' %}active{% endif %}">Tableau de bord</a>
+                    <a href="{% url 'inventory:analytics' %}" class="{% if current == 'analytics' %}active{% endif %}">Analyses</a>
+                    <a href="{% url 'inventory:customer_list' %}" class="{% if current == 'customer_list' or current == 'customer_create' or current == 'customer_detail' or current == 'customer_update' %}active{% endif %}">Clients</a>
+                    <a href="{% url 'inventory:quotes_list' %}" class="{% if current == 'quotes_list' or current == 'quote_create' or current == 'quote_detail' %}active{% endif %}">Devis</a>
+                    <a href="{% url 'inventory:record_movement' %}" class="{% if current == 'record_movement' %}active{% endif %}">Mouvement</a>
+                    <a href="{% url 'inventory:inventory_overview' %}" class="{% if current == 'inventory_overview' %}active{% endif %}">Inventaire</a>
+                    <a href="{% url 'inventory:sales_list' %}" class="{% if current == 'sales_list' or current == 'sale_create' %}active{% endif %}">Ventes</a>
+                    <a href="{% url 'inventory:import_products' %}" class="{% if current == 'import_products' %}active{% endif %}">Import CSV</a>
+                {% endwith %}
+            </nav>
+        </div>
+        <div class="context-bar">
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                <span class="context-chip">Site : {{ active_site.name|default:"Vue globale" }}</span>
+                <span class="context-chip" style="background:#e1f2f5;border-color:rgba(15,124,144,0.2);color:var(--accent);">Utilisateur : {{ request.user.username|default:"Invite" }}</span>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                <a class="btn secondary" href="{% url 'inventory:record_movement' %}">Mouvement</a>
+                <a class="btn" href="{% url 'inventory:sale_create' %}">Nouvelle vente</a>
+            </div>
+        </div>
+    </header>
+    <main class="container">
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <div class="message {{ message.tags }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            document.querySelectorAll("tr[data-href]").forEach((row) => {
+                if (!row.hasAttribute("tabindex")) {
+                    row.tabIndex = 0;
+                }
+                const clickableSelector = "a, button, input, textarea, select, label";
+                const isEventOnInteractive = (event) =>
+                    Boolean(event.target.closest(clickableSelector));
+
+                row.addEventListener("click", (event) => {
+                    if (isEventOnInteractive(event)) {
+                        return;
+                    }
+                    window.location.href = row.dataset.href;
+                });
+
+                row.addEventListener("keydown", (event) => {
+                    if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                    }
+                    if (isEventOnInteractive(event)) {
+                        return;
+                    }
+                    event.preventDefault();
+                    row.click();
+                });
+            });
+        });
+    </script>
+</body>
+</html>

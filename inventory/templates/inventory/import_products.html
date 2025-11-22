@@ -1,0 +1,71 @@
+{% extends "inventory/base.html" %}
+{% block title %}Import CSV{% endblock %}
+{% block content %}
+<section class="card" style="max-width:800px;margin:0 auto;">
+    <h2 style="margin-top:0;">Import CSV produits</h2>
+    <p style="color:var(--muted);">Le modèle CSV accepte toutes les colonnes du produit : <strong>SKU</strong>, <strong>Ref</strong>, <strong>Désignation</strong>, <strong>Description</strong>, <strong>Marque</strong>, <strong>Catégorie</strong>, <strong>Code-barres</strong>, <strong>Stock minimal</strong>, <strong>Prix achat</strong>, <strong>Prix vente</strong>, <strong>Qté</strong> et <strong>Unité</strong>. Le séparateur peut être « ; » ou « , ».</p>
+    {% if active_site %}
+        <p style="margin-top:0.25rem;color:var(--muted);font-size:0.9rem;">
+            Importation liée au site actif <strong>{{ active_site.name }}</strong>.
+            {% if can_switch_site %}
+                Utilisez le champ ci-dessous pour changer de site avant d'importer.
+            {% endif %}
+        </p>
+    {% else %}
+        <p style="margin-top:0.25rem;color:var(--muted);font-size:0.9rem;">
+            Aucune vue de site forcée : le site par défaut sera utilisé pour l'importation.
+        </p>
+    {% endif %}
+    <p><a class="btn secondary" href="{% url 'inventory:export_import_template' %}">Télécharger le modèle CSV</a></p>
+    <form method="post" enctype="multipart/form-data" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+        {% csrf_token %}
+        <div>
+            <label for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
+            {{ form.file }}
+            {{ form.file.errors }}
+        </div>
+        <div>
+            <label for="{{ form.encoding.id_for_label }}">{{ form.encoding.label }}</label>
+            {{ form.encoding }}
+        </div>
+        <div style="grid-column:1 / -1;">
+            <label>
+                {{ form.apply_quantity }} {{ form.apply_quantity.label }}
+            </label>
+        </div>
+        <div>
+            <label for="{{ form.movement_type.id_for_label }}">{{ form.movement_type.label }}</label>
+            {{ form.movement_type }}
+            <small style="color:var(--muted);display:block;">{{ form.movement_type.help_text }}</small>
+        </div>
+        {% if form.site.is_hidden %}
+            {{ form.site }}
+            {{ form.site.errors }}
+        {% else %}
+            <div>
+                <label for="{{ form.site.id_for_label }}">{{ form.site.label }}</label>
+                {{ form.site }}
+                {{ form.site.errors }}
+                <small style="color:var(--muted);display:block;">{{ form.site.help_text }}</small>
+            </div>
+        {% endif %}
+        <div style="grid-column:1 / -1;">
+            <button type="submit" class="btn">Lancer l'import</button>
+        </div>
+    </form>
+</section>
+{% if report %}
+    <section class="card" style="max-width:800px;margin:1.5rem auto 0;">
+        <h3 style="margin-top:0;">Résumé</h3>
+        <p>{{ report.created }} produits créés · {{ report.updated }} mis à jour · {{ report.movements }} mouvements enregistrés.</p>
+        {% if report.errors %}
+            <h4 style="margin-bottom:0.5rem;">Lignes ignorées</h4>
+            <ul>
+                {% for error in report.errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </section>
+{% endif %}
+{% endblock %}

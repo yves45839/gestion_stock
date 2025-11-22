@@ -1,0 +1,185 @@
+{% extends "inventory/base.html" %}
+{% block title %}Nouveau mouvement{% endblock %}
+{% block content %}
+<section class="card" style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:1.5rem;">
+    <div>
+        <h2 style="margin-top:0;">Mode scanner</h2>
+        <p style="color:var(--muted);margin-bottom:0.5rem;">Scannez un code-barres pour sélectionner automatiquement le produit et incrémenter la quantité.</p>
+        <div style="display:flex;gap:1rem;align-items:center;">
+            <input id="scan-input" type="text" placeholder="Prêt pour scan..." class="form-control" style="max-width:320px;" data-lookup-url="{% url 'inventory:lookup_product' %}">
+            <button type="button" class="btn secondary" id="scan-reset">Réinitialiser</button>
+        </div>
+        <div id="scan-summary" style="margin-top:0.75rem;font-size:0.9rem;color:var(--muted);">En attente d'un premier scan.</div>
+        <ul id="scan-history" style="list-style:none;padding-left:0;margin:0;color:var(--muted);font-size:0.85rem;"></ul>
+    </div>
+    <h2>Enregistrer un mouvement</h2>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <div style="margin-bottom:1rem;font-size:0.9rem;color:var(--muted);">
+            Site actif :
+            <strong>{{ active_site.name|default:"Vue globale" }}</strong>
+        </div>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
+            <div>
+                <label for="{{ form.product.id_for_label }}">{{ form.product.label }}</label>
+                {{ form.product }}
+                {{ form.product.errors }}
+            </div>
+            <div>
+                <label for="{{ form.movement_type.id_for_label }}">{{ form.movement_type.label }}</label>
+                {{ form.movement_type }}
+                {{ form.movement_type.errors }}
+            </div>
+            <div>
+                <label for="{{ form.quantity.id_for_label }}">{{ form.quantity.label }}</label>
+                {{ form.quantity }}
+                {{ form.quantity.errors }}
+            </div>
+            <div>
+                <label for="{{ form.site.id_for_label }}">{{ form.site.label }}</label>
+                {{ form.site }}
+                {{ form.site.errors }}
+            </div>
+            <div>
+                <label for="{{ form.movement_date.id_for_label }}">{{ form.movement_date.label }}</label>
+                {{ form.movement_date }}
+                {{ form.movement_date.errors }}
+            </div>
+        </div>
+        <div style="margin-top:1rem;">
+            <label for="{{ form.document_number.id_for_label }}">{{ form.document_number.label }}</label>
+            {{ form.document_number }}
+            {{ form.document_number.errors }}
+        </div>
+        <div style="margin-top:1rem;">
+            <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
+            {{ form.comment }}
+            {{ form.comment.errors }}
+        </div>
+        <div style="margin-top:1.5rem;display:flex;gap:1rem;">
+            <button type="submit" class="btn">Enregistrer</button>
+            <a href="{% url 'inventory:dashboard' %}" class="btn secondary">Annuler</a>
+        </div>
+    </form>
+</section>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const scanInput = document.getElementById("scan-input");
+        const resetBtn = document.getElementById("scan-reset");
+        const summary = document.getElementById("scan-summary");
+        const historyList = document.getElementById("scan-history");
+        const productSelect = document.getElementById("id_product");
+        const quantityInput = document.getElementById("id_quantity");
+        const history = [];
+
+        if (!scanInput) {
+            return;
+        }
+
+        const focusScan = () => {
+            scanInput.focus();
+            scanInput.select();
+        };
+
+        const renderHistory = () => {
+            historyList.innerHTML = "";
+            history.slice(-5).reverse().forEach((entry) => {
+                const li = document.createElement("li");
+                li.textContent = `${entry.time} - ${entry.name} (${entry.sku})`;
+                historyList.appendChild(li);
+            });
+        };
+
+        const ensureOptionExists = (product) => {
+            if (!productSelect) {
+                return;
+            }
+            let option = productSelect.querySelector(`option[value="${product.id}"]`);
+            if (!option) {
+                option = document.createElement("option");
+                option.value = product.id;
+                option.textContent = `${product.sku} - ${product.name}`;
+                productSelect.appendChild(option);
+            }
+        };
+
+        const handleSuccess = (product, meta = {}) => {
+            ensureOptionExists(product);
+            if (productSelect) {
+                const previous = productSelect.value;
+                productSelect.value = product.id.toString();
+                if (quantityInput) {
+                    const current = parseInt(quantityInput.value || "0", 10) || 0;
+                    if (previous === product.id.toString()) {
+                        quantityInput.value = current + 1;
+                    } else {
+                        quantityInput.value = Math.max(current, 1) || 1;
+                    }
+                }
+            }
+            if (meta.created) {
+                summary.textContent = `Nouveau produit créé : ${product.name} (${product.sku}). Pensez à enregistrer le mouvement pour initialiser le stock.`;
+            } else {
+                summary.textContent = `Sélection : ${product.name} (${product.sku}) - Stock actuel ${product.stock_quantity}`;
+            }
+            summary.style.color = meta.created ? "#047857" : "var(--muted)";
+            history.push({
+                name: product.name,
+                sku: product.sku,
+                time: new Date().toLocaleTimeString(),
+            });
+            renderHistory();
+        };
+
+        const handleError = (message) => {
+            summary.textContent = message;
+            summary.style.color = "#b91c1c";
+            setTimeout(() => {
+                summary.style.color = "var(--muted)";
+            }, 2000);
+        };
+
+        const lookupProduct = (value) => {
+            const url = new URL(scanInput.dataset.lookupUrl, window.location.origin);
+            url.searchParams.set("code", value);
+            fetch(url)
+                .then((response) => response.json())
+                .then((payload) => {
+                    if (payload.found) {
+                        handleSuccess(payload.product, { created: payload.created });
+                    } else {
+                        handleError(payload.error || "Produit introuvable");
+                    }
+                })
+                .catch(() => handleError("Erreur réseau lors de la recherche."));
+        };
+
+        scanInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                const value = scanInput.value.trim();
+                if (!value) {
+                    return;
+                }
+                lookupProduct(value);
+                scanInput.value = "";
+            }
+        });
+
+        resetBtn.addEventListener("click", () => {
+            history.splice(0, history.length);
+            renderHistory();
+            summary.textContent = "Historique réinitialisé.";
+            if (quantityInput) {
+                quantityInput.value = "";
+            }
+            if (productSelect) {
+                productSelect.value = "";
+            }
+            focusScan();
+        });
+
+        focusScan();
+    });
+</script>
+{% endblock %}

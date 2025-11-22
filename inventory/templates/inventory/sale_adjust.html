@@ -1,0 +1,89 @@
+{% extends "inventory/base.html" %}
+{% block title %}Ajuster - {{ sale.reference }}{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+        <div>
+            <h1 style="margin:0;font-size:1.5rem;">Ajuster la facture {{ sale.reference }}</h1>
+            <p style="margin:0.25rem 0;color:var(--muted);">
+                {{ sale.customer_display_name }}
+                {% if sale.site %}
+                    · {{ sale.site.name }}
+                {% endif %}
+            </p>
+            <p style="margin:0;color:var(--muted);font-size:0.85rem;">
+                {{ sale.sale_date|date:"d/m/Y H:i" }} · {{ sale.total_amount|floatformat:2 }} FCFA facturés
+            </p>
+            <p style="margin:0;color:var(--muted);font-size:0.85rem;">
+                Ajustez les quantités (jusqu'à 0) et les prix pour enregistrer des retours directement sur la facture confirmée.
+            </p>
+        </div>
+        <div>
+            <a href="{{ cancel_url }}" class="btn secondary">Retour aux ventes</a>
+        </div>
+    </div>
+</div>
+<form method="post">
+    {% csrf_token %}
+    <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <div>
+                <h2 style="margin:0;">Lignes de la facture</h2>
+                <p style="margin:0;color:var(--muted);font-size:0.85rem;">
+                    Modifiez la quantité facturée restante et le prix unitaire. Les quantités retirées sont enregistrées comme retours avec remise en stock.
+                </p>
+            </div>
+        </div>
+        {{ formset.management_form }}
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Produit</th>
+                        <th>Vendu</th>
+                        <th>Déjà retourné</th>
+                        <th>Disponible</th>
+                        <th>Qté facturée</th>
+                        <th>Prix unitaire</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if form_rows %}
+                        {% for form,item in form_rows %}
+                            <tr>
+                                <td>
+                                    <strong>{{ item.product.name }}</strong><br>
+                                    <small style="color:var(--muted);">{{ item.product.sku }}</small>
+                                </td>
+                                <td>{{ item.quantity }}</td>
+                                <td>{{ item.returned_quantity }}</td>
+                                <td>{{ item.available_return_quantity }}</td>
+                                <td>
+                                    {{ form.sale_item_id }}
+                                    {{ form.keep_quantity }}
+                                    {% for error in form.keep_quantity.errors %}
+                                        <div class="field-error">{{ error }}</div>
+                                    {% endfor %}
+                                </td>
+                                <td>
+                                    {{ form.unit_price }}
+                                    {% for error in form.unit_price.errors %}
+                                        <div class="field-error">{{ error }}</div>
+                                    {% endfor %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" style="text-align:center;">Aucune ligne produit à ajuster.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div style="margin-top:1rem;text-align:right;">
+        <button type="submit" class="btn">Enregistrer les ajustements</button>
+    </div>
+</form>
+{% endblock %}

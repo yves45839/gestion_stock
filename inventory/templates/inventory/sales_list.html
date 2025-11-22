@@ -1,0 +1,255 @@
+{% extends "inventory/base.html" %}
+{% block title %}Ventes - Gestion de stock{% endblock %}
+{% block content %}
+<style>
+    .odoo-shell { display: flex; flex-direction: column; gap: 1rem; }
+    .odoo-bar {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: center;
+        padding: 0.9rem 1.1rem;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: linear-gradient(180deg, #fff, #f8fafc);
+        box-shadow: 0 12px 24px rgba(15, 124, 144, 0.07);
+    }
+    .odoo-title h1 { margin: 0; font-size: 1.6rem; }
+    .odoo-title p { margin: 0; color: var(--muted); }
+    .pill {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        padding: 0.35rem 0.75rem; border-radius: 999px;
+        border: 1px solid var(--border); background: #eef2f7;
+        font-weight: 600; font-size: 0.85rem; color: var(--text);
+    }
+    .toolbar {
+        display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+    }
+    .filter-bar {
+        display: grid;
+        grid-template-columns: 1.2fr repeat(auto-fit, minmax(160px, 1fr));
+        gap: 0.75rem;
+        padding: 0.85rem 1.1rem;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        align-items: center;
+    }
+    .filter-bar label { font-size: 0.82rem; color: var(--muted); }
+    .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+    }
+    .stat-card {
+        padding: 0.9rem 1rem;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        background: #fff;
+    }
+    .stat-card .value { font-size: 1.4rem; font-weight: 700; margin: 0.25rem 0 0; }
+    .status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 0.75rem;
+    }
+    .status-card {
+        padding: 0.8rem 0.95rem;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: #f9fafb;
+    }
+    .table-wrap {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(15, 124, 144, 0.06);
+    }
+    table thead th {
+        background: #f4f6f8;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    tr[data-href]:hover { background: #f9fbfc; cursor: pointer; }
+    .chip {
+        display: inline-flex;
+        padding: 0.25rem 0.65rem;
+        border-radius: 999px;
+        background: #eef2f7;
+        font-size: 0.82rem;
+        font-weight: 700;
+    }
+    .chip.safe { background: #ecfdf5; color: #047857; }
+    .chip.warn { background: #fff4e6; color: #b45309; }
+    @media (max-width: 980px) {
+        .filter-bar { grid-template-columns: 1fr; }
+        .toolbar { justify-content: flex-start; }
+    }
+</style>
+
+<div class="odoo-shell">
+    <div class="odoo-bar">
+        <div class="odoo-title">
+            <h1>Gestion des ventes</h1>
+            <p>
+                Vue {% if active_site %}site : {{ active_site.name }}{% else %}globale{% endif %}
+                - Historique des ventes et documents.
+            </p>
+        </div>
+        <div class="toolbar">
+            <span class="pill">Liste</span>
+            <span class="pill">Kanban</span>
+            <a href="{% url 'inventory:sale_create' %}" class="btn">Nouvelle vente</a>
+        </div>
+    </div>
+
+    <form method="get" class="filter-bar">
+        <div>
+            <label for="sales-search">Recherche</label>
+            <input id="sales-search"
+                   type="text"
+                   name="q"
+                   class="form-control"
+                   placeholder="Ref ou client"
+                   value="{{ search }}">
+        </div>
+        <div>
+            <label for="sales-status">Statut</label>
+            <select id="sales-status" name="status" class="form-control">
+                {% for value,label in status_options %}
+                    <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if can_switch_site %}
+            <div>
+                <label for="sales-site">Site</label>
+                <select id="sales-site" name="site" class="form-control">
+                    <option value="" {% if selected_site == "" %}selected{% endif %}>Vue globale</option>
+                    {% for site in sites %}
+                        <option value="{{ site.pk }}" {% if selected_site == site.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ site.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% else %}
+            <input type="hidden" name="site" value="{{ selected_site }}">
+        {% endif %}
+        <div>
+            <label for="sales-start">Date debut</label>
+            <input id="sales-start" type="date" name="start" value="{{ start_input }}" class="form-control">
+        </div>
+        <div>
+            <label for="sales-end">Date fin</label>
+            <input id="sales-end" type="date" name="end" value="{{ end_input }}" class="form-control">
+        </div>
+        <div style="align-self:flex-end;">
+            <button type="submit" class="btn">Appliquer</button>
+        </div>
+    </form>
+
+    <div class="stats">
+        <div class="stat-card">
+            <p class="muted" style="margin:0;font-size:0.85rem;">Nombre de ventes</p>
+            <p class="value">{{ total_sales }}</p>
+        </div>
+        <div class="stat-card">
+            <p class="muted" style="margin:0;font-size:0.85rem;">Produits vendus</p>
+            <p class="value">{{ total_quantity }}</p>
+        </div>
+        <div class="stat-card">
+            <p class="muted" style="margin:0;font-size:0.85rem;">Montant total</p>
+            <p class="value">{{ total_amount|floatformat:2 }} FCFA</p>
+        </div>
+        <div class="stat-card">
+            <p class="muted" style="margin:0;font-size:0.85rem;">Articles retournes</p>
+            <p class="value">{{ total_return_quantity }}</p>
+            <p class="muted" style="margin:0;font-size:0.85rem;">{{ total_return_amount|floatformat:2 }} FCFA remis en stock</p>
+        </div>
+    </div>
+
+    <div class="status-grid">
+        {% for entry in status_summary %}
+            <div class="status-card">
+                <p style="margin:0;">
+                    <span class="chip {% if entry.value == 'confirmed' %}safe{% else %}warn{% endif %}">{{ entry.label }}</span>
+                </p>
+                <p class="value" style="margin:0.35rem 0 0;">{{ entry.count }} vente{% if entry.count != 1 %}s{% endif %}</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="table-wrap">
+        {% if sales %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Reference</th>
+                        <th>Date</th>
+                        <th>Client</th>
+                        <th>Articles</th>
+                        <th>Quantite</th>
+                        <th>Montant</th>
+                        <th>Scans</th>
+                        <th>Statut</th>
+                        <th>Retours</th>
+                        <th>Documents</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sale in sales %}
+                        {% if sale.status == "confirmed" %}
+                            {% url 'inventory:sale_document_preview' sale.pk 'invoice' as row_href %}
+                        {% else %}
+                            {% url 'inventory:sale_document_preview' sale.pk 'quote' as row_href %}
+                        {% endif %}
+                        <tr data-href="{{ row_href }}" role="button">
+                            <td style="font-weight:600;">{{ sale.reference }}</td>
+                            <td>{{ sale.sale_date|date:"d/m/Y H:i" }}</td>
+                            <td>{{ sale.customer_display_name }}</td>
+                            <td>{{ sale.items.all|length }}</td>
+                            <td>{{ sale.total_quantity }}</td>
+                            <td>{{ sale.total_amount|floatformat:2 }} FCFA</td>
+                            <td>{{ sale.scan_total }}</td>
+                            <td>
+                                <span class="chip {% if sale.status == 'confirmed' %}safe{% else %}warn{% endif %}">
+                                    {{ sale.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <p style="margin:0;font-weight:600;">
+                                    {{ sale.returned_quantity }} article{% if sale.returned_quantity != 1 %}s{% endif %}
+                                </p>
+                                <p style="margin:0;color:var(--muted);font-size:0.75rem;">
+                                    {{ sale.returned_amount|floatformat:2 }} FCFA
+                                </p>
+                                {% if sale.status == 'confirmed' %}
+                                    <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-top:0.35rem;">
+                                        <a href="{% url 'inventory:sale_return' sale.pk %}" class="btn secondary" style="padding:0.25rem 0.65rem;display:inline-flex;align-items:center;">Retour</a>
+                                        <a href="{% url 'inventory:sale_adjust' sale.pk %}" class="btn secondary" style="padding:0.25rem 0.65rem;display:inline-flex;align-items:center;">Ajuster</a>
+                                    </div>
+                                {% else %}
+                                    <span class="chip warn" style="margin-top:0.35rem;display:inline-flex;align-items:center;">Indisponible</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if sale.status == 'confirmed' %}
+                                    <a href="{% url 'inventory:sale_document_preview' sale.pk 'invoice' %}" class="btn secondary" style="padding:0.25rem 0.65rem;">Facture</a>
+                                    <a href="{% url 'inventory:sale_document_preview' sale.pk 'delivery' %}" class="btn secondary" style="padding:0.25rem 0.65rem;">Livraison</a>
+                                {% else %}
+                                    <span class="chip warn">En attente</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="margin:0;padding:1rem;">Aucune vente enregistree pour le moment.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

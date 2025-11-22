@@ -1,0 +1,72 @@
+{% load static %}
+{% with current_type=form.line_type.value|default:"product" %}
+<tr class="sale-line" data-form-index="{{ row_index }}" data-line-type="{{ current_type }}">
+    <td class="product-cell">
+        <div class="line-info">
+            <span class="line-label" data-line-label>
+                {% if current_type == "section" %}
+                    Section
+                {% elif current_type == "note" %}
+                    Note
+                {% else %}
+                    Produit
+                {% endif %}
+            </span>
+        </div>
+        <input type="hidden"
+               name="{{ form.line_type.html_name }}"
+               id="{{ form.line_type.id_for_label }}"
+               value="{{ form.line_type.value|default:current_type }}"
+               class="line-type-input">
+        {% if form.non_field_errors %}
+            <div class="field-error">
+                {{ form.non_field_errors|join:", " }}
+            </div>
+        {% endif %}
+        <div class="product-fields" data-role="product-fields">
+            <input type="text"
+                   class="form-control product-search"
+                   placeholder="Chercher un produit par nom ou r\u00e9f\u00e9rence"
+                   list="product-options"
+                   autocomplete="off">
+            {{ form.product }}
+            {% for error in form.product.errors %}
+                <div class="field-error">{{ error }}</div>
+            {% endfor %}
+            <div class="scan-field">
+                {{ form.scan_code }}
+                {% for error in form.scan_code.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="note-fields" data-role="note-fields">
+            {{ form.description }}
+            {% for error in form.description.errors %}
+                <div class="field-error">{{ error }}</div>
+            {% endfor %}
+        </div>
+    </td>
+    <td class="quantity-cell">
+        {{ form.quantity }}
+        {% for error in form.quantity.errors %}
+            <div class="field-error">{{ error }}</div>
+        {% endfor %}
+    </td>
+    <td class="price-cell">
+        {{ form.unit_price }}
+        {% for error in form.unit_price.errors %}
+            <div class="field-error">{{ error }}</div>
+        {% endfor %}
+    </td>
+    <td class="amount-cell">
+        <span data-line-total>0.00</span>
+    </td>
+    <td class="actions-cell">
+        {% if form.DELETE %}
+            {{ form.DELETE }}
+        {% endif %}
+        <button type="button" class="btn secondary small" data-action="remove-line">✕</button>
+    </td>
+</tr>
+{% endwith %}
