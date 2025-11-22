@@ -667,7 +667,8 @@ def inventory_overview(request):
         product = adjustment_form.cleaned_data["product"]
         counted_quantity = adjustment_form.cleaned_data["counted_quantity"]
         comment = adjustment_form.cleaned_data["comment"]
-        product_with_stock = Product.objects.with_stock_quantity(site=view_site).get(
+        stock_site = action_site if site_locked else view_site
+        product_with_stock = Product.objects.with_stock_quantity(site=stock_site).get(
             pk=product.pk
         )
         difference = counted_quantity - product_with_stock.stock_quantity
@@ -1698,10 +1699,14 @@ def _get_requested_site(request):
 
 
 def _get_action_site(request):
+    if not request.user.is_authenticated:
+        return None
     assigned_site = _get_assigned_site(request)
     if assigned_site:
         return assigned_site
-    return _get_requested_site(request)
+    if request.user.is_superuser:
+        return _get_requested_site(request)
+    return None
 
 
 def _get_active_site(request):
