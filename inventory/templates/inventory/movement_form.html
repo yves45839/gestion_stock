@@ -13,53 +13,99 @@
         <ul id="scan-history" style="list-style:none;padding-left:0;margin:0;color:var(--muted);font-size:0.85rem;"></ul>
     </div>
     <h2>Enregistrer un mouvement</h2>
-    <form method="post" novalidate>
+    <form method="post" novalidate id="movement-form">
         {% csrf_token %}
         <div style="margin-bottom:1rem;font-size:0.9rem;color:var(--muted);">
             Site actif :
             <strong>{{ active_site.name|default:"Vue globale" }}</strong>
         </div>
+        {% if header_form.non_field_errors %}
+            <div class="alert alert-error">{{ header_form.non_field_errors }}</div>
+        {% endif %}
         <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
             <div>
-                <label for="{{ form.product.id_for_label }}">{{ form.product.label }}</label>
-                {{ form.product }}
-                {{ form.product.errors }}
+                <label for="{{ header_form.movement_type.id_for_label }}">{{ header_form.movement_type.label }}</label>
+                {{ header_form.movement_type }}
+                {{ header_form.movement_type.errors }}
             </div>
             <div>
-                <label for="{{ form.movement_type.id_for_label }}">{{ form.movement_type.label }}</label>
-                {{ form.movement_type }}
-                {{ form.movement_type.errors }}
+                <label for="{{ header_form.site.id_for_label }}">{{ header_form.site.label }}</label>
+                {{ header_form.site }}
+                {{ header_form.site.errors }}
             </div>
             <div>
-                <label for="{{ form.quantity.id_for_label }}">{{ form.quantity.label }}</label>
-                {{ form.quantity }}
-                {{ form.quantity.errors }}
-            </div>
-            <div>
-                <label for="{{ form.site.id_for_label }}">{{ form.site.label }}</label>
-                {{ form.site }}
-                {{ form.site.errors }}
-            </div>
-            <div>
-                <label for="{{ form.movement_date.id_for_label }}">{{ form.movement_date.label }}</label>
-                {{ form.movement_date }}
-                {{ form.movement_date.errors }}
+                <label for="{{ header_form.movement_date.id_for_label }}">{{ header_form.movement_date.label }}</label>
+                {{ header_form.movement_date }}
+                {{ header_form.movement_date.errors }}
             </div>
         </div>
         <div style="margin-top:1rem;">
-            <label for="{{ form.document_number.id_for_label }}">{{ form.document_number.label }}</label>
-            {{ form.document_number }}
-            {{ form.document_number.errors }}
+            <label for="{{ header_form.document_number.id_for_label }}">{{ header_form.document_number.label }}</label>
+            {{ header_form.document_number }}
+            {{ header_form.document_number.errors }}
         </div>
         <div style="margin-top:1rem;">
-            <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
-            {{ form.comment }}
-            {{ form.comment.errors }}
+            <label for="{{ header_form.comment.id_for_label }}">{{ header_form.comment.label }}</label>
+            {{ header_form.comment }}
+            {{ header_form.comment.errors }}
         </div>
-        <div style="margin-top:1.5rem;display:flex;gap:1rem;">
+        <div style="margin-top:1.5rem;">
+            <h3 style="margin:0 0 0.5rem 0;">Produits</h3>
+            {{ line_formset.management_form }}
+            <div id="movement-lines" style="display:flex;flex-direction:column;gap:1rem;">
+                {% for form in line_formset %}
+                    <div class="movement-line card" style="padding:1rem;">
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-error">{{ form.non_field_errors }}</div>
+                        {% endif %}
+                        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:end;">
+                            <div>
+                                <label for="{{ form.product.id_for_label }}">{{ form.product.label }}</label>
+                                {{ form.product }}
+                                {{ form.product.errors }}
+                            </div>
+                            <div>
+                                <label for="{{ form.quantity.id_for_label }}">{{ form.quantity.label }}</label>
+                                {{ form.quantity }}
+                                {{ form.quantity.errors }}
+                            </div>
+                            {% if line_formset.can_delete %}
+                                <div style="display:flex;align-items:center;gap:0.5rem;">
+                                    <label style="margin:0;">Supprimer</label>
+                                    {{ form.DELETE }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            <div style="margin-top:0.75rem;">
+                <button type="button" class="btn secondary" id="add-line">Ajouter une ligne produit</button>
+            </div>
+        </div>
+        <div style="margin-top:1.5rem;display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
             <button type="submit" class="btn">Enregistrer</button>
             <a href="{% url 'inventory:dashboard' %}" class="btn secondary">Annuler</a>
         </div>
+        <template id="line-template">
+            <div class="movement-line card" style="padding:1rem;">
+                <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:end;">
+                    <div>
+                        <label>Produit</label>
+                        __PRODUCT__
+                    </div>
+                    <div>
+                        <label>Quantité</label>
+                        __QUANTITY__
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                        <label style="margin:0;">Supprimer</label>
+                        __DELETE__
+                    </div>
+                </div>
+            </div>
+        </template>
+        <div id="empty-form" style="display:none;">{{ line_formset.empty_form }}</div>
     </form>
 </section>
 <script>
@@ -68,9 +114,14 @@
         const resetBtn = document.getElementById("scan-reset");
         const summary = document.getElementById("scan-summary");
         const historyList = document.getElementById("scan-history");
-        const productSelect = document.getElementById("id_product");
-        const quantityInput = document.getElementById("id_quantity");
+        const productSelects = () => Array.from(document.querySelectorAll(".product-select"));
+        const quantityInputs = () => Array.from(document.querySelectorAll(".quantity-input"));
         const history = [];
+        const totalFormsInput = document.getElementById("id_lines-TOTAL_FORMS");
+        const lineTemplate = document.getElementById("line-template");
+        const addLineBtn = document.getElementById("add-line");
+        const linesContainer = document.getElementById("movement-lines");
+        const emptyForm = document.getElementById("empty-form");
 
         if (!scanInput) {
             return;
@@ -91,20 +142,30 @@
         };
 
         const ensureOptionExists = (product) => {
-            if (!productSelect) {
-                return;
+            productSelects().forEach((select) => {
+                let option = select.querySelector(`option[value="${product.id}"]`);
+                if (!option) {
+                    option = document.createElement("option");
+                    option.value = product.id;
+                    option.textContent = `${product.sku} - ${product.name}`;
+                    select.appendChild(option);
+                }
+            });
+        };
+
+        const getCurrentLine = () => {
+            const selects = productSelects();
+            if (selects.length === 0) {
+                return { productSelect: null, quantityInput: null };
             }
-            let option = productSelect.querySelector(`option[value="${product.id}"]`);
-            if (!option) {
-                option = document.createElement("option");
-                option.value = product.id;
-                option.textContent = `${product.sku} - ${product.name}`;
-                productSelect.appendChild(option);
-            }
+            const productSelect = selects[selects.length - 1];
+            const quantityInput = quantityInputs()[quantityInputs().length - 1];
+            return { productSelect, quantityInput };
         };
 
         const handleSuccess = (product, meta = {}) => {
             ensureOptionExists(product);
+            const { productSelect, quantityInput } = getCurrentLine();
             if (productSelect) {
                 const previous = productSelect.value;
                 productSelect.value = product.id.toString();
@@ -170,14 +231,35 @@
             history.splice(0, history.length);
             renderHistory();
             summary.textContent = "Historique réinitialisé.";
-            if (quantityInput) {
-                quantityInput.value = "";
-            }
-            if (productSelect) {
-                productSelect.value = "";
-            }
+            quantityInputs().forEach((input) => (input.value = ""));
+            productSelects().forEach((select) => (select.value = ""));
             focusScan();
         });
+
+        const addLine = () => {
+            if (!lineTemplate || !totalFormsInput || !emptyForm) {
+                return;
+            }
+            const formIndex = parseInt(totalFormsInput.value, 10) || 0;
+            const templateHtml = emptyForm.innerHTML.replace(/__prefix__/g, formIndex);
+            const wrapper = document.createElement("div");
+            wrapper.innerHTML = templateHtml;
+            const productField = wrapper.querySelector("select");
+            const quantityField = wrapper.querySelector("input[type='number']");
+            const deleteField = wrapper.querySelector("input[name$='-DELETE']");
+            let lineHtml = lineTemplate.innerHTML;
+            lineHtml = lineHtml.replace("__PRODUCT__", productField.outerHTML);
+            lineHtml = lineHtml.replace("__QUANTITY__", quantityField.outerHTML);
+            lineHtml = lineHtml.replace("__DELETE__", deleteField ? deleteField.outerHTML : "");
+            const lineWrapper = document.createElement("div");
+            lineWrapper.innerHTML = lineHtml;
+            linesContainer.appendChild(lineWrapper.firstElementChild);
+            totalFormsInput.value = formIndex + 1;
+        };
+
+        if (addLineBtn) {
+            addLineBtn.addEventListener("click", addLine);
+        }
 
         focusScan();
     });

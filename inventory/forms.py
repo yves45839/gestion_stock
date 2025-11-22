@@ -15,10 +15,16 @@ from .models import (
     generate_customer_reference,
 )
 
+MANUAL_MOVEMENT_CODES = ["RECEPTION", "TRANSFERT"]
+
+
+def _manual_movement_queryset():
+    return MovementType.objects.filter(code__in=MANUAL_MOVEMENT_CODES).order_by("name")
+
 
 class StockMovementForm(forms.ModelForm):
     movement_type = forms.ModelChoiceField(
-        queryset=MovementType.objects.all(),
+        queryset=_manual_movement_queryset(),
         label="Type de mouvement",
         widget=forms.Select(attrs={"class": "form-control"}),
     )
@@ -44,9 +50,9 @@ class StockMovementForm(forms.ModelForm):
             "comment",
         ]
         widgets = {
-        "product": forms.Select(attrs={"class": "form-control"}),
-        "quantity": forms.NumberInput(attrs={"class": "form-control", "min": 1}),
-        "site": forms.Select(attrs={"class": "form-control"}),
+            "product": forms.Select(attrs={"class": "form-control product-select"}),
+            "quantity": forms.NumberInput(attrs={"class": "form-control", "min": 1, "step": 1}),
+            "site": forms.Select(attrs={"class": "form-control"}),
             "document_number": forms.TextInput(attrs={"class": "form-control"}),
             "comment": forms.Textarea(
                 attrs={"rows": 3, "class": "form-control", "placeholder": "Commentaire (optionnel)"}
@@ -54,12 +60,12 @@ class StockMovementForm(forms.ModelForm):
         }
         labels = {
             "product": "Produit",
-            "quantity": "Quantite",
+            "quantity": "Quantité",
             "document_number": "Document",
             "comment": "Commentaire",
         }
 
-    def __init__(self, *args, current_site=None, site_locked=False, **kwargs):
+    def __init__(self, *args, current_site=None, site_locked=False, user=None, **kwargs):
         self._current_site = current_site
         self._site_locked = bool(site_locked and current_site)
         super().__init__(*args, **kwargs)
@@ -69,11 +75,17 @@ class StockMovementForm(forms.ModelForm):
             self.fields["site"].initial = current_site
         if self._site_locked:
             self.fields["site"].widget = forms.HiddenInput()
+        if user and not getattr(user, "is_superuser", False):
+            assignment = getattr(user, "site_assignment", None)
+            if assignment:
+                self.fields["site"].queryset = Site.objects.filter(pk=assignment.site_id)
+            else:
+                self.fields["site"].queryset = Site.objects.none()
 
     def clean_quantity(self):
         quantity = self.cleaned_data["quantity"]
         if quantity <= 0:
-            raise forms.ValidationError("La quantite doit etre positive.")
+            raise forms.ValidationError("La quantité doit être positive.")
         return quantity
 
     def clean_site(self):
@@ -83,6 +95,88 @@ class StockMovementForm(forms.ModelForm):
         if site is None:
             raise forms.ValidationError("Sélectionnez un site.")
         return site
+
+
+class MovementHeaderForm(forms.Form):
+    movement_type = forms.ModelChoiceField(
+        queryset=_manual_movement_queryset(),
+        label="Type de mouvement",
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    movement_date = forms.DateTimeField(
+        label="Date du mouvement",
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local", "class": "form-control"}),
+    )
+    site = forms.ModelChoiceField(
+        queryset=Site.objects.order_by("name"),
+        label="Site concerné",
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    document_number = forms.CharField(
+        required=False,
+        label="Document",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    comment = forms.CharField(
+        required=False,
+        label="Commentaire",
+        widget=forms.Textarea(
+            attrs={"rows": 3, "class": "form-control", "placeholder": "Commentaire (optionnel)"}
+        ),
+    )
+
+    def __init__(self, *args, current_site=None, site_locked=False, user=None, **kwargs):
+        self._current_site = current_site
+        self._site_locked = bool(site_locked and current_site)
+        self._user = user
+        super().__init__(*args, **kwargs)
+        if not self.data.get("movement_date") and not self.initial.get("movement_date"):
+            self.fields["movement_date"].initial = timezone.now().strftime("%Y-%m-%dT%H:%M")
+        if current_site:
+            self.fields["site"].initial = current_site
+        self._limit_sites()
+        if self._site_locked:
+            self.fields["site"].widget = forms.HiddenInput()
+
+    def _limit_sites(self):
+        if not self._user or getattr(self._user, "is_superuser", False):
+            self.fields["site"].queryset = Site.objects.order_by("name")
+            return
+        assignment = getattr(self._user, "site_assignment", None)
+        if assignment:
+            self.fields["site"].queryset = Site.objects.filter(pk=assignment.site_id)
+            self.fields["site"].initial = assignment.site
+        else:
+            self.fields["site"].queryset = Site.objects.none()
+
+    def clean_site(self):
+        site = self.cleaned_data.get("site")
+        if self._site_locked and self._current_site and site != self._current_site:
+            raise forms.ValidationError("Le site ne peut pas être modifié.")
+        if site is None:
+            raise forms.ValidationError("Sélectionnez un site accessible.")
+        if site not in self.fields["site"].queryset:
+            raise forms.ValidationError("Ce site n'est pas autorisé pour votre compte.")
+        return site
+
+
+class MovementLineForm(forms.Form):
+    product = forms.ModelChoiceField(
+        queryset=Product.objects.order_by("name"),
+        label="Produit",
+        widget=forms.Select(attrs={"class": "form-control product-select"}),
+    )
+    quantity = forms.IntegerField(
+        min_value=1,
+        label="Quantité",
+        widget=forms.NumberInput(attrs={"class": "form-control quantity-input", "min": 1, "step": 1}),
+    )
+
+    def clean_quantity(self):
+        quantity = self.cleaned_data["quantity"]
+        if quantity <= 0:
+            raise forms.ValidationError("La quantité doit être positive.")
+        return quantity
 
 
 class InventoryAdjustmentForm(forms.Form):
