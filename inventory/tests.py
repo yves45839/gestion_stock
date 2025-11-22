@@ -211,13 +211,13 @@ class InventoryViewTests(TestCase):
         self.assertTrue(data["found"])
         self.assertEqual(data["product"]["id"], self.product.id)
 
-    def test_lookup_product_endpoint_auto_creates_missing_product(self):
+    def test_lookup_product_endpoint_returns_not_found_for_missing_product(self):
         response = self.client.get(reverse("inventory:lookup_product"), {"code": "000000"})
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 404)
         data = response.json()
-        self.assertTrue(data["created"])
-        created_product = Product.objects.get(barcode="000000")
-        self.assertEqual(created_product.manufacturer_reference, "000000")
+        self.assertFalse(data["found"])
+        self.assertFalse(data["created"])
+        self.assertFalse(Product.objects.filter(barcode="000000").exists())
 
     def test_inventory_overview_scan_filter(self):
         StockMovement.objects.create(
@@ -231,11 +231,11 @@ class InventoryViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["products"]), 1)
 
-    def test_inventory_overview_scan_creates_product_when_missing(self):
+    def test_inventory_overview_scan_does_not_create_product_when_missing(self):
         response = self.client.get(reverse("inventory:inventory_overview"), {"scan": "NEWCODE123"})
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(Product.objects.filter(barcode="NEWCODE123").exists())
-        self.assertEqual(len(response.context["products"]), 1)
+        self.assertFalse(Product.objects.filter(barcode="NEWCODE123").exists())
+        self.assertIn("Produit introuvable", response.context["scan_message"])
 
 
 class ImportViewTests(TestCase):
