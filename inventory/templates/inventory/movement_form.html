@@ -303,9 +303,8 @@
                                 <div class="muted-text">Ligne produit</div>
                             </div>
                             {% if line_formset.can_delete %}
-                                <label class="trash-btn" data-action="remove-line">
-                                    {{ form.DELETE }} 🗑 Supprimer
-                                </label>
+                                {{ form.DELETE.as_widget(attrs={'class': 'delete-checkbox', 'style': 'display:none;'}) }}
+                                <button type="button" class="trash-btn" data-action="remove-line">🗑 Supprimer</button>
                             {% endif %}
                         </div>
                         {% if form.non_field_errors %}
@@ -362,10 +361,8 @@
                         <span class="line-tag">#</span>
                         <div class="muted-text">Ligne produit</div>
                     </div>
-                    <label class="trash-btn" data-action="remove-line">
-                        __DELETE__
-                        🗑 Supprimer
-                    </label>
+                    __DELETE__
+                    <button type="button" class="trash-btn" data-action="remove-line">🗑 Supprimer</button>
                 </div>
                 <div class="line-grid">
                     <div class="field">
@@ -557,6 +554,13 @@
 
         const getLines = () => Array.from(linesContainer.querySelectorAll(".movement-line"));
 
+        const hideDeleteField = (line) => {
+            const deleteField = line.querySelector("input[name$='-DELETE']");
+            if (deleteField) {
+                deleteField.style.display = "none";
+            }
+        };
+
         const toggleEmptyState = () => {
             if (!emptyState) return;
             emptyState.style.display = getLines().length ? "none" : "flex";
@@ -589,7 +593,13 @@
         }
 
         const removeLine = (line) => {
-            line.remove();
+            const deleteField = line.querySelector("input[name$='-DELETE']");
+            if (deleteField) {
+                deleteField.checked = true;
+                line.style.display = "none";
+            } else {
+                line.remove();
+            }
             refreshIndexes();
         };
 
@@ -608,6 +618,9 @@
             let lineHtml = lineTemplate.innerHTML.trim();
             lineHtml = lineHtml.replace("__PRODUCT__", productField.outerHTML);
             lineHtml = lineHtml.replace("__QUANTITY__", quantityField.outerHTML);
+            if (deleteField) {
+                deleteField.style.display = "none";
+            }
             lineHtml = lineHtml.replace("__DELETE__", deleteField ? deleteField.outerHTML : "");
             const lineWrapper = document.createElement("div");
             lineWrapper.innerHTML = lineHtml;
@@ -623,6 +636,7 @@
         };
 
         const attachLine = (line) => {
+            hideDeleteField(line);
             bindAutocomplete(line);
             const removeBtn = line.querySelector("[data-action='remove-line']");
             if (removeBtn) {
