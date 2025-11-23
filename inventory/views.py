@@ -178,6 +178,10 @@ def dashboard(request):
         F("quantity") * F("unit_price"),
         output_field=DecimalField(max_digits=14, decimal_places=2),
     )
+    sale_item_amount_expression = ExpressionWrapper(
+        F("items__quantity") * F("items__unit_price"),
+        output_field=DecimalField(max_digits=14, decimal_places=2),
+    )
     site_breakdown = []
     for site in site_context["sites"]:
         site_products = Product.objects.with_stock_quantity(site=site)
@@ -305,7 +309,7 @@ def dashboard(request):
         confirmed_sales_period.values("site__name")
         .annotate(
             total_amount=Coalesce(
-                Sum(sales_amount_expression),
+                Sum(sale_item_amount_expression),
                 decimal_zero_value,
             )
         )
@@ -319,7 +323,10 @@ def dashboard(request):
 
     payment_totals = confirmed_sales_period.aggregate(
         total_paid=Coalesce(Sum("amount_paid"), decimal_zero_value),
-        total_invoiced=Coalesce(Sum(sales_amount_expression), decimal_zero_value),
+        total_invoiced=Coalesce(
+            Sum(sale_item_amount_expression),
+            decimal_zero_value,
+        ),
     )
     outstanding_amount = max(
         payment_totals.get("total_invoiced") - payment_totals.get("total_paid"),
@@ -336,7 +343,10 @@ def dashboard(request):
         )
         .values("customer__name", "customer__company_name", "customer_name")
         .annotate(
-            total_amount=Coalesce(Sum(sales_amount_expression), decimal_zero_value)
+            total_amount=Coalesce(
+                Sum(sale_item_amount_expression),
+                decimal_zero_value,
+            )
         )
         .order_by("-total_amount")[:5]
     )
