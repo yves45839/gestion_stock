@@ -58,11 +58,6 @@
                     <h2 style="margin:0;">Lignes de vente</h2>
                     <small style="color:var(--muted);">Une seule ligne apparait d'abord. Ajoutez autant de produits, sections ou notes que necessaire.</small>
                 </div>
-                <div class="line-buttons">
-                    <button type="button" class="btn secondary small" data-add-line="product">+ Ajouter un produit</button>
-                    <button type="button" class="btn secondary small" data-add-line="section">Ajouter une section</button>
-                    <button type="button" class="btn secondary small" data-add-line="note">Ajouter une note</button>
-                </div>
             </div>
             {% if formset.non_form_errors %}
                 <div class="message error">
@@ -89,6 +84,11 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+            <div class="line-buttons">
+                <button type="button" class="btn secondary small" data-add-line="product">+ Ajouter un produit</button>
+                <button type="button" class="btn secondary small" data-add-line="section">Ajouter une section</button>
+                <button type="button" class="btn secondary small" data-add-line="note">Ajouter une note</button>
             </div>
             <div class="sale-summary">
                 <span>Total</span>
@@ -133,7 +133,14 @@
 .sale-line .note-fields { display: none; }
 .sale-line.text-line .product-fields { display: none; }
 .sale-line.text-line .note-fields { display: block; }
-.line-buttons .btn { margin-left: 0.35rem; }
+.line-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
+}
+.line-buttons .btn { margin-left: 0; }
 .btn.small { padding: 0.3rem 0.85rem; font-size: 0.85rem; }
 .sale-summary {
     display: flex;

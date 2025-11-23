@@ -41,6 +41,11 @@
         font-weight: 600;
     }
     .movement-lines { display: grid; gap: 1rem; }
+    .line-footer {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 0.5rem;
+    }
     .movement-line {
         position: relative;
         border-radius: 16px;
@@ -222,8 +227,8 @@
                                 <div class="muted-text">Ligne produit</div>
                             </div>
                             {% if line_formset.can_delete %}
-                                <label class="info-chip" style="cursor:pointer; gap:0.35rem;">
-                                    {{ form.DELETE }} Supprimer
+                                <label class="trash-btn" data-action="remove-line">
+                                    {{ form.DELETE }} 🗑 Supprimer
                                 </label>
                             {% endif %}
                         </div>
@@ -252,17 +257,12 @@
                                 {{ form.quantity }}
                                 {{ form.quantity.errors }}
                             </div>
-                            {% if line_formset.can_delete %}
-                                <label class="trash-btn">
-                                    {{ form.DELETE }} 🗑 Supprimer
-                                </label>
-                            {% endif %}
                         </div>
                     </div>
                 {% endfor %}
             </div>
-            <div style="margin-top:0.25rem;">
-                <button type="button" class="btn secondary" id="add-line">+ Ajouter une ligne produit</button>
+            <div class="line-footer">
+                <button type="button" class="btn secondary" id="add-line" data-add-movement-line>+ Ajouter une ligne produit</button>
             </div>
         </div>
         <div id="pre-submit-message" class="message info" style="display:none; margin-top:0;">
@@ -279,7 +279,7 @@
                         <span class="line-tag">#</span>
                         <div class="muted-text">Ligne produit</div>
                     </div>
-                    <label class="trash-btn">
+                    <label class="trash-btn" data-action="remove-line">
                         __DELETE__
                         🗑 Supprimer
                     </label>
@@ -322,7 +322,6 @@
         const history = [];
         const totalFormsInput = document.getElementById("id_lines-TOTAL_FORMS");
         const lineTemplate = document.getElementById("line-template");
-        const addLineBtn = document.getElementById("add-line");
         const linesContainer = document.getElementById("movement-lines");
         const emptyForm = document.getElementById("empty-form");
         const productDataset = JSON.parse(document.getElementById("product-dataset").textContent || "[]");
@@ -472,9 +471,48 @@
             }
         };
 
+        const getLines = () => Array.from(linesContainer.querySelectorAll(".movement-line"));
+
+        const refreshIndexes = () => {
+            const lines = getLines();
+            lines.forEach((line, index) => {
+                line.dataset.formIndex = index;
+                const tag = line.querySelector(".line-tag");
+                if (tag) tag.textContent = index + 1;
+                line.querySelectorAll("input, select").forEach((input) => {
+                    if (!input.name) {
+                        return;
+                    }
+                    input.name = input.name.replace(/lines-\d+-/, `lines-${index}-`);
+                    if (input.id) {
+                        input.id = input.id.replace(/id_lines-\d+-/, `id_lines-${index}-`);
+                    }
+                });
+            });
+            if (totalFormsInput) {
+                totalFormsInput.value = lines.length;
+            }
+        };
+
         if (!scanInput) {
             return;
         }
+
+        const removeLine = (line) => {
+            line.remove();
+            refreshIndexes();
+        };
+
+        const attachLine = (line) => {
+            bindAutocomplete(line);
+            const removeBtn = line.querySelector("[data-action='remove-line']");
+            if (removeBtn) {
+                removeBtn.addEventListener("click", (event) => {
+                    event.preventDefault();
+                    removeLine(line);
+                });
+            }
+        };
 
         const focusScan = () => {
             scanInput.focus();
@@ -581,10 +619,10 @@
         });
 
         const addLine = () => {
-            if (!lineTemplate || !totalFormsInput || !emptyForm) {
+            if (!lineTemplate || !emptyForm) {
                 return;
             }
-            const formIndex = parseInt(totalFormsInput.value, 10) || 0;
+            const formIndex = getLines().length;
             const templateHtml = emptyForm.innerHTML.replace(/__prefix__/g, formIndex);
             const wrapper = document.createElement("div");
             wrapper.innerHTML = templateHtml;
@@ -592,7 +630,7 @@
             const quantityField = wrapper.querySelector("input[type='number']");
             const deleteField = wrapper.querySelector("input[name$='-DELETE']");
             ensureSelectTagged(productField);
-            let lineHtml = lineTemplate.innerHTML;
+            let lineHtml = lineTemplate.innerHTML.trim();
             lineHtml = lineHtml.replace("__PRODUCT__", productField.outerHTML);
             lineHtml = lineHtml.replace("__QUANTITY__", quantityField.outerHTML);
             lineHtml = lineHtml.replace("__DELETE__", deleteField ? deleteField.outerHTML : "");
@@ -600,26 +638,25 @@
             lineWrapper.innerHTML = lineHtml;
             const newLine = lineWrapper.firstElementChild;
             linesContainer.appendChild(newLine);
-            totalFormsInput.value = formIndex + 1;
-            const tag = newLine.querySelector(".line-tag");
-            if (tag) tag.textContent = formIndex + 1;
-            bindAutocomplete(newLine);
+            attachLine(newLine);
+            refreshIndexes();
         };
 
-        Array.from(document.querySelectorAll(".movement-line")).forEach((line, index) => {
+        getLines().forEach((line) => {
             const select = line.querySelector("select");
             ensureSelectTagged(select);
-            const tag = line.querySelector(".line-tag");
-            if (tag) tag.textContent = index + 1;
-            bindAutocomplete(line);
+            attachLine(line);
         });
+        refreshIndexes();
 
-        if (addLineBtn) {
-            addLineBtn.addEventListener("click", (event) => {
-                event.preventDefault();
-                addLine();
+        Array.from(document.querySelectorAll("[data-add-movement-line]"))
+            .filter(Boolean)
+            .forEach((btn) => {
+                btn.addEventListener("click", (event) => {
+                    event.preventDefault();
+                    addLine();
+                });
             });
-        }
 
         const movementForm = document.getElementById("movement-form");
         const preSubmitMessage = document.getElementById("pre-submit-message");
