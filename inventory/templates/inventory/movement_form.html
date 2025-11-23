@@ -303,7 +303,7 @@
                                 <div class="muted-text">Ligne produit</div>
                             </div>
                             {% if line_formset.can_delete %}
-                                {{ form.DELETE.as_widget(attrs={'class': 'delete-checkbox', 'style': 'display:none;'}) }}
+                                <span style="display:none;">{{ form.DELETE }}</span>
                                 <button type="button" class="trash-btn" data-action="remove-line">🗑 Supprimer</button>
                             {% endif %}
                         </div>
