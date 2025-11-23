@@ -2,6 +2,75 @@
 {% block title %}Nouveau mouvement{% endblock %}
 {% block content %}
 <section class="card" style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:1.5rem;">
+    <style>
+        .product-select { display: none; }
+        .autocomplete-panel { position: relative; }
+        .autocomplete-results {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+            z-index: 20;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .autocomplete-option {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            width: 100%;
+            border: none;
+            background: transparent;
+            padding: 0.65rem 0.85rem;
+            cursor: pointer;
+            text-align: left;
+        }
+        .autocomplete-option:hover,
+        .autocomplete-option:focus {
+            background: #f7f7f7;
+            outline: none;
+        }
+        .autocomplete-empty {
+            padding: 0.65rem 0.85rem;
+            color: var(--muted);
+        }
+        .product-thumb {
+            width: 42px;
+            height: 42px;
+            border-radius: 8px;
+            background: #f3f4f6;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+            border: 1px solid var(--border);
+        }
+        .product-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .product-thumb.fallback {
+            font-weight: 600;
+            color: #6b7280;
+        }
+        .product-preview {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 0.35rem;
+            color: var(--muted);
+        }
+        .product-preview strong {
+            color: inherit;
+            display: block;
+        }
+    </style>
     <div>
         <h2 style="margin-top:0;">Mode scanner</h2>
         <p style="color:var(--muted);margin-bottom:0.5rem;">Scannez un code-barres pour sélectionner automatiquement le produit et incrémenter la quantité.</p>
@@ -61,7 +130,18 @@
                         <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:end;">
                             <div>
                                 <label for="{{ form.product.id_for_label }}">{{ form.product.label }}</label>
-                                {{ form.product }}
+                                <div class="autocomplete-panel">
+                                    <input type="text" class="form-control product-search" placeholder="Chercher un produit par nom ou référence" autocomplete="off">
+                                    {{ form.product }}
+                                    <div class="autocomplete-results" data-autocomplete></div>
+                                </div>
+                                <div class="product-preview" data-product-preview>
+                                    <div class="product-thumb fallback">?</div>
+                                    <div>
+                                        <strong>Aucun produit sélectionné</strong>
+                                        <small style="color:var(--muted);">Saisissez un nom ou une référence pour commencer.</small>
+                                    </div>
+                                </div>
                                 {{ form.product.errors }}
                             </div>
                             <div>
@@ -92,7 +172,18 @@
                 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:end;">
                     <div>
                         <label>Produit</label>
-                        __PRODUCT__
+                        <div class="autocomplete-panel">
+                            <input type="text" class="form-control product-search" placeholder="Chercher un produit par nom ou référence" autocomplete="off">
+                            __PRODUCT__
+                            <div class="autocomplete-results" data-autocomplete></div>
+                        </div>
+                        <div class="product-preview" data-product-preview>
+                            <div class="product-thumb fallback">?</div>
+                            <div>
+                                <strong>Aucun produit sélectionné</strong>
+                                <small style="color:var(--muted);">Saisissez un nom ou une référence pour commencer.</small>
+                            </div>
+                        </div>
                     </div>
                     <div>
                         <label>Quantité</label>
@@ -108,6 +199,7 @@
         <div id="empty-form" style="display:none;">{{ line_formset.empty_form }}</div>
     </form>
 </section>
+{{ product_dataset|json_script:"product-dataset" }}
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         const scanInput = document.getElementById("scan-input");
@@ -122,6 +214,123 @@
         const addLineBtn = document.getElementById("add-line");
         const linesContainer = document.getElementById("movement-lines");
         const emptyForm = document.getElementById("empty-form");
+        const productDataset = JSON.parse(document.getElementById("product-dataset").textContent || "[]");
+
+        const createThumb = (product) => {
+            const thumb = document.createElement("div");
+            thumb.className = "product-thumb";
+            if (product && product.image_url) {
+                const img = document.createElement("img");
+                img.src = product.image_url;
+                img.alt = product.name || "Produit";
+                thumb.appendChild(img);
+            } else {
+                thumb.classList.add("fallback");
+                thumb.textContent = (product?.name || "?").slice(0, 1).toUpperCase();
+            }
+            return thumb;
+        };
+
+        const renderPreview = (wrapper, product) => {
+            if (!wrapper) return;
+            wrapper.innerHTML = "";
+            const thumb = createThumb(product);
+            const info = document.createElement("div");
+            const title = document.createElement("strong");
+            title.textContent = product ? product.name : "Aucun produit sélectionné";
+            const subtitle = document.createElement("small");
+            subtitle.style.color = "var(--muted)";
+            subtitle.textContent = product
+                ? product.sku || "Référence manquante"
+                : "Saisissez un nom ou une référence pour commencer.";
+            info.append(title, subtitle);
+            wrapper.append(thumb, info);
+        };
+
+        const bindAutocomplete = (lineElement) => {
+            const searchInput = lineElement.querySelector(".product-search");
+            const select = lineElement.querySelector(".product-select");
+            const results = lineElement.querySelector("[data-autocomplete]");
+            const preview = lineElement.querySelector("[data-product-preview]");
+            renderPreview(
+                preview,
+                productDataset.find((p) => p.id.toString() === (select?.value || "")) || null,
+            );
+
+            const selectProduct = (product) => {
+                if (!product || !select) return;
+                ensureOptionExists(product);
+                select.value = product.id.toString();
+                if (searchInput) {
+                    searchInput.value = `${product.name} (${product.sku || "Réf. inconnue"})`;
+                }
+                renderPreview(preview, product);
+                if (results) {
+                    results.innerHTML = "";
+                }
+            };
+
+            const filterProducts = (term) => {
+                const normalized = term.trim().toLowerCase();
+                if (!normalized) return [];
+                return productDataset
+                    .filter(
+                        (product) =>
+                            (product.name || "").toLowerCase().includes(normalized) ||
+                            (product.sku || "").toLowerCase().includes(normalized),
+                    )
+                    .slice(0, 8);
+            };
+
+            const renderResults = (items) => {
+                if (!results) return;
+                results.innerHTML = "";
+                if (!items.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "autocomplete-empty";
+                    empty.textContent = "Aucun produit trouvé";
+                    results.appendChild(empty);
+                    return;
+                }
+                items.forEach((product) => {
+                    const option = document.createElement("button");
+                    option.type = "button";
+                    option.className = "autocomplete-option";
+                    option.appendChild(createThumb(product));
+                    const meta = document.createElement("div");
+                    const title = document.createElement("div");
+                    title.textContent = product.name;
+                    title.style.fontWeight = "600";
+                    const subtitle = document.createElement("div");
+                    subtitle.textContent = product.sku || "Sans référence";
+                    subtitle.style.color = "var(--muted)";
+                    meta.append(title, subtitle);
+                    option.appendChild(meta);
+                    option.addEventListener("click", () => selectProduct(product));
+                    results.appendChild(option);
+                });
+            };
+
+            if (searchInput) {
+                searchInput.addEventListener("input", () => {
+                    const matches = filterProducts(searchInput.value);
+                    renderResults(matches);
+                });
+                searchInput.addEventListener("focus", () => {
+                    const matches = filterProducts(searchInput.value);
+                    renderResults(matches);
+                });
+                searchInput.addEventListener("blur", () => {
+                    setTimeout(() => results && (results.innerHTML = ""), 150);
+                });
+            }
+            if (select) {
+                select.addEventListener("change", () => {
+                    const product = productDataset.find((p) => p.id.toString() === select.value);
+                    renderPreview(preview, product || null);
+                });
+            }
+        };
 
         if (!scanInput) {
             return;
@@ -190,6 +399,13 @@
                 time: new Date().toLocaleTimeString(),
             });
             renderHistory();
+            document.querySelectorAll(".movement-line").forEach((line) => {
+                const select = line.querySelector(".product-select");
+                const preview = line.querySelector("[data-product-preview]");
+                if (select && select.value === product.id.toString()) {
+                    renderPreview(preview, product);
+                }
+            });
         };
 
         const handleError = (message) => {
@@ -253,9 +469,15 @@
             lineHtml = lineHtml.replace("__DELETE__", deleteField ? deleteField.outerHTML : "");
             const lineWrapper = document.createElement("div");
             lineWrapper.innerHTML = lineHtml;
-            linesContainer.appendChild(lineWrapper.firstElementChild);
+            const newLine = lineWrapper.firstElementChild;
+            linesContainer.appendChild(newLine);
             totalFormsInput.value = formIndex + 1;
+            bindAutocomplete(newLine);
         };
+
+        Array.from(document.querySelectorAll(".movement-line")).forEach((line) => {
+            bindAutocomplete(line);
+        });
 
         if (addLineBtn) {
             addLineBtn.addEventListener("click", addLine);

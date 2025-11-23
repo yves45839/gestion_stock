@@ -24,12 +24,21 @@
             </div>
         {% endif %}
         <div class="product-fields" data-role="product-fields">
-            <input type="text"
-                   class="form-control product-search"
-                   placeholder="Chercher un produit par nom ou r\u00e9f\u00e9rence"
-                   list="product-options"
-                   autocomplete="off">
-            {{ form.product }}
+            <div class="autocomplete-panel">
+                <input type="text"
+                       class="form-control product-search"
+                       placeholder="Chercher un produit par nom ou référence"
+                       autocomplete="off">
+                {{ form.product }}
+                <div class="autocomplete-results" data-autocomplete></div>
+            </div>
+            <div class="product-preview" data-product-preview>
+                <div class="product-thumb fallback">?</div>
+                <div>
+                    <strong>Aucun produit sélectionné</strong>
+                    <small style="color:var(--muted);">Tapez un nom ou une référence pour commencer.</small>
+                </div>
+            </div>
             {% for error in form.product.errors %}
                 <div class="field-error">{{ error }}</div>
             {% endfor %}

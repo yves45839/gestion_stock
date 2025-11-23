@@ -25,7 +25,24 @@
             {% for field in sale_form %}
                 <div style="margin-bottom:1rem;">
                     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                    {{ field }}
+                    {% if field.name == "customer" %}
+                        <div class="customer-picker">
+                            <div class="autocomplete-panel">
+                                <input type="text" class="form-control customer-search" placeholder="Rechercher un client" autocomplete="off">
+                                {{ field }}
+                                <div class="autocomplete-results" data-customer-autocomplete></div>
+                            </div>
+                            <div class="product-preview" data-customer-preview>
+                                <div class="product-thumb fallback">👤</div>
+                                <div>
+                                    <strong>Aucun client sélectionné</strong>
+                                    <small style="color:var(--muted);">Saisissez un nom, une référence ou un numéro.</small>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        {{ field }}
+                    {% endif %}
                     {% if field.help_text %}
                         <small style="color:var(--muted);">{{ field.help_text }}</small>
                     {% endif %}
@@ -88,7 +105,7 @@
     {% include "inventory/partials/sale_line_row.html" with form=formset.empty_form row_index="__prefix__" %}
 </template>
 {{ product_dataset|json_script:"product-dataset" }}
-<datalist id="product-options"></datalist>
+{{ customer_dataset|json_script:"customer-dataset" }}
 <style>
 .sale-lines-table {
     width: 100%;
@@ -137,6 +154,69 @@
 .product-search {
     width: 100%;
 }
+.product-select { display: none; }
+.customer-picker select { display: none; }
+.autocomplete-panel { position: relative; }
+.autocomplete-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    z-index: 25;
+    max-height: 260px;
+    overflow-y: auto;
+}
+.autocomplete-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 0.65rem 0.85rem;
+    cursor: pointer;
+    text-align: left;
+}
+.autocomplete-option:hover,
+.autocomplete-option:focus {
+    background: #f7f7f7;
+    outline: none;
+}
+.autocomplete-empty {
+    padding: 0.65rem 0.85rem;
+    color: var(--muted);
+}
+.product-thumb {
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    background: #f3f4f6;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+}
+.product-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.product-thumb.fallback { font-weight: 600; color: #6b7280; }
+.product-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+    color: var(--muted);
+}
+.product-preview strong { color: inherit; display: block; }
+.customer-picker { display: flex; flex-direction: column; gap: 0.35rem; }
 </style>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -145,51 +225,152 @@ document.addEventListener("DOMContentLoaded", () => {
     const totalInput = document.getElementById("id_items-TOTAL_FORMS");
     const totalDisplay = document.getElementById("sale-total-display");
     const productDataset = JSON.parse(document.getElementById("product-dataset").textContent || "[]");
+    const customerDataset = JSON.parse(document.getElementById("customer-dataset").textContent || "[]");
     const priceMap = {};
     const productMap = {};
-    const productOptions = document.getElementById("product-options");
 
     const formatProductLabel = (item) => {
         const ref = item.sku ? ` (${item.sku})` : "";
-        return `${item.name}${ref} [${item.id}]`;
+        return `${item.name}${ref}`;
     };
 
-    function fillProductOptions() {
-        if (!productOptions || productOptions.children.length) {
-            return;
+    const createThumb = (item) => {
+        const thumb = document.createElement("div");
+        thumb.className = "product-thumb";
+        if (item && item.image_url) {
+            const img = document.createElement("img");
+            img.src = item.image_url;
+            img.alt = item.name || "Produit";
+            thumb.appendChild(img);
+        } else {
+            thumb.classList.add("fallback");
+            thumb.textContent = (item?.name || "?").slice(0, 1).toUpperCase();
         }
-        productDataset.forEach((item) => {
-            const option = document.createElement("option");
-            option.value = formatProductLabel(item);
-            option.dataset.productId = item.id;
-            productOptions.appendChild(option);
+        return thumb;
+    };
+
+    const renderProductPreview = (wrapper, product) => {
+        if (!wrapper) return;
+        wrapper.innerHTML = "";
+        const thumb = createThumb(product);
+        const info = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = product ? product.name : "Aucun produit sélectionné";
+        const subtitle = document.createElement("small");
+        subtitle.style.color = "var(--muted)";
+        subtitle.textContent = product ? (product.sku || "Référence manquante") : "Tapez un nom ou une référence pour commencer.";
+        info.append(title, subtitle);
+        wrapper.append(thumb, info);
+    };
+
+    const filterProducts = (value) => {
+        const normalized = (value || "").toLowerCase().trim();
+        if (!normalized) return [];
+        return productDataset
+            .filter((item) =>
+                (item.name || "").toLowerCase().includes(normalized) ||
+                (item.sku || "").toLowerCase().includes(normalized)
+            )
+            .slice(0, 8);
+    };
+
+    const customerSelect = document.getElementById("id_customer");
+    const customerSearch = document.querySelector(".customer-search");
+    const customerResults = document.querySelector("[data-customer-autocomplete]");
+    const customerPreview = document.querySelector("[data-customer-preview]");
+
+    const renderCustomerPreview = (customer) => {
+        if (!customerPreview) return;
+        customerPreview.innerHTML = "";
+        const thumb = document.createElement("div");
+        thumb.className = "product-thumb fallback";
+        thumb.textContent = "👤";
+        const info = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = customer ? customer.display_name : "Aucun client sélectionné";
+        const subtitle = document.createElement("small");
+        subtitle.style.color = "var(--muted)";
+        subtitle.textContent = customer
+            ? `${customer.reference || "Sans référence"} ${(customer.phone || "").trim()}`.trim()
+            : "Recherchez par nom, référence ou téléphone.";
+        info.append(title, subtitle);
+        customerPreview.append(thumb, info);
+    };
+
+    const filterCustomers = (value) => {
+        const normalized = (value || "").toLowerCase().trim();
+        if (!normalized) return [];
+        return customerDataset
+            .filter((customer) =>
+                (customer.display_name || "").toLowerCase().includes(normalized) ||
+                (customer.reference || "").toLowerCase().includes(normalized) ||
+                (customer.phone || "").toLowerCase().includes(normalized)
+            )
+            .slice(0, 8);
+    };
+
+    const selectCustomer = (customer) => {
+        if (customerSelect) {
+            customerSelect.value = customer ? customer.id : "";
+        }
+        if (customerSearch) {
+            customerSearch.value = customer ? customer.display_name : "";
+        }
+        renderCustomerPreview(customer || null);
+        if (customerResults) {
+            customerResults.innerHTML = "";
+        }
+    };
+
+    if (customerSearch) {
+        customerSearch.addEventListener("input", () => {
+            if (!customerResults) return;
+            const matches = filterCustomers(customerSearch.value);
+            customerResults.innerHTML = "";
+            if (!matches.length) {
+                const empty = document.createElement("div");
+                empty.className = "autocomplete-empty";
+                empty.textContent = "Aucun client";
+                customerResults.appendChild(empty);
+                return;
+            }
+            matches.forEach((customer) => {
+                const option = document.createElement("button");
+                option.type = "button";
+                option.className = "autocomplete-option";
+                const meta = document.createElement("div");
+                const title = document.createElement("div");
+                title.textContent = customer.display_name;
+                title.style.fontWeight = "600";
+                const subtitle = document.createElement("div");
+                subtitle.textContent = customer.reference || customer.phone || "Sans référence";
+                subtitle.style.color = "var(--muted)";
+                meta.append(title, subtitle);
+                option.append(meta);
+                option.addEventListener("click", () => selectCustomer(customer));
+                customerResults.append(option);
+            });
         });
+        customerSearch.addEventListener("focus", () => {
+            if (customerSearch.value) {
+                customerSearch.dispatchEvent(new Event("input"));
+            }
+        });
+        customerSearch.addEventListener("blur", () => {
+            setTimeout(() => customerResults && (customerResults.innerHTML = ""), 150);
+        });
+    }
+
+    const initialCustomer = customerDataset.find((c) => customerSelect && c.id === Number(customerSelect.value)) || null;
+    renderCustomerPreview(initialCustomer);
+    if (initialCustomer && customerSearch) {
+        customerSearch.value = initialCustomer.display_name;
     }
 
     productDataset.forEach((item) => {
         priceMap[item.id.toString()] = parseFloat(item.sale_price) || 0;
         productMap[item.id.toString()] = item;
     });
-    fillProductOptions();
-
-    function findProductFromInput(value) {
-        const normalized = (value || "").toLowerCase().trim();
-        if (!normalized) {
-            return null;
-        }
-        let match = productDataset.find(
-            (item) => formatProductLabel(item).toLowerCase() === normalized
-        );
-        if (match) {
-            return match;
-        }
-        match = productDataset.find((item) => {
-            const name = (item.name || "").toLowerCase();
-            const sku = (item.sku || "").toLowerCase();
-            return name.includes(normalized) || sku.includes(normalized);
-        });
-        return match || null;
-    }
 
     function updateRowMode(row, type) {
         row.dataset.lineType = type;
@@ -235,13 +416,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const priceInput = row.querySelector(".unit-price-input");
         const removeBtn = row.querySelector("[data-action='remove-line']");
         const productSearch = row.querySelector(".product-search");
+        const results = row.querySelector("[data-autocomplete]");
+        const preview = row.querySelector("[data-product-preview]");
 
-        function setProduct(product) {
+        const selectProduct = (product) => {
             if (!productSelect || !product) return;
             productSelect.value = product.id;
             if (productSearch) {
                 productSearch.value = formatProductLabel(product);
             }
+            renderProductPreview(preview, product);
             if (priceInput) {
                 const price = priceMap[product.id.toString()] || 0;
                 priceInput.value = price.toFixed(2);
@@ -251,40 +435,62 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             updateLineTotal(row);
             updateSummary();
-        }
-
-        function syncSearchLabel() {
-            if (!productSelect || !productSearch) return;
-            const product = productMap[productSelect.value];
-            if (product) {
-                productSearch.value = formatProductLabel(product);
+            if (results) {
+                results.innerHTML = "";
             }
-        }
+        };
+
+        const renderOptions = (value) => {
+            if (!results) return;
+            const matches = filterProducts(value);
+            results.innerHTML = "";
+            if (!matches.length) {
+                const empty = document.createElement("div");
+                empty.className = "autocomplete-empty";
+                empty.textContent = "Aucun produit";
+                results.appendChild(empty);
+                return;
+            }
+            matches.forEach((item) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "autocomplete-option";
+                btn.appendChild(createThumb(item));
+                const meta = document.createElement("div");
+                const title = document.createElement("div");
+                title.textContent = item.name;
+                title.style.fontWeight = "600";
+                const subtitle = document.createElement("div");
+                subtitle.textContent = item.sku || "Sans référence";
+                subtitle.style.color = "var(--muted)";
+                meta.append(title, subtitle);
+                btn.appendChild(meta);
+                btn.addEventListener("click", () => selectProduct(item));
+                results.appendChild(btn);
+            });
+        };
 
         if (productSelect) {
             productSelect.addEventListener("change", () => {
                 const product = productMap[productSelect.value];
-                if (!product) {
-                    return;
+                if (product) {
+                    selectProduct(product);
+                } else {
+                    renderProductPreview(preview, null);
                 }
-                setProduct(product);
             });
         }
         if (productSearch) {
-            productSearch.addEventListener("change", () => {
-                const product = findProductFromInput(productSearch.value);
-                if (product) {
-                    setProduct(product);
-                } else if (productSelect) {
-                    productSelect.value = "";
-                    if (priceInput) {
-                        priceInput.value = "";
-                    }
-                    updateLineTotal(row);
-                    updateSummary();
-                }
+            productSearch.addEventListener("input", () => renderOptions(productSearch.value));
+            productSearch.addEventListener("focus", () => renderOptions(productSearch.value));
+            productSearch.addEventListener("blur", () => {
+                setTimeout(() => results && (results.innerHTML = ""), 150);
             });
-            productSearch.addEventListener("blur", syncSearchLabel);
+        }
+        const initialProduct = productSelect ? productMap[productSelect.value] : null;
+        renderProductPreview(preview, initialProduct);
+        if (productSearch && initialProduct) {
+            productSearch.value = formatProductLabel(initialProduct);
         }
         if (qtyInput) {
             qtyInput.addEventListener("input", () => {
@@ -304,7 +510,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 refreshIndexes();
             });
         }
-        syncSearchLabel();
         updateLineTotal(row);
     }
 
