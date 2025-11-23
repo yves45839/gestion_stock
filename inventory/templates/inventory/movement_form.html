@@ -150,6 +150,70 @@
     .panel textarea::placeholder {
         color: #e3edff;
     }
+    .context-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 0.75rem;
+    }
+    .context-card {
+        background: linear-gradient(140deg, rgba(15,124,144,0.15), rgba(26,42,69,0.7));
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 0.9rem 1rem;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+        display: grid;
+        gap: 0.35rem;
+    }
+    .context-label {
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin: 0;
+    }
+    .context-value {
+        font-weight: 700;
+        font-size: 1.05rem;
+        margin: 0;
+    }
+    .empty-state {
+        border: 1px dashed var(--border);
+        background: var(--surface-muted);
+        border-radius: 14px;
+        padding: 1rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        color: var(--muted);
+    }
+    .empty-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: #102038;
+        border: 1px solid var(--border);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        color: var(--accent-strong);
+        box-shadow: 0 10px 20px rgba(16,32,56,0.35);
+    }
+    @media (max-width: 900px) {
+        .line-grid { grid-template-columns: 1fr; }
+        .line-header { align-items: flex-start; }
+        .line-actions { width: 100%; }
+        .trash-btn { width: 100%; justify-content: center; }
+        .toolbar { flex-wrap: wrap; gap: 0.65rem; }
+        .toolbar .btn { width: 100%; justify-content: center; }
+    }
+    @media (max-width: 600px) {
+        .panel { padding: 1rem; }
+        .info-row { flex-direction: column; align-items: flex-start; }
+        .context-grid { grid-template-columns: 1fr; }
+        .line-header { flex-direction: column; gap: 0.35rem; }
+        #scan-input { width: 100%; }
+    }
 </style>
 
 <section class="page-header reveal">
@@ -210,6 +274,18 @@
             {{ header_form.comment }}
             {{ header_form.comment.errors }}
         </div>
+        <div class="context-grid">
+            <div class="context-card">
+                <p class="context-label">Type de mouvement</p>
+                <p class="context-value">Choisissez le type : entrée, sortie, transfert...</p>
+                <p class="muted-text" style="margin:0;">Le récapitulatif s'adapte automatiquement.</p>
+            </div>
+            <div class="context-card">
+                <p class="context-label">Sites & date</p>
+                <p class="context-value">Validez le site concerné et la date d'application.</p>
+                <p class="muted-text" style="margin:0;">Le site est verrouillé si vous êtes affecté à un point précis.</p>
+            </div>
+        </div>
         <div class="stack">
             <div class="surface-header" style="margin:0; padding:0; border:none;">
                 <div>
@@ -261,12 +337,19 @@
                     </div>
                 {% endfor %}
             </div>
+            <div class="empty-state" data-empty-state style="display:none;">
+                <div class="empty-icon">+</div>
+                <div>
+                    <strong>Aucune ligne ajoutée.</strong>
+                    <div class="muted-text">Ajoutez un produit pour commencer ou scannez un code-barres.</div>
+                </div>
+            </div>
             <div class="line-footer">
                 <button type="button" class="btn secondary" id="add-line" data-add-movement-line>+ Ajouter une ligne produit</button>
             </div>
         </div>
         <div id="pre-submit-message" class="message info" style="display:none; margin-top:0;">
-            Choisissez un type de mouvement puis confirmez le rÃ©capitulatif avant validation.
+            Choisissez un type de mouvement puis confirmez le récapitulatif avant validation.
         </div>
         <div class="toolbar" style="margin-top:0.5rem; flex-wrap:wrap;">
             <button type="submit" class="btn">Enregistrer</button>
@@ -324,6 +407,7 @@
         const lineTemplate = document.getElementById("line-template");
         const linesContainer = document.getElementById("movement-lines");
         const emptyForm = document.getElementById("empty-form");
+        const emptyState = document.querySelector("[data-empty-state]");
         const productDataset = JSON.parse(document.getElementById("product-dataset").textContent || "[]");
 
         const createThumb = (product) => {
@@ -473,6 +557,11 @@
 
         const getLines = () => Array.from(linesContainer.querySelectorAll(".movement-line"));
 
+        const toggleEmptyState = () => {
+            if (!emptyState) return;
+            emptyState.style.display = getLines().length ? "none" : "flex";
+        };
+
         const refreshIndexes = () => {
             const lines = getLines();
             lines.forEach((line, index) => {
@@ -492,6 +581,7 @@
             if (totalFormsInput) {
                 totalFormsInput.value = lines.length;
             }
+            toggleEmptyState();
         };
 
         if (!scanInput) {
