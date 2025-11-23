@@ -465,6 +465,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 subtitle.style.color = "var(--muted)";
                 meta.append(title, subtitle);
                 btn.appendChild(meta);
+                btn.addEventListener("mousedown", (event) => {
+                    event.preventDefault();
+                    selectProduct(item);
+                });
                 btn.addEventListener("click", () => selectProduct(item));
                 results.appendChild(btn);
             });

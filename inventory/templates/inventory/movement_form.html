@@ -306,6 +306,10 @@
                     subtitle.style.color = "var(--muted)";
                     meta.append(title, subtitle);
                     option.appendChild(meta);
+                    option.addEventListener("mousedown", (event) => {
+                        event.preventDefault();
+                        selectProduct(product);
+                    });
                     option.addEventListener("click", () => selectProduct(product));
                     results.appendChild(option);
                 });
