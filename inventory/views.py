@@ -774,9 +774,19 @@ def record_movement(request):
             user=request.user,
         )
         line_formset = MovementLineFormSet(prefix="lines")
+    product_dataset = [
+        {
+            "id": product.id,
+            "name": product.name,
+            "sku": product.sku,
+            "image_url": product.image.url if product.image else "",
+        }
+        for product in Product.objects.order_by("name")
+    ]
     context = {
         "header_form": header_form,
         "line_formset": line_formset,
+        "product_dataset": product_dataset,
     }
     context.update(site_context)
     return render(request, "inventory/movement_form.html", context)
@@ -1146,13 +1156,24 @@ def sale_create(request):
             "name": product.name,
             "sku": product.sku,
             "sale_price": float(product.sale_price) if product.sale_price is not None else 0,
+            "image_url": product.image.url if product.image else "",
         }
         for product in Product.objects.order_by("name")
+    ]
+    customer_dataset = [
+        {
+            "id": customer.id,
+            "display_name": customer.display_name,
+            "reference": customer.reference,
+            "phone": customer.phone,
+        }
+        for customer in Customer.objects.order_by("name", "company_name")
     ]
     context = {
         "sale_form": sale_form,
         "formset": formset,
         "product_dataset": product_dataset,
+        "customer_dataset": customer_dataset,
         "form_title": "Nouvelle vente",
         "form_description": "Confirmez la vente et mettez le stock à jour.",
         "submit_label": "Enregistrer la vente",
@@ -1437,13 +1458,24 @@ def quote_create(request):
             "name": product.name,
             "sku": product.sku,
             "sale_price": float(product.sale_price) if product.sale_price is not None else 0,
+            "image_url": product.image.url if product.image else "",
         }
         for product in Product.objects.order_by("name")
+    ]
+    customer_dataset = [
+        {
+            "id": customer.id,
+            "display_name": customer.display_name,
+            "reference": customer.reference,
+            "phone": customer.phone,
+        }
+        for customer in Customer.objects.order_by("name", "company_name")
     ]
     context = {
         "sale_form": sale_form,
         "formset": formset,
         "product_dataset": product_dataset,
+        "customer_dataset": customer_dataset,
         "form_title": "Nouveau devis",
         "form_description": "Préparez un devis (proforma) sans mouvement de stock.",
         "submit_label": "Enregistrer le devis",
