@@ -45,7 +45,7 @@
         <h1 class="page-title">Produits</h1>
         <p class="lead">Vue carte avec prix, stock, marque et site.</p>
         <div class="chip-row" style="margin-top:0.4rem;">
-            <span class="pill">Total : {{ products|length }} produits</span>
+            <span class="pill">Total : {{ total_products }} produits</span>
             {% if search %}<span class="pill">Recherche : {{ search }}</span>{% endif %}
             {% if selected_brand %}
                 {% for option in brands %}
@@ -164,6 +164,19 @@
                     <p class="muted-text" style="margin:0;">Aucun produit trouvé.</p>
                 {% endfor %}
             </div>
+            {% if page_obj.has_other_pages %}
+                <nav class="pagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem; flex-wrap:wrap; gap:0.5rem;">
+                    {% if page_obj.has_previous %}
+                        <a class="btn secondary" href="{% if pagination_query %}?{{ pagination_query }}&page={{ page_obj.previous_page_number }}{% else %}?page={{ page_obj.previous_page_number }}{% endif %}">Précédent</a>
+                    {% else %}
+                        <span></span>
+                    {% endif %}
+                    <span class="muted-text">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                    {% if page_obj.has_next %}
+                        <a class="btn secondary" href="{% if pagination_query %}?{{ pagination_query }}&page={{ page_obj.next_page_number }}{% else %}?page={{ page_obj.next_page_number }}{% endif %}">Suivant</a>
+                    {% endif %}
+                </nav>
+            {% endif %}
         </div>
     </div>
 

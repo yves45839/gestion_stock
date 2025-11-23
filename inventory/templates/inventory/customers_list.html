@@ -1,6 +1,33 @@
 {% extends "inventory/base.html" %}
 {% block title %}Clients - Gestion de stock{% endblock %}
 {% block content %}
+<style>
+    .customer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+    .customer-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: linear-gradient(180deg, #ffffff 0%, #f9fbfc 100%);
+        text-decoration: none;
+        color: inherit;
+        box-shadow: 0 6px 16px rgba(13, 61, 95, 0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .customer-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(13, 61, 95, 0.16); border-color: rgba(13, 61, 95, 0.25); }
+    .customer-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+    .customer-name { margin: 0; font-weight: 800; font-size: 1.05rem; }
+    .customer-meta { margin: 0; color: var(--muted); font-size: 0.9rem; }
+    .customer-contact { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
+    .customer-foot { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.35rem; }
+    .metric { display: flex; flex-direction: column; gap: 0.1rem; }
+    .metric-label { color: var(--muted); font-size: 0.8rem; margin: 0; }
+    .metric-value { font-weight: 800; margin: 0; }
+    .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; gap: 0.5rem; flex-wrap: wrap; }
+</style>
+
 <section class="page-header reveal">
     <div>
         <p class="eyebrow">Clients</p>
@@ -35,44 +62,53 @@
 
 <section class="surface reveal" data-delay="180">
     {% if customers %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Référence</th>
-                    <th>Client</th>
-                    <th>Contact</th>
-                    <th>Plafond</th>
-                    <th>Solde</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for customer in customers %}
-                    <tr data-href="{% url 'inventory:customer_detail' customer.pk %}" role="button">
-                        <td>{{ customer.reference }}</td>
-                        <td>
-                            <div style="font-weight:700;">{{ customer.display_name }}</div>
-                            <div class="muted-text" style="font-size:0.85rem;">{{ customer.email|default:"Aucun email" }}</div>
-                        </td>
-                        <td>
-                            {% if customer.phone %}<div>{{ customer.phone }}</div>{% endif %}
-                            <div class="muted-text" style="font-size:0.85rem;">{{ customer.address|default:"-"|truncatechars:45 }}</div>
-                        </td>
-                        <td>{{ customer.credit_limit|floatformat:2 }} FCFA</td>
-                        <td>
-                            {% if customer.balance > 0 %}
-                                <span class="badge warn">{{ customer.balance|floatformat:2 }} FCFA dus</span>
-                            {% elif customer.balance < 0 %}
-                                <span class="badge success">{{ customer.balance|floatformat:2 }} FCFA d'avance</span>
-                            {% else %}
-                                <span class="badge">{{ customer.balance|floatformat:2 }} FCFA</span>
-                            {% endif %}
-                        </td>
-                        <td><a href="{% url 'inventory:customer_detail' customer.pk %}" class="btn secondary" style="padding:0.4rem 0.9rem;">Ouvrir</a></td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="customer-grid">
+            {% for customer in customers %}
+                <a class="customer-card" href="{% url 'inventory:customer_detail' customer.pk %}">
+                    <div class="customer-header">
+                        <div>
+                            <p class="customer-name">{{ customer.display_name }}</p>
+                            <p class="customer-meta">Réf. {{ customer.reference }}</p>
+                        </div>
+                        {% if customer.balance > 0 %}
+                            <span class="badge warn">{{ customer.balance|floatformat:2 }} FCFA dus</span>
+                        {% elif customer.balance < 0 %}
+                            <span class="badge success">{{ customer.balance|floatformat:2 }} FCFA d'avance</span>
+                        {% else %}
+                            <span class="badge">{{ customer.balance|floatformat:2 }} FCFA</span>
+                        {% endif %}
+                    </div>
+                    <div class="customer-contact">
+                        <span>{{ customer.email|default:"Aucun email" }}</span>
+                        {% if customer.phone %}<span>{{ customer.phone }}</span>{% endif %}
+                        <span class="muted-text">{{ customer.address|default:"-"|truncatechars:70 }}</span>
+                    </div>
+                    <div class="customer-foot">
+                        <div class="metric">
+                            <p class="metric-label">Plafond</p>
+                            <p class="metric-value">{{ customer.credit_limit|floatformat:2 }} FCFA</p>
+                        </div>
+                        <div class="metric">
+                            <p class="metric-label">Client</p>
+                            <p class="metric-value">{{ customer.company_name|default:"Particulier" }}</p>
+                        </div>
+                    </div>
+                </a>
+            {% endfor %}
+        </div>
+        {% if page_obj.has_other_pages %}
+            <nav class="pagination">
+                {% if page_obj.has_previous %}
+                    <a class="btn secondary" href="{% if pagination_query %}?{{ pagination_query }}&page={{ page_obj.previous_page_number }}{% else %}?page={{ page_obj.previous_page_number }}{% endif %}">Précédent</a>
+                {% else %}
+                    <span></span>
+                {% endif %}
+                <span class="muted-text">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a class="btn secondary" href="{% if pagination_query %}?{{ pagination_query }}&page={{ page_obj.next_page_number }}{% else %}?page={{ page_obj.next_page_number }}{% endif %}">Suivant</a>
+                {% endif %}
+            </nav>
+        {% endif %}
     {% else %}
         <p class="muted-text" style="margin:0;">Aucun client pour l'instant.</p>
     {% endif %}

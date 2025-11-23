@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
@@ -629,10 +630,20 @@ def customers_list(request):
         (-customer.balance for customer in customer_list if customer.balance < 0),
         Decimal("0.00"),
     )
+
+    paginator = Paginator(customer_list, 12)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    query_params = request.GET.copy()
+    if "page" in query_params:
+        query_params.pop("page")
+    pagination_query = query_params.urlencode()
     context = {
-        "customers": customer_list,
+        "customers": page_obj,
+        "page_obj": page_obj,
+        "pagination_query": pagination_query,
         "search": search,
-        "total_customers": len(customer_list),
+        "total_customers": paginator.count,
         "outstanding_total": outstanding_total,
         "credit_total": credit_total,
     }
@@ -895,8 +906,20 @@ def inventory_overview(request):
         messages.success(request, "Ajustement d'inventaire enregistré.")
         return redirect(reverse("inventory:inventory_overview"))
 
+    products = products.order_by("name")
+
+    paginator = Paginator(products, 12)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    query_params = request.GET.copy()
+    if "page" in query_params:
+        query_params.pop("page")
+    pagination_query = query_params.urlencode()
+
     context = {
-        "products": products,
+        "products": page_obj,
+        "page_obj": page_obj,
+        "pagination_query": pagination_query,
         "adjustment_form": adjustment_form,
         "search": search or "",
         "scan_code": scan_code or "",
@@ -909,6 +932,7 @@ def inventory_overview(request):
         ),
         "selected_brand": brand_id or "",
         "selected_category": category_id or "",
+        "total_products": paginator.count,
     }
     context.update(site_context)
     return render(request, "inventory/inventory_list.html", context)
