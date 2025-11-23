@@ -593,6 +593,35 @@
             refreshIndexes();
         };
 
+        const addLine = () => {
+            if (!lineTemplate || !emptyForm) {
+                return null;
+            }
+            const formIndex = getLines().length;
+            const templateHtml = emptyForm.innerHTML.replace(/__prefix__/g, formIndex);
+            const wrapper = document.createElement("div");
+            wrapper.innerHTML = templateHtml;
+            const productField = wrapper.querySelector("select");
+            const quantityField = wrapper.querySelector("input[type='number']");
+            const deleteField = wrapper.querySelector("input[name$='-DELETE']");
+            ensureSelectTagged(productField);
+            let lineHtml = lineTemplate.innerHTML.trim();
+            lineHtml = lineHtml.replace("__PRODUCT__", productField.outerHTML);
+            lineHtml = lineHtml.replace("__QUANTITY__", quantityField.outerHTML);
+            lineHtml = lineHtml.replace("__DELETE__", deleteField ? deleteField.outerHTML : "");
+            const lineWrapper = document.createElement("div");
+            lineWrapper.innerHTML = lineHtml;
+            const newLine = lineWrapper.firstElementChild;
+            linesContainer.appendChild(newLine);
+            attachLine(newLine);
+            const searchInput = newLine.querySelector(".product-search");
+            if (searchInput) {
+                searchInput.focus();
+            }
+            refreshIndexes();
+            return newLine;
+        };
+
         const attachLine = (line) => {
             bindAutocomplete(line);
             const removeBtn = line.querySelector("[data-action='remove-line']");
@@ -628,9 +657,16 @@
             return { productSelect, quantityInput };
         };
 
+        const ensureTargetLine = () => {
+            if (!getLines().length) {
+                addLine();
+            }
+            return getCurrentLine();
+        };
+
         const handleSuccess = (product, meta = {}) => {
             ensureOptionExists(product);
-            const { productSelect, quantityInput } = getCurrentLine();
+            const { productSelect, quantityInput } = ensureTargetLine();
             if (productSelect) {
                 const previous = productSelect.value;
                 productSelect.value = product.id.toString();
@@ -705,32 +741,11 @@
             summary.textContent = "Historique réinitialisé.";
             quantityInputs().forEach((input) => (input.value = ""));
             productSelects().forEach((select) => (select.value = ""));
+            if (!getLines().length) {
+                addLine();
+            }
             focusScan();
         });
-
-        const addLine = () => {
-            if (!lineTemplate || !emptyForm) {
-                return;
-            }
-            const formIndex = getLines().length;
-            const templateHtml = emptyForm.innerHTML.replace(/__prefix__/g, formIndex);
-            const wrapper = document.createElement("div");
-            wrapper.innerHTML = templateHtml;
-            const productField = wrapper.querySelector("select");
-            const quantityField = wrapper.querySelector("input[type='number']");
-            const deleteField = wrapper.querySelector("input[name$='-DELETE']");
-            ensureSelectTagged(productField);
-            let lineHtml = lineTemplate.innerHTML.trim();
-            lineHtml = lineHtml.replace("__PRODUCT__", productField.outerHTML);
-            lineHtml = lineHtml.replace("__QUANTITY__", quantityField.outerHTML);
-            lineHtml = lineHtml.replace("__DELETE__", deleteField ? deleteField.outerHTML : "");
-            const lineWrapper = document.createElement("div");
-            lineWrapper.innerHTML = lineHtml;
-            const newLine = lineWrapper.firstElementChild;
-            linesContainer.appendChild(newLine);
-            attachLine(newLine);
-            refreshIndexes();
-        };
 
         getLines().forEach((line) => {
             const select = line.querySelector("select");
