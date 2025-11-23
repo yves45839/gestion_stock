@@ -1,59 +1,63 @@
 {% extends "inventory/base.html" %}
 {% block title %}Analyses{% endblock %}
 {% block content %}
-<section class="card">
-    <form method="get" style="display:flex;flex-direction:column;gap:1rem;">
-        <div style="display:flex;flex-wrap:wrap;gap:1rem;">
-            <div style="flex:1;min-width:180px;">
-                <label for="period">Période</label>
-                <select name="period" id="period">
-                    {% for value, label in period_choices %}
-                        <option value="{{ value }}" {% if selected_period == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div style="flex:1;min-width:140px;">
-                <label for="start">Début</label>
-                <input type="date" id="start" name="start" value="{{ start_input }}">
-            </div>
-            <div style="flex:1;min-width:140px;">
-                <label for="end">Fin</label>
-                <input type="date" id="end" name="end" value="{{ end_input }}">
-            </div>
-            <div style="align-self:flex-end;">
-                <button type="submit" class="btn">Appliquer</button>
-            </div>
-        </div>
-        <p style="margin:0;color:var(--muted);font-size:0.85rem;">
-            Période sélectionnée : <strong>{{ period_label }}</strong> — {{ range_label }}
-        </p>
-        <p style="margin:0;color:var(--muted);font-size:0.75rem;">
-            Les dates de début/fin ne sont prises en compte que lorsque vous choisissez la plage personnalisée.
-        </p>
-    </form>
+<section class="page-header reveal">
+    <div>
+        <p class="eyebrow">Synthèse</p>
+        <h1 class="page-title">Analyses</h1>
+        <p class="lead">Vue consolidée des périodes, ventes confirmées, devis et clients créés.</p>
+    </div>
 </section>
 
-<section class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:1.5rem;">
+<section class="surface reveal" data-delay="80">
+    <div class="surface-header">
+        <div>
+            <p class="eyebrow">Période</p>
+            <p class="lead" style="margin:0;">{{ period_label }} — {{ range_label }}</p>
+        </div>
+    </div>
+    <form method="get" class="form-grid">
+        <div class="field">
+            <label for="period">Période</label>
+            <select name="period" id="period">
+                {% for value, label in period_choices %}
+                    <option value="{{ value }}" {% if selected_period == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="start">Début</label>
+            <input type="date" id="start" name="start" value="{{ start_input }}">
+        </div>
+        <div class="field">
+            <label for="end">Fin</label>
+            <input type="date" id="end" name="end" value="{{ end_input }}">
+        </div>
+        <div class="field" style="align-self:flex-end;">
+            <button type="submit" class="btn" style="width:100%;">Appliquer</button>
+        </div>
+    </form>
+    <p class="muted-text" style="margin:0.5rem 0 0;">Les dates ne sont prises en compte que pour la plage personnalisée.</p>
+</section>
+
+<section class="grid auto-3">
     {% for card in cards %}
-        <a href="{{ card.url }}" class="card" style="text-decoration:none;color:inherit;display:block;">
-            <h3>{{ card.title }}</h3>
-            <div class="value">
-                {{ card.value }}
-                <span style="font-size:0.85rem;font-weight:400;margin-left:0.35rem;">{{ card.unit }}</span>
-            </div>
+        <a href="{{ card.url }}" class="stat-card reveal pulse-border" data-delay="{% widthratio forloop.counter 1 50 %}">
+            <p class="label">{{ card.title }}</p>
+            <p class="value">{{ card.value }} <span style="font-size:0.9rem; font-weight:500;">{{ card.unit }}</span></p>
             {% if card.amount %}
-                <p style="margin:0;color:var(--muted);font-size:0.85rem;">{{ card.amount|floatformat:2 }} FCFA</p>
+                <p class="hint">{{ card.amount|floatformat:2 }} FCFA</p>
             {% endif %}
-            <p style="margin-top:0.35rem;color:var(--muted);font-size:0.85rem;">{{ card.description }}</p>
+            <p class="hint">{{ card.description }}</p>
         </a>
     {% endfor %}
 </section>
 
-<section class="card" style="margin-top:1.5rem;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+<section class="surface reveal" data-delay="120">
+    <div class="surface-header">
         <div>
-            <h3>Clients ({{ customers_count }})</h3>
-            <p style="margin:0;color:var(--muted);font-size:0.9rem;">Les derniers clients créés pendant la période.</p>
+            <h2 class="surface-title">Clients ({{ customers_count }})</h2>
+            <p class="muted-text" style="margin:0;">Derniers clients créés pendant la période.</p>
         </div>
         <a class="btn secondary" href="{% url 'inventory:customer_list' %}">Voir tous</a>
     </div>
@@ -69,11 +73,7 @@
             <tbody>
                 {% for customer in customers %}
                     <tr data-href="{% url 'inventory:customer_detail' customer.pk %}" role="button">
-                        <td>
-                            <a href="{% url 'inventory:customer_detail' customer.pk %}" style="color:inherit;text-decoration:none;">
-                                {{ customer.display_name }}
-                            </a>
-                        </td>
+                        <td>{{ customer.display_name }}</td>
                         <td>{{ customer.reference }}</td>
                         <td>{{ customer.created_at|date:"d/m/Y" }}</td>
                     </tr>
@@ -81,16 +81,16 @@
             </tbody>
         </table>
     {% else %}
-        <p style="margin:0;">Aucun client créé sur la période sélectionnée.</p>
+        <p class="muted-text" style="margin:0;">Aucun client créé sur la période sélectionnée.</p>
     {% endif %}
 </section>
 
-<section class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-top:1.5rem;">
-    <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+<section class="split split-70">
+    <div class="surface reveal" data-delay="140">
+        <div class="surface-header">
             <div>
-                <h3>Factures ({{ confirmed_sales_count }})</h3>
-                <p style="margin:0;color:var(--muted);font-size:0.9rem;">Ventes confirmées générant une facture dans la période.</p>
+                <h2 class="surface-title">Factures ({{ confirmed_sales_count }})</h2>
+                <p class="muted-text" style="margin:0;">Ventes confirmées générant une facture dans la période.</p>
             </div>
             <a class="btn secondary" href="{% url 'inventory:sales_list' %}">Voir les ventes</a>
         </div>
@@ -107,11 +107,7 @@
                 <tbody>
                     {% for sale in confirmed_sales %}
                         <tr data-href="{% url 'inventory:sale_document_preview' sale.pk 'invoice' %}" role="button">
-                            <td>
-                                <a href="{% url 'inventory:sale_document_preview' sale.pk 'invoice' %}" style="color:inherit;text-decoration:none;font-weight:600;">
-                                    {{ sale.reference }}
-                                </a>
-                            </td>
+                            <td>{{ sale.reference }}</td>
                             <td>{{ sale.sale_date|date:"d/m/Y" }}</td>
                             <td>{{ sale.customer_display_name }}</td>
                             <td>{{ sale.total_amount|floatformat:2 }} FCFA</td>
@@ -120,15 +116,15 @@
                 </tbody>
             </table>
         {% else %}
-            <p style="margin:0;">Aucune facture confirmée sur la période.</p>
+            <p class="muted-text" style="margin:0;">Aucune facture confirmée sur la période.</p>
         {% endif %}
     </div>
 
-    <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <div class="surface reveal" data-delay="180">
+        <div class="surface-header">
             <div>
-                <h3>Devis ({{ quotes_count }})</h3>
-                <p style="margin:0;color:var(--muted);font-size:0.9rem;">Devis encore en attente de confirmation.</p>
+                <h2 class="surface-title">Devis ({{ quotes_count }})</h2>
+                <p class="muted-text" style="margin:0;">Devis encore en attente de confirmation.</p>
             </div>
             <a class="btn secondary" href="{% url 'inventory:quotes_list' %}">Voir les devis</a>
         </div>
@@ -145,11 +141,7 @@
                 <tbody>
                     {% for quote in quotes %}
                         <tr data-href="{% url 'inventory:quote_detail' quote.pk %}" role="button">
-                            <td>
-                                <a href="{% url 'inventory:quote_detail' quote.pk %}" style="color:inherit;text-decoration:none;font-weight:600;">
-                                    {{ quote.reference }}
-                                </a>
-                            </td>
+                            <td>{{ quote.reference }}</td>
                             <td>{{ quote.sale_date|date:"d/m/Y" }}</td>
                             <td>{{ quote.customer_display_name }}</td>
                             <td>{{ quote.total_amount|floatformat:2 }} FCFA</td>
@@ -158,16 +150,16 @@
                 </tbody>
             </table>
         {% else %}
-            <p style="margin:0;">Aucun devis créé sur la période.</p>
+            <p class="muted-text" style="margin:0;">Aucun devis créé sur la période.</p>
         {% endif %}
     </div>
 </section>
 
-<section class="card" style="margin-top:1.5rem;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+<section class="surface reveal" data-delay="220">
+    <div class="surface-header">
         <div>
-            <h3>Produits (Ventes vs Réceptions)</h3>
-            <p style="margin:0;color:var(--muted);font-size:0.9rem;">Les références suivies avec leurs ventes et réceptions sur la période.</p>
+            <h2 class="surface-title">Produits (Ventes vs Réceptions)</h2>
+            <p class="muted-text" style="margin:0;">Références suivies avec leurs ventes et réceptions sur la période.</p>
         </div>
         <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Inventaire</a>
     </div>
@@ -185,10 +177,8 @@
                 {% for product in product_performance %}
                     <tr data-href="{% url 'inventory:product_detail' product.product_id %}" role="button">
                         <td>
-                        <a href="{% url 'inventory:product_detail' product.product_id %}" style="color:inherit;text-decoration:none;font-weight:600;">
-                            {{ product.name }}
-                        </a>
-                            <p style="margin:0;color:var(--muted);font-size:0.75rem;">{{ product.sku }}</p>
+                            <div style="font-weight:700;">{{ product.name }}</div>
+                            <div class="muted-text" style="font-size:0.85rem;">{{ product.sku }}</div>
                         </td>
                         <td>{{ product.sold_quantity }}</td>
                         <td>{{ product.received_quantity }}</td>
@@ -198,7 +188,7 @@
             </tbody>
         </table>
     {% else %}
-        <p style="margin:0;">Aucun mouvement produit enregistré sur la période.</p>
+        <p class="muted-text" style="margin:0;">Aucun mouvement produit enregistré sur la période.</p>
     {% endif %}
 </section>
 {% endblock %}

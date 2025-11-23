@@ -1,38 +1,36 @@
 {% extends "inventory/base.html" %}
 {% block title %}{{ title }} - Clients{% endblock %}
 {% block content %}
-<div class="card" style="margin-bottom:1.5rem;">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
-        <div>
-            <h1 style="margin:0;font-size:1.5rem;">{{ title }}</h1>
-            <p style="margin:0.25rem 0 0;color:var(--muted);">
-                {% if breadcrumb %}{{ breadcrumb }}{% else %}Gestion des informations client.{% endif %}
-            </p>
-        </div>
-        <a href="{% url 'inventory:customer_list' %}" class="btn secondary">Retour</a>
+<section class="page-header reveal">
+    <div>
+        <p class="eyebrow">Clients</p>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="lead">{% if breadcrumb %}{{ breadcrumb }}{% else %}Gestion des informations client.{% endif %}</p>
     </div>
-</div>
-<div class="card">
-    <form method="post">
+    <a href="{% url 'inventory:customer_list' %}" class="btn secondary">Retour</a>
+</section>
+
+<section class="surface reveal" data-delay="120">
+    <form method="post" class="stack">
         {% csrf_token %}
         {% if form.non_field_errors %}
             <div class="message error">{{ form.non_field_errors }}</div>
         {% endif %}
-        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));gap:1rem;">
+        <div class="form-grid">
             {% for field in form %}
-                <div>
+                <div class="field">
                     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                     {{ field }}
-                    {% if field.help_text %}<small style="color:var(--muted);">{{ field.help_text }}</small>{% endif %}
+                    {% if field.help_text %}<small class="muted-text">{{ field.help_text }}</small>{% endif %}
                     {% for error in field.errors %}
                         <div class="field-error">{{ error }}</div>
                     {% endfor %}
                 </div>
             {% endfor %}
         </div>
-        <div style="text-align:right;margin-top:1.5rem;">
+        <div style="text-align:right;">
             <button type="submit" class="btn">Enregistrer</button>
         </div>
     </form>
-</div>
+</section>
 {% endblock %}

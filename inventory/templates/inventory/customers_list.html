@@ -1,37 +1,39 @@
 {% extends "inventory/base.html" %}
 {% block title %}Clients - Gestion de stock{% endblock %}
 {% block content %}
-<div class="card" style="margin-bottom:1.5rem;">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
-        <div>
-            <h1 style="margin:0;font-size:1.5rem;">Clients</h1>
-            <p style="margin:0.25rem 0 0;color:var(--muted);">Suivez les comptes clients, soldes et limites de crédit.</p>
-        </div>
-        <a href="{% url 'inventory:customer_create' %}" class="btn">Nouveau client</a>
+<section class="page-header reveal">
+    <div>
+        <p class="eyebrow">Clients</p>
+        <h1 class="page-title">Référentiel clients</h1>
+        <p class="lead">Suivez les comptes, soldes et limites de crédit.</p>
     </div>
-    <form method="get" style="margin-top:1.25rem;">
+    <a href="{% url 'inventory:customer_create' %}" class="btn">Nouveau client</a>
+</section>
+
+<section class="surface reveal" data-delay="100">
+    <form method="get" class="stack">
         <input type="text"
                name="q"
                placeholder="Rechercher un client, email ou référence..."
-               value="{{ search }}"
-               style="width:100%;padding:0.75rem 1rem;border-radius:999px;border:1px solid var(--border);font-size:0.95rem;">
+               value="{{ search }}">
+        <div class="grid auto-3">
+            <div>
+                <p class="muted-text" style="margin:0;">Nombre de clients</p>
+                <p class="value" style="margin:0; font-weight:800;">{{ total_customers }}</p>
+            </div>
+            <div>
+                <p class="muted-text" style="margin:0;">Crédits accordés</p>
+                <p class="value" style="margin:0; font-weight:800;">{{ credit_total|floatformat:2 }} FCFA</p>
+            </div>
+            <div>
+                <p class="muted-text" style="margin:0;">Montant dû</p>
+                <p class="value" style="margin:0; font-weight:800;">{{ outstanding_total|floatformat:2 }} FCFA</p>
+            </div>
+        </div>
     </form>
-    <div class="grid grid-3" style="margin-top:1.5rem;">
-        <div>
-            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Nombre de clients</p>
-            <p class="value" style="margin:0;">{{ total_customers }}</p>
-        </div>
-        <div>
-            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Crédits accordés</p>
-            <p class="value" style="margin:0;">{{ credit_total|floatformat:2 }} FCFA</p>
-        </div>
-        <div>
-            <p style="margin:0;color:var(--muted);font-size:0.8rem;">Montant dû</p>
-            <p class="value" style="margin:0;">{{ outstanding_total|floatformat:2 }} FCFA</p>
-        </div>
-    </div>
-</div>
-<div class="card">
+</section>
+
+<section class="surface reveal" data-delay="180">
     {% if customers %}
         <table>
             <thead>
@@ -49,32 +51,30 @@
                     <tr data-href="{% url 'inventory:customer_detail' customer.pk %}" role="button">
                         <td>{{ customer.reference }}</td>
                         <td>
-                            <strong>{{ customer.display_name }}</strong><br>
-                            <small style="color:var(--muted);">{{ customer.email|default:"Aucun email" }}</small>
+                            <div style="font-weight:700;">{{ customer.display_name }}</div>
+                            <div class="muted-text" style="font-size:0.85rem;">{{ customer.email|default:"Aucun email" }}</div>
                         </td>
                         <td>
-                            {% if customer.phone %}{{ customer.phone }}<br>{% endif %}
-                            <small style="color:var(--muted);">{{ customer.address|default:"-"|truncatechars:45 }}</small>
+                            {% if customer.phone %}<div>{{ customer.phone }}</div>{% endif %}
+                            <div class="muted-text" style="font-size:0.85rem;">{{ customer.address|default:"-"|truncatechars:45 }}</div>
                         </td>
                         <td>{{ customer.credit_limit|floatformat:2 }} FCFA</td>
                         <td>
                             {% if customer.balance > 0 %}
-                                <span class="badge warn">{{ customer.balance|floatformat:2 }} FCFA dûs</span>
+                                <span class="badge warn">{{ customer.balance|floatformat:2 }} FCFA dus</span>
                             {% elif customer.balance < 0 %}
-                                <span class="badge safe">{{ customer.balance|floatformat:2 }} FCFA d'avance</span>
+                                <span class="badge success">{{ customer.balance|floatformat:2 }} FCFA d'avance</span>
                             {% else %}
                                 <span class="badge">{{ customer.balance|floatformat:2 }} FCFA</span>
                             {% endif %}
                         </td>
-                        <td>
-                            <a href="{% url 'inventory:customer_detail' customer.pk %}" class="btn secondary" style="padding:0.35rem 0.85rem;">Ouvrir</a>
-                        </td>
+                        <td><a href="{% url 'inventory:customer_detail' customer.pk %}" class="btn secondary" style="padding:0.4rem 0.9rem;">Ouvrir</a></td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p style="margin:0;">Aucun client trouvé pour l'instant.</p>
+        <p class="muted-text" style="margin:0;">Aucun client pour l'instant.</p>
     {% endif %}
-</div>
+</section>
 {% endblock %}

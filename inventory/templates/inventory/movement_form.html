@@ -1,134 +1,237 @@
 {% extends "inventory/base.html" %}
 {% block title %}Nouveau mouvement{% endblock %}
 {% block content %}
-<section class="card" style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:1.5rem;">
-    <style>
-        .product-select { display: none; }
-        .autocomplete-panel { position: relative; }
-        .autocomplete-results {
-            position: absolute;
-            top: calc(100% + 4px);
-            left: 0;
-            right: 0;
-            background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-            z-index: 20;
-            max-height: 260px;
-            overflow-y: auto;
-        }
-        .autocomplete-option {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            width: 100%;
-            border: none;
-            background: transparent;
-            padding: 0.65rem 0.85rem;
-            cursor: pointer;
-            text-align: left;
-        }
-        .autocomplete-option:hover,
-        .autocomplete-option:focus {
-            background: #f7f7f7;
-            outline: none;
-        }
-        .autocomplete-empty {
-            padding: 0.65rem 0.85rem;
-            color: var(--muted);
-        }
-        .product-thumb {
-            width: 42px;
-            height: 42px;
-            border-radius: 8px;
-            background: #f3f4f6;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            flex-shrink: 0;
-            border: 1px solid var(--border);
-        }
-        .product-thumb img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .product-thumb.fallback {
-            font-weight: 600;
-            color: #6b7280;
-        }
-        .product-preview {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            margin-top: 0.35rem;
-            color: var(--muted);
-        }
-        .product-preview strong {
-            color: inherit;
-            display: block;
-        }
-    </style>
+<style>
+    .product-select { display: block; width: 100%; }
+    .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: 0 18px 45px rgba(15,124,144,0.12);
+        padding: 1.25rem;
+    }
+    .section-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.7rem;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        font-weight: 700;
+        font-size: 0.85rem;
+        border: 1px solid rgba(15,124,144,0.25);
+    }
+    .info-row {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.95rem;
+    }
+    .info-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.65rem;
+        border-radius: 10px;
+        background: var(--surface-muted);
+        border: 1px solid var(--border);
+        font-weight: 600;
+    }
+    .movement-lines { display: grid; gap: 1rem; }
+    .movement-line {
+        position: relative;
+        border-radius: 16px;
+        border: 1px dashed var(--border);
+        background: #f8fbff;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+        padding: 1rem 1.1rem;
+    }
+    .line-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.65rem;
+    }
+    .line-tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        font-weight: 800;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        border: 1px solid rgba(15,124,144,0.3);
+        box-shadow: 0 4px 12px rgba(15,124,144,0.15);
+    }
+    .line-actions { display: flex; align-items: center; gap: 0.5rem; }
+    .line-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.45fr auto;
+        gap: 0.75rem;
+        align-items: end;
+    }
+    .trash-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        padding: 0.65rem 0.9rem;
+        border: 1px solid var(--border);
+        background: #fff5f5;
+        color: #b91c1c;
+        cursor: pointer;
+        font-weight: 700;
+        gap: 0.4rem;
+    }
+    .trash-btn:hover { background: #fee2e2; }
+    .autocomplete-panel { position: relative; }
+    .autocomplete-results {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+        z-index: 20;
+        max-height: 260px;
+        overflow-y: auto;
+    }
+    .autocomplete-option {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        width: 100%;
+        border: none;
+        background: transparent;
+        padding: 0.65rem 0.85rem;
+        cursor: pointer;
+        text-align: left;
+    }
+    .autocomplete-option:hover,
+    .autocomplete-option:focus { background: #f7f7f7; outline: none; }
+    .autocomplete-empty { padding: 0.65rem 0.85rem; color: var(--muted); }
+    .product-thumb {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        background: #f3f4f6;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
+        border: 1px solid var(--border);
+    }
+    .product-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .product-thumb.fallback { font-weight: 600; color: #6b7280; }
+    .product-preview { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.35rem; color: var(--muted); }
+    .product-preview strong { color: inherit; display: block; }
+    .panel input,
+    .panel select,
+    .panel textarea {
+        background: #1a2a45;
+        color: #f8fbff;
+        border: 1px solid var(--border-strong);
+    }
+    .panel input::placeholder,
+    .panel textarea::placeholder {
+        color: #e3edff;
+    }
+</style>
+
+<section class="page-header reveal">
     <div>
-        <h2 style="margin-top:0;">Mode scanner</h2>
-        <p style="color:var(--muted);margin-bottom:0.5rem;">Scannez un code-barres pour sélectionner automatiquement le produit et incrémenter la quantité.</p>
-        <div style="display:flex;gap:1rem;align-items:center;">
-            <input id="scan-input" type="text" placeholder="Prêt pour scan..." class="form-control" style="max-width:320px;" data-lookup-url="{% url 'inventory:lookup_product' %}">
+        <p class="eyebrow">Stock</p>
+        <h1 class="page-title">Nouveau mouvement</h1>
+        <p class="lead">Scanner un produit ou enregistrer manuellement une entrée/sortie.</p>
+    </div>
+</section>
+
+<section class="surface stack" style="max-width:1100px; margin:0 auto;">
+    <div class="surface surface-muted reveal" data-delay="100">
+        <h2 class="surface-title">Mode scanner</h2>
+        <p class="muted-text">Scannez un code-barres pour sélectionner automatiquement le produit et incrémenter la quantité.</p>
+        <div class="toolbar">
+            <input id="scan-input" type="text" placeholder="Prêt pour scan..." data-lookup-url="{% url 'inventory:lookup_product' %}" style="max-width:320px;">
             <button type="button" class="btn secondary" id="scan-reset">Réinitialiser</button>
         </div>
-        <div id="scan-summary" style="margin-top:0.75rem;font-size:0.9rem;color:var(--muted);">En attente d'un premier scan.</div>
-        <ul id="scan-history" style="list-style:none;padding-left:0;margin:0;color:var(--muted);font-size:0.85rem;"></ul>
+        <div id="scan-summary" class="muted-text" style="margin-top:0.75rem;">En attente d'un premier scan.</div>
+        <ul id="scan-history" class="muted-text" style="list-style:none; padding-left:0; margin:0; font-size:0.9rem;"></ul>
     </div>
-    <h2>Enregistrer un mouvement</h2>
-    <form method="post" novalidate id="movement-form">
+
+    <h2 class="surface-title reveal" data-delay="140">Enregistrer un mouvement</h2>
+    <form method="post" novalidate id="movement-form" class="stack panel reveal" data-delay="160" style="gap:1rem;">
         {% csrf_token %}
-        <div style="margin-bottom:1rem;font-size:0.9rem;color:var(--muted);">
-            Site actif :
-            <strong>{{ active_site.name|default:"Vue globale" }}</strong>
+        <div class="info-row">
+            <span class="section-label">Détails mouvement</span>
+            <span class="info-chip">Site : {{ active_site.name|default:"Vue globale" }}</span>
+            <span class="info-chip">Date : {{ header_form.movement_date.value|default:header_form.movement_date.initial }}</span>
         </div>
         {% if header_form.non_field_errors %}
-            <div class="alert alert-error">{{ header_form.non_field_errors }}</div>
+            <div class="message error">{{ header_form.non_field_errors }}</div>
         {% endif %}
-        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
-            <div>
+        <div class="form-grid">
+            <div class="field">
                 <label for="{{ header_form.movement_type.id_for_label }}">{{ header_form.movement_type.label }}</label>
                 {{ header_form.movement_type }}
                 {{ header_form.movement_type.errors }}
             </div>
-            <div>
+            <div class="field">
                 <label for="{{ header_form.site.id_for_label }}">{{ header_form.site.label }}</label>
                 {{ header_form.site }}
                 {{ header_form.site.errors }}
             </div>
-            <div>
+            <div class="field">
                 <label for="{{ header_form.movement_date.id_for_label }}">{{ header_form.movement_date.label }}</label>
                 {{ header_form.movement_date }}
                 {{ header_form.movement_date.errors }}
             </div>
         </div>
-        <div style="margin-top:1rem;">
+        <div class="field">
             <label for="{{ header_form.document_number.id_for_label }}">{{ header_form.document_number.label }}</label>
             {{ header_form.document_number }}
             {{ header_form.document_number.errors }}
         </div>
-        <div style="margin-top:1rem;">
+        <div class="field">
             <label for="{{ header_form.comment.id_for_label }}">{{ header_form.comment.label }}</label>
             {{ header_form.comment }}
             {{ header_form.comment.errors }}
         </div>
-        <div style="margin-top:1.5rem;">
-            <h3 style="margin:0 0 0.5rem 0;">Produits</h3>
+        <div class="stack">
+            <div class="surface-header" style="margin:0; padding:0; border:none;">
+                <div>
+                    <p class="eyebrow" style="margin:0;">Lignes produits</p>
+                    <h3 class="surface-title" style="margin:0;">Sélection et quantités</h3>
+                </div>
+            </div>
             {{ line_formset.management_form }}
-            <div id="movement-lines" style="display:flex;flex-direction:column;gap:1rem;">
+            <div id="movement-lines" class="movement-lines">
                 {% for form in line_formset %}
-                    <div class="movement-line card" style="padding:1rem;">
+                    <div class="surface surface-muted movement-line">
+                        <div class="line-header">
+                            <div class="line-actions">
+                                <span class="line-tag">{{ forloop.counter }}</span>
+                                <div class="muted-text">Ligne produit</div>
+                            </div>
+                            {% if line_formset.can_delete %}
+                                <label class="info-chip" style="cursor:pointer; gap:0.35rem;">
+                                    {{ form.DELETE }} Supprimer
+                                </label>
+                            {% endif %}
+                        </div>
                         {% if form.non_field_errors %}
-                            <div class="alert alert-error">{{ form.non_field_errors }}</div>
+                            <div class="message error">{{ form.non_field_errors }}</div>
                         {% endif %}
-                        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:end;">
-                            <div>
+                        <div class="line-grid">
+                            <div class="field">
                                 <label for="{{ form.product.id_for_label }}">{{ form.product.label }}</label>
                                 <div class="autocomplete-panel">
                                     <input type="text" class="form-control product-search" placeholder="Chercher un produit par nom ou référence" autocomplete="off">
@@ -144,33 +247,45 @@
                                 </div>
                                 {{ form.product.errors }}
                             </div>
-                            <div>
+                            <div class="field">
                                 <label for="{{ form.quantity.id_for_label }}">{{ form.quantity.label }}</label>
                                 {{ form.quantity }}
                                 {{ form.quantity.errors }}
                             </div>
                             {% if line_formset.can_delete %}
-                                <div style="display:flex;align-items:center;gap:0.5rem;">
-                                    <label style="margin:0;">Supprimer</label>
-                                    {{ form.DELETE }}
-                                </div>
+                                <label class="trash-btn">
+                                    {{ form.DELETE }} 🗑 Supprimer
+                                </label>
                             {% endif %}
                         </div>
                     </div>
                 {% endfor %}
             </div>
-            <div style="margin-top:0.75rem;">
-                <button type="button" class="btn secondary" id="add-line">Ajouter une ligne produit</button>
+            <div style="margin-top:0.25rem;">
+                <button type="button" class="btn secondary" id="add-line">+ Ajouter une ligne produit</button>
             </div>
         </div>
-        <div style="margin-top:1.5rem;display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
+        <div id="pre-submit-message" class="message info" style="display:none; margin-top:0;">
+            Choisissez un type de mouvement puis confirmez le rÃ©capitulatif avant validation.
+        </div>
+        <div class="toolbar" style="margin-top:0.5rem; flex-wrap:wrap;">
             <button type="submit" class="btn">Enregistrer</button>
             <a href="{% url 'inventory:dashboard' %}" class="btn secondary">Annuler</a>
         </div>
         <template id="line-template">
-            <div class="movement-line card" style="padding:1rem;">
-                <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:end;">
-                    <div>
+            <div class="surface surface-muted movement-line reveal" data-delay="180">
+                <div class="line-header">
+                    <div class="line-actions">
+                        <span class="line-tag">#</span>
+                        <div class="muted-text">Ligne produit</div>
+                    </div>
+                    <label class="trash-btn">
+                        __DELETE__
+                        🗑 Supprimer
+                    </label>
+                </div>
+                <div class="line-grid">
+                    <div class="field">
                         <label>Produit</label>
                         <div class="autocomplete-panel">
                             <input type="text" class="form-control product-search" placeholder="Chercher un produit par nom ou référence" autocomplete="off">
@@ -185,13 +300,9 @@
                             </div>
                         </div>
                     </div>
-                    <div>
+                    <div class="field">
                         <label>Quantité</label>
                         __QUANTITY__
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.5rem;">
-                        <label style="margin:0;">Supprimer</label>
-                        __DELETE__
                     </div>
                 </div>
             </div>
@@ -207,7 +318,7 @@
         const summary = document.getElementById("scan-summary");
         const historyList = document.getElementById("scan-history");
         const productSelects = () => Array.from(document.querySelectorAll(".product-select"));
-        const quantityInputs = () => Array.from(document.querySelectorAll(".quantity-input"));
+        const quantityInputs = () => Array.from(document.querySelectorAll(".movement-line input[type='number']"));
         const history = [];
         const totalFormsInput = document.getElementById("id_lines-TOTAL_FORMS");
         const lineTemplate = document.getElementById("line-template");
@@ -247,9 +358,29 @@
             wrapper.append(thumb, info);
         };
 
+        const ensureSelectTagged = (select) => {
+            if (select && !select.classList.contains("product-select")) {
+                select.classList.add("product-select");
+            }
+        };
+
+        const ensureOptionExists = (product) => {
+            productSelects().forEach((select) => {
+                ensureSelectTagged(select);
+                let option = select.querySelector(`option[value="${product.id}"]`);
+                if (!option) {
+                    option = document.createElement("option");
+                    option.value = product.id;
+                    option.textContent = `${product.sku} - ${product.name}`;
+                    select.appendChild(option);
+                }
+            });
+        };
+
         const bindAutocomplete = (lineElement) => {
             const searchInput = lineElement.querySelector(".product-search");
-            const select = lineElement.querySelector(".product-select");
+            const select = lineElement.querySelector(".product-select") || lineElement.querySelector("select");
+            ensureSelectTagged(select);
             const results = lineElement.querySelector("[data-autocomplete]");
             const preview = lineElement.querySelector("[data-product-preview]");
             renderPreview(
@@ -326,6 +457,11 @@
                 });
                 searchInput.addEventListener("blur", () => {
                     setTimeout(() => results && (results.innerHTML = ""), 150);
+                    if (!select || select.value) return;
+                    const matches = filterProducts(searchInput.value);
+                    if (matches.length === 1) {
+                        selectProduct(matches[0]);
+                    }
                 });
             }
             if (select) {
@@ -351,18 +487,6 @@
                 const li = document.createElement("li");
                 li.textContent = `${entry.time} - ${entry.name} (${entry.sku})`;
                 historyList.appendChild(li);
-            });
-        };
-
-        const ensureOptionExists = (product) => {
-            productSelects().forEach((select) => {
-                let option = select.querySelector(`option[value="${product.id}"]`);
-                if (!option) {
-                    option = document.createElement("option");
-                    option.value = product.id;
-                    option.textContent = `${product.sku} - ${product.name}`;
-                    select.appendChild(option);
-                }
             });
         };
 
@@ -467,6 +591,7 @@
             const productField = wrapper.querySelector("select");
             const quantityField = wrapper.querySelector("input[type='number']");
             const deleteField = wrapper.querySelector("input[name$='-DELETE']");
+            ensureSelectTagged(productField);
             let lineHtml = lineTemplate.innerHTML;
             lineHtml = lineHtml.replace("__PRODUCT__", productField.outerHTML);
             lineHtml = lineHtml.replace("__QUANTITY__", quantityField.outerHTML);
@@ -476,15 +601,62 @@
             const newLine = lineWrapper.firstElementChild;
             linesContainer.appendChild(newLine);
             totalFormsInput.value = formIndex + 1;
+            const tag = newLine.querySelector(".line-tag");
+            if (tag) tag.textContent = formIndex + 1;
             bindAutocomplete(newLine);
         };
 
-        Array.from(document.querySelectorAll(".movement-line")).forEach((line) => {
+        Array.from(document.querySelectorAll(".movement-line")).forEach((line, index) => {
+            const select = line.querySelector("select");
+            ensureSelectTagged(select);
+            const tag = line.querySelector(".line-tag");
+            if (tag) tag.textContent = index + 1;
             bindAutocomplete(line);
         });
 
         if (addLineBtn) {
-            addLineBtn.addEventListener("click", addLine);
+            addLineBtn.addEventListener("click", (event) => {
+                event.preventDefault();
+                addLine();
+            });
+        }
+
+        const movementForm = document.getElementById("movement-form");
+        const preSubmitMessage = document.getElementById("pre-submit-message");
+        const movementTypeSelect = document.getElementById("id_movement_type");
+
+        if (movementForm) {
+            movementForm.addEventListener("submit", (event) => {
+                const selectedType = movementTypeSelect ? movementTypeSelect.options[movementTypeSelect.selectedIndex]?.text : "";
+                const filledLines = Array.from(document.querySelectorAll(".movement-line")).filter((line) => {
+                    const select = line.querySelector(".product-select");
+                    const qty = line.querySelector("input[type='number']");
+                    return select && select.value && qty && Number(qty.value) > 0;
+                });
+                if (!movementTypeSelect || !movementTypeSelect.value) {
+                    event.preventDefault();
+                    if (preSubmitMessage) {
+                        preSubmitMessage.style.display = "block";
+                        preSubmitMessage.textContent = "Choisissez un type de mouvement avant de valider.";
+                    }
+                    movementTypeSelect?.focus();
+                    return;
+                }
+                const confirmationText =
+                    `Confirmer le mouvement "${selectedType}" avec ${filledLines.length || 0} ligne(s) produit ?`;
+                if (!window.confirm(confirmationText)) {
+                    event.preventDefault();
+                    if (preSubmitMessage) {
+                        preSubmitMessage.style.display = "block";
+                        preSubmitMessage.textContent = "Validation annulée. Vous pouvez ajuster les lignes ou le type avant de réessayer.";
+                    }
+                    return;
+                }
+                if (preSubmitMessage) {
+                    preSubmitMessage.style.display = "block";
+                    preSubmitMessage.textContent = "Enregistrement en cours...";
+                }
+            });
         }
 
         focusScan();

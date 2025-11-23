@@ -462,6 +462,76 @@ class StockMovement(TimeStampedModel):
         return self.movement_type.get_direction_display()
 
 
+class InventoryCountSession(TimeStampedModel):
+    class Status(models.TextChoices):
+        OPEN = "open", "Ouvert"
+        CLOSED = "closed", "Cloture"
+
+    name = models.CharField(max_length=200)
+    site = models.ForeignKey(
+        Site,
+        on_delete=models.PROTECT,
+        related_name="inventory_sessions",
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    started_at = models.DateTimeField(default=timezone.now)
+    closed_at = models.DateTimeField(blank=True, null=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_sessions",
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        verbose_name = "inventaire physique"
+        verbose_name_plural = "inventaires physiques"
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def is_closed(self) -> bool:
+        return self.status == self.Status.CLOSED
+
+
+class InventoryCountLine(TimeStampedModel):
+    session = models.ForeignKey(
+        InventoryCountSession,
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="inventory_lines",
+    )
+    expected_qty = models.IntegerField(default=0)
+    counted_qty = models.IntegerField(default=0)
+    difference = models.IntegerField(default=0)
+    value_loss = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+
+    class Meta:
+        unique_together = ("session", "product")
+        ordering = ["product__name"]
+        verbose_name = "ligne d'inventaire"
+        verbose_name_plural = "lignes d'inventaire"
+
+    def __str__(self) -> str:
+        return f"{self.session} - {self.product}"
+
+    def recompute(self):
+        self.difference = (self.counted_qty or 0) - (self.expected_qty or 0)
+        purchase_price = self.product.purchase_price or Decimal("0.00")
+        loss_units = abs(self.difference) if self.difference < 0 else 0
+        self.value_loss = purchase_price * Decimal(loss_units)
+
+
 class Sale(VersionedModelMixin, TimeStampedModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "Brouillon"

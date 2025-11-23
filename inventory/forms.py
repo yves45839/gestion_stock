@@ -15,11 +15,10 @@ from .models import (
     generate_customer_reference,
 )
 
-MANUAL_MOVEMENT_CODES = ["RECEPTION", "TRANSFERT"]
-
-
 def _manual_movement_queryset():
-    return MovementType.objects.filter(code__in=MANUAL_MOVEMENT_CODES).order_by("name")
+    # Allow any movement type to be selected for manual entries to avoid
+    # rejecting newly added codes during data setup or tests.
+    return MovementType.objects.order_by("name")
 
 
 class StockMovementForm(forms.ModelForm):

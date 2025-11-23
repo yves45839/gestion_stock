@@ -5,360 +5,444 @@
     <meta charset="utf-8">
     <title>{% block title %}Gestion de stock{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --accent: #0f7c90;
-            --accent-light: #e1f2f5;
-            --text: #1f2933;
-            --muted: #6b7280;
-            --border: #e5e7eb;
+            --bg: #050710;
+            --surface: #12203a;
+            --surface-muted: #0f1a30;
+            --border: #2b3d5c;
+            --border-strong: #3a5277;
+            --text: #f6f8ff;
+            --muted: #d4e2ff;
+            --accent: #4df0ff;
+            --accent-strong: #00c6ff;
+            --accent-soft: rgba(77, 240, 255, 0.18);
+            --success: #6ef2a6;
+            --warning: #fcb35c;
+            --danger: #ff6f6f;
+            --shadow: 0 25px 60px rgba(0, 198, 255, 0.24);
         }
-        * {
-            box-sizing: border-box;
-            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        }
+        * { box-sizing: border-box; }
         body {
             margin: 0;
-            background: #f7f8fa;
+            background:
+                radial-gradient(circle at 18% 25%, rgba(77, 240, 255, 0.16), transparent 35%),
+                radial-gradient(circle at 82% 18%, rgba(255, 117, 172, 0.14), transparent 32%),
+                linear-gradient(135deg, #050710 0%, #0a1224 40%, #050710 100%);
             color: var(--text);
+            font-family: "Space Grotesk", "Manrope", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
         }
-        header {
-            background: #fff;
-            border-bottom: 1px solid var(--border);
+        a { color: inherit; }
+        .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+        .topbar {
             position: sticky;
             top: 0;
-            z-index: 10;
-            backdrop-filter: blur(6px);
+            z-index: 20;
+            background: rgba(10, 16, 32, 0.96);
+            border-bottom: 1px solid var(--border-strong);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
         }
-        .navbar {
-            max-width: 1100px;
+        .topbar-inner {
+            max-width: 1180px;
             margin: 0 auto;
+            padding: 0.9rem 1.5rem;
             display: flex;
             align-items: center;
+            gap: 1.25rem;
             justify-content: space-between;
-            padding: 1rem 1.5rem;
         }
-        .context-bar {
-            max-width: 1100px;
-            margin: 0 auto;
-            display: flex;
+        .brand {
+            display: inline-flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 1.5rem;
-            gap: 0.75rem;
-            border-top: 1px solid var(--border);
+            gap: 0.45rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: #ffffff;
+            font-size: 1.05rem;
+            text-decoration: none;
+            text-transform: uppercase;
         }
+        .brand .dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-strong), #ff65c3);
+            box-shadow: 0 0 0 8px rgba(77, 240, 255, 0.16);
+            animation: pulse 2.8s ease-in-out infinite;
+        }
+        .nav { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+        .nav a {
+            padding: 0.55rem 0.85rem;
+            border-radius: 10px;
+            text-decoration: none;
+            color: var(--muted);
+            font-weight: 600;
+            border: 1px solid transparent;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+        .nav a.active {
+            background: var(--accent-soft);
+            color: #0f1c35;
+            border: 1px solid rgba(77, 240, 255, 0.45);
+            box-shadow: 0 10px 30px rgba(0, 198, 255, 0.2);
+            transform: translateY(-1px);
+        }
+        .nav a:hover { color: var(--accent); border-color: rgba(77, 240, 255, 0.25); }
+        .user-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
         .context-chip {
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
-            padding: 0.35rem 0.75rem;
-            border-radius: 999px;
-            background: #eef2f7;
+            padding: 0.4rem 0.75rem;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
             color: var(--text);
             font-weight: 600;
-            font-size: 0.9rem;
-            border: 1px solid var(--border);
-        }
-        .navbar a {
-            text-decoration: none;
-            color: var(--muted);
-            margin-right: 1rem;
-            font-weight: 500;
-        }
-        .navbar a.active, .navbar a:hover {
-            color: var(--accent);
         }
         .container {
-            max-width: 1100px;
-            margin: 2rem auto;
-            padding: 0 1.5rem 4rem;
-        }
-        .grid {
-            display: grid;
-            gap: 1.5rem;
-        }
-        .grid-3 {
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        }
-        .card {
-            background: #fff;
-            border-radius: 18px;
-            padding: 1.5rem;
-            box-shadow: 0 15px 30px rgba(15, 124, 144, 0.08);
-            border: 1px solid rgba(15, 124, 144, 0.08);
-        }
-        .card h3 {
-            margin: 0;
-            font-size: 0.95rem;
-            color: var(--muted);
-        }
-        .card .value {
-            margin-top: 0.5rem;
-            font-size: 2rem;
-            font-weight: 600;
-        }
-        table {
+            max-width: 1180px;
             width: 100%;
-            border-collapse: collapse;
+            margin: 0 auto;
+            padding: 1.5rem;
         }
+        .page { display: flex; flex-direction: column; gap: 1.25rem; padding-bottom: 3rem; }
+        .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .page-title { margin: 0 0 0.25rem; font-size: 1.9rem; letter-spacing: -0.01em; }
+        .eyebrow {
+            margin: 0;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-size: 0.78rem;
+        }
+        .lead { margin: 0; color: var(--muted); font-size: 0.95rem; }
+        .surface {
+            background: #111a2e;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            padding: 1.25rem 1.35rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .surface::before {
+            content: "";
+            position: absolute;
+            inset: -60%;
+            background: radial-gradient(circle at 30% 30%, rgba(77, 240, 255, 0.08), transparent 45%);
+            transform: translateZ(0);
+            pointer-events: none;
+        }
+        .surface::after {
+            content: "";
+            position: absolute;
+            inset: -70%;
+            background: radial-gradient(circle at 70% 20%, rgba(255, 101, 195, 0.06), transparent 55%);
+            transform: translateZ(0);
+            pointer-events: none;
+        }
+        .surface > * { position: relative; }
+        .card {
+            background: #111a2e;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            padding: 1.25rem 1.35rem;
+        }
+        .card .value { font-size: 1.6rem; font-weight: 700; margin: 0.2rem 0 0; }
+        .surface-muted {
+            background: var(--surface-muted);
+            border: 1px dashed var(--border);
+            box-shadow: none;
+        }
+        .surface-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        .surface-title { margin: 0; font-size: 1.1rem; }
+        .toolbar { display: flex; gap: 0.65rem; flex-wrap: wrap; }
+        .grid { display: grid; gap: 1rem; }
+        .grid.auto-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+        .grid.auto-2 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+        .split { display: grid; gap: 1rem; }
+        .split-70 { grid-template-columns: 1.5fr 1fr; }
+        .stat-grid {
+            display: grid;
+            gap: 0.85rem;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        }
+        .stat-card {
+            background: linear-gradient(160deg, rgba(17, 26, 47, 0.95) 0%, rgba(11, 17, 34, 0.98) 100%);
+            border: 1px solid #3d5b87;
+            border-radius: 14px;
+            padding: 1rem 1.1rem;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(77, 240, 255, 0.6);
+            box-shadow: 0 18px 50px rgba(0, 198, 255, 0.2);
+        }
+        .stat-card .label { margin: 0; color: var(--muted); font-weight: 600; font-size: 0.9rem; letter-spacing: 0.02em; }
+        .stat-card .value { margin: 0.35rem 0 0; font-size: 1.6rem; font-weight: 700; }
+        .stat-card .hint { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.85rem; }
+        table { width: 100%; border-collapse: collapse; }
         th, td {
-            padding: 0.75rem 0.5rem;
+            padding: 0.7rem 0.55rem;
             border-bottom: 1px solid var(--border);
             text-align: left;
         }
         th {
-            color: var(--muted);
-            font-size: 0.8rem;
+            color: #e4ebff;
+            font-size: 0.82rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            background: rgba(255,255,255,0.05);
         }
-        tr:hover {
-            background: #f9fbfc;
-        }
-        tr[data-href] {
-            cursor: pointer;
-        }
-        tr[data-href]:focus-visible {
-            outline: 2px solid var(--accent);
-            outline-offset: -1px;
-        }
+        tr:hover { background: rgba(77, 240, 255, 0.06); }
+        tr[data-href] { cursor: pointer; }
+        tr[data-href]:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
         .btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            border-radius: 999px;
+            border-radius: 12px;
             padding: 0.65rem 1.4rem;
-            border: none;
-            background: var(--accent);
+            border: 1px solid transparent;
+            background: linear-gradient(120deg, var(--accent-strong), #ff65c3);
             color: #fff;
-            font-weight: 600;
+            font-weight: 700;
             text-decoration: none;
             cursor: pointer;
-            transition: box-shadow 0.2s ease, transform 0.2s ease;
+            box-shadow: 0 12px 28px rgba(0, 198, 255, 0.25);
+            transition: box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
         }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 16px 36px rgba(0, 198, 255, 0.28); }
         .btn.secondary {
-            background: transparent;
+            background: linear-gradient(120deg, rgba(77, 240, 255, 0.1), rgba(255, 101, 195, 0.1));
             color: var(--accent);
-            border: 1px solid var(--accent);
+            border-color: rgba(77, 240, 255, 0.35);
+            box-shadow: 0 10px 20px rgba(0, 198, 255, 0.12);
         }
-        .btn:hover {
-            box-shadow: 0 10px 20px rgba(15, 124, 144, 0.2);
-            transform: translateY(-1px);
-        }
-        .badge {
-            padding: 0.15rem 0.5rem;
-            border-radius: 999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        .badge.warn {
-            background: #fff4e6;
-            color: #b45309;
-        }
-        .badge.safe {
-            background: #ecfdf5;
-            color: #047857;
-        }
-        .back-link {
+        .btn.ghost { background: transparent; color: var(--muted); border-color: var(--border); box-shadow: none; }
+        .pill, .badge {
             display: inline-flex;
             align-items: center;
             gap: 0.35rem;
-            color: var(--accent);
+            border-radius: 999px;
+            padding: 0.35rem 0.7rem;
             font-weight: 700;
-            text-decoration: none;
+            font-size: 0.8rem;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            color: var(--muted);
         }
-        .back-link:hover {
-            text-decoration: underline;
+        .badge.success { background: rgba(110, 242, 166, 0.12); color: var(--success); border-color: rgba(110, 242, 166, 0.35); }
+        .badge.warn { background: rgba(252, 179, 92, 0.12); color: var(--warning); border-color: rgba(252, 179, 92, 0.35); }
+        .badge.info { background: rgba(77, 240, 255, 0.12); color: var(--accent); border-color: rgba(77, 240, 255, 0.35); }
+        .badge.danger { background: rgba(255, 111, 111, 0.14); color: var(--danger); border-color: rgba(255, 111, 111, 0.35); }
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--muted);
+            font-weight: 600;
+            font-size: 0.82rem;
         }
-        .messages {
-            margin-bottom: 1rem;
-        }
+        .messages { display: flex; flex-direction: column; gap: 0.5rem; }
         .message {
-            padding: 0.75rem 1rem;
-            border-radius: 12px;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
+            padding: 0.95rem 1.1rem;
+            border-radius: 14px;
+            font-size: 0.96rem;
+            font-weight: 700;
+            border: 1px solid var(--border-strong);
+            color: #0a192f;
         }
         .message.success {
-            background: #ecfdf5;
-            color: #047857;
+            background: linear-gradient(120deg, rgba(110, 242, 166, 0.24), rgba(47, 179, 113, 0.28));
+            color: #05210f;
+            border-color: rgba(110, 242, 166, 0.7);
+            box-shadow: 0 18px 38px rgba(110, 242, 166, 0.25);
         }
         .message.error {
-            background: #fee2e2;
-            color: #b91c1c;
+            background: linear-gradient(120deg, rgba(255, 111, 111, 0.24), rgba(236, 72, 72, 0.28));
+            color: #2e0505;
+            border-color: rgba(255, 111, 111, 0.65);
+            box-shadow: 0 18px 38px rgba(255, 111, 111, 0.2);
         }
         .message.info {
-            background: #e0f2fe;
-            color: #0369a1;
+            background: linear-gradient(120deg, rgba(77, 240, 255, 0.22), rgba(0, 198, 255, 0.28));
+            color: #02131c;
+            border-color: rgba(77, 240, 255, 0.65);
+            box-shadow: 0 18px 38px rgba(0, 198, 255, 0.25);
         }
-        form .form-control, form select, form textarea {
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.85rem; }
+        .field { display: flex; flex-direction: column; gap: 0.3rem; }
+        label { font-size: 0.88rem; color: var(--muted); font-weight: 600; }
+        input, select, textarea {
             width: 100%;
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 0.65rem 0.85rem;
-            font-size: 0.95rem;
+            padding: 0.7rem 0.85rem;
+            font-size: 0.98rem;
+            background: rgba(7, 11, 22, 0.9);
+            color: var(--text);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
-        form label {
-            font-size: 0.85rem;
-            color: var(--muted);
-            margin-bottom: 0.25rem;
-            display: block;
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: rgba(77, 240, 255, 0.7);
+            box-shadow: 0 0 0 5px rgba(77, 240, 255, 0.18);
+            background: rgba(77, 240, 255, 0.04);
         }
-        .muted-label {
-            font-size: 0.8rem;
-            color: var(--muted);
-            margin-bottom: 0.15rem;
+        textarea { min-height: 120px; resize: vertical; }
+        .muted-text { color: var(--muted); }
+        .stack { display: flex; flex-direction: column; gap: 0.65rem; }
+        .chip-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+        .table-foot { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
+        .back-link { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--accent); font-weight: 700; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        /* Motion & reveal */
+        .reveal { opacity: 0; transform: translateY(14px); }
+        .reveal.is-visible { opacity: 1; transform: translateY(0); transition: transform 360ms ease, opacity 360ms ease; }
+        .reveal[data-delay] { transition-delay: calc(var(--delay, 0) * 1ms); }
+        .float-soft { animation: floatSoft 6s ease-in-out infinite; }
+        @keyframes floatSoft {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+            100% { transform: translateY(0); }
         }
-        .module-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 8px rgba(77, 240, 255, 0.16); }
+            50% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(255, 101, 195, 0.12); }
+            100% { transform: scale(1); box-shadow: 0 0 0 8px rgba(77, 240, 255, 0.16); }
         }
-        .module-card {
-            position: relative;
-            overflow: hidden;
-            border: none;
-            border-radius: 22px;
-            padding: 1.5rem;
-            min-height: 180px;
-            color: #fff;
-            box-shadow: 0 25px 45px rgba(15, 124, 144, 0.35);
-            background: linear-gradient(135deg, #0f7c90, #1c9cbc);
-            transition: transform 0.35s ease, box-shadow 0.35s ease;
-        }
-        .module-card::after {
+        .pulse-border { position: relative; }
+        .pulse-border::after {
             content: "";
             position: absolute;
-            inset: 0;
-            background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.25), transparent 45%);
-            opacity: 0.6;
+            inset: -4px;
+            border-radius: inherit;
+            background: radial-gradient(circle, rgba(77,240,255,0.22), transparent 45%);
+            filter: blur(10px);
+            opacity: 0;
+            transition: opacity 200ms ease;
             pointer-events: none;
         }
-        .module-card:hover {
-            transform: translateY(-6px);
-            box-shadow: 0 35px 60px rgba(15, 124, 144, 0.45);
+        .pulse-border:hover::after { opacity: 1; }
+        @media (prefers-reduced-motion: reduce) {
+            .reveal, .reveal.is-visible { opacity: 1; transform: none; transition: none; }
+            .float-soft, .pulse-border::after { animation: none; }
         }
-        .module-card .module-icon {
-            font-size: 2rem;
-            margin-bottom: 0.75rem;
-            display: inline-flex;
-            animation: float 3s ease-in-out infinite;
-        }
-        .module-card .module-label {
-            margin: 0;
-            color: rgba(255, 255, 255, 0.8);
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            font-size: 0.75rem;
-        }
-        .module-card .module-value {
-            margin: 0.4rem 0;
-            font-size: 2.1rem;
-            font-weight: 600;
-        }
-        .module-card .module-description {
-            margin: 0;
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }
-        .module-card .btn {
-            margin-top: 1rem;
-            padding: 0.5rem 1rem;
-            background: rgba(255, 255, 255, 0.2);
-            color: #fff;
-            border-color: rgba(255, 255, 255, 0.45);
-        }
-        .module-card .btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-        .module-card.module-product {
-            background: linear-gradient(135deg, #0f7c90, #1f97b4);
-        }
-        .module-card.module-sales {
-            background: linear-gradient(135deg, #8b5cf6, #ec4899);
-        }
-        .module-card.module-customers {
-            background: linear-gradient(135deg, #047857, #059669);
-        }
-        .module-card.module-inventory {
-            background: linear-gradient(135deg, #c084fc, #6366f1);
-        }
-        @keyframes float {
-            0% {
-                transform: translateY(0);
-            }
-            50% {
-                transform: translateY(-7px);
-            }
-            100% {
-                transform: translateY(0);
-            }
+        @media (max-width: 960px) {
+            .topbar-inner { padding: 0.8rem 1rem; }
+            .surface-header { flex-direction: column; align-items: flex-start; }
+            .page-header { flex-direction: column; }
+            .split-70 { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="navbar">
-            <div class="logo" style="font-weight:700;color:var(--accent);">Flux<span style="color:var(--text);font-weight:400;">Stock</span></div>
-            <nav>
-                {% with current=request.resolver_match.url_name %}
-                    <a href="{% url 'inventory:dashboard' %}" class="{% if current == 'dashboard' %}active{% endif %}">Tableau de bord</a>
-                    <a href="{% url 'inventory:analytics' %}" class="{% if current == 'analytics' %}active{% endif %}">Analyses</a>
-                    <a href="{% url 'inventory:customer_list' %}" class="{% if current == 'customer_list' or current == 'customer_create' or current == 'customer_detail' or current == 'customer_update' %}active{% endif %}">Clients</a>
-                    <a href="{% url 'inventory:quotes_list' %}" class="{% if current == 'quotes_list' or current == 'quote_create' or current == 'quote_detail' %}active{% endif %}">Devis</a>
-                    <a href="{% url 'inventory:record_movement' %}" class="{% if current == 'record_movement' %}active{% endif %}">Mouvement</a>
-                    <a href="{% url 'inventory:inventory_overview' %}" class="{% if current == 'inventory_overview' %}active{% endif %}">Inventaire</a>
-                    <a href="{% url 'inventory:sales_list' %}" class="{% if current == 'sales_list' or current == 'sale_create' %}active{% endif %}">Ventes</a>
-                    <a href="{% url 'inventory:import_products' %}" class="{% if current == 'import_products' %}active{% endif %}">Import CSV</a>
-                {% endwith %}
-            </nav>
-        </div>
-        <div class="context-bar">
-            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
-                <span class="context-chip">Site : {{ active_site.name|default:"Vue globale" }}</span>
-                <span class="context-chip" style="background:#e1f2f5;border-color:rgba(15,124,144,0.2);color:var(--accent);">Utilisateur : {{ request.user.username|default:"Invite" }}</span>
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="topbar-inner">
+                <a class="brand" href="{% url 'inventory:dashboard' %}">
+                    <span class="dot" aria-hidden="true"></span>
+                     LR Stock
+                </a>
+                <nav class="nav">
+                    {% with current=request.resolver_match.url_name %}
+                        <a href="{% url 'inventory:dashboard' %}" class="{% if current == 'dashboard' %}active{% endif %}">Tableau de bord</a>
+                        <a href="{% url 'inventory:analytics' %}" class="{% if current == 'analytics' %}active{% endif %}">Analyses</a>
+                        <a href="{% url 'inventory:customer_list' %}" class="{% if current == 'customer_list' or current == 'customer_create' or current == 'customer_detail' or current == 'customer_update' %}active{% endif %}">Clients</a>
+                        <a href="{% url 'inventory:quotes_list' %}" class="{% if current == 'quotes_list' or current == 'quote_create' or current == 'quote_detail' %}active{% endif %}">Devis</a>
+                        <a href="{% url 'inventory:record_movement' %}" class="{% if current == 'record_movement' %}active{% endif %}">Mouvements</a>
+                        <a href="{% url 'inventory:inventory_overview' %}" class="{% if current == 'inventory_overview' %}active{% endif %}">Inventaire</a>
+                        <a href="{% url 'inventory:inventory_physical' %}" class="{% if current == 'inventory_physical' %}active{% endif %}">Inventaire physique</a>
+                        <a href="{% url 'inventory:sales_list' %}" class="{% if current == 'sales_list' or current == 'sale_create' %}active{% endif %}">Ventes</a>
+                        <a href="{% url 'inventory:import_products' %}" class="{% if current == 'import_products' %}active{% endif %}">Import</a>
+                    {% endwith %}
+                </nav>
+                <div class="user-actions">
+                    <span class="context-chip">Site: {{ active_site.name|default:"Vue globale" }}</span>
+                    <span class="context-chip" style="background:var(--accent-soft); border-color: rgba(77,240,255,0.35); color: var(--accent);">Utilisateur: {{ request.user.username|default:"Invite" }}</span>
+                    {% if not request.user.is_authenticated %}
+                        <a class="btn secondary" href="{% url 'login' %}?next={{ request.path }}">Connexion</a>
+                    {% endif %}
+                    <a class="btn ghost" href="{% url 'inventory:record_movement' %}">Mouvement</a>
+                    <a class="btn" href="{% url 'inventory:sale_create' %}">Nouvelle vente</a>
+                </div>
             </div>
-            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-                {% if request.user.is_authenticated %}
-                    <a class="btn secondary" href="{% url 'logout' %}?next={{ request.path }}">Déconnexion</a>
-                {% else %}
-                    <a class="btn" href="{% url 'login' %}?next={{ request.path }}">Connexion</a>
-                {% endif %}
-                <a class="btn secondary" href="{% url 'inventory:record_movement' %}">Mouvement</a>
-                <a class="btn" href="{% url 'inventory:sale_create' %}">Nouvelle vente</a>
+        </header>
+        <main class="container">
+            {% if messages %}
+                <div class="messages">
+                    {% for message in messages %}
+                        <div class="message {{ message.tags }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <div class="page">
+                {% block content %}{% endblock %}
             </div>
-        </div>
-    </header>
-    <main class="container">
-        {% if messages %}
-            <div class="messages">
-                {% for message in messages %}
-                    <div class="message {{ message.tags }}">{{ message }}</div>
-                {% endfor %}
-            </div>
-        {% endif %}
-        {% block content %}{% endblock %}
-    </main>
+        </main>
+    </div>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
+            const revealNodes = document.querySelectorAll(".reveal");
+            const observer = "IntersectionObserver" in window
+                ? new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("is-visible");
+                            observer.unobserve(entry.target);
+                        }
+                    });
+                }, { threshold: 0.12 })
+                : null;
+            revealNodes.forEach((node, index) => {
+                node.style.setProperty("--delay", node.dataset.delay || index * 40);
+                if (observer) {
+                    observer.observe(node);
+                } else {
+                    node.classList.add("is-visible");
+                }
+            });
+
             document.querySelectorAll("tr[data-href]").forEach((row) => {
                 if (!row.hasAttribute("tabindex")) {
                     row.tabIndex = 0;
                 }
                 const clickableSelector = "a, button, input, textarea, select, label";
-                const isEventOnInteractive = (event) =>
-                    Boolean(event.target.closest(clickableSelector));
-
+                const isEventOnInteractive = (event) => Boolean(event.target.closest(clickableSelector));
                 row.addEventListener("click", (event) => {
                     if (isEventOnInteractive(event)) {
                         return;
                     }
                     window.location.href = row.dataset.href;
                 });
-
                 row.addEventListener("keydown", (event) => {
                     if (event.key !== "Enter" && event.key !== " ") {
                         return;

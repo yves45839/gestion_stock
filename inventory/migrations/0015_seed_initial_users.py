@@ -1,9 +1,9 @@
-from django.contrib.auth import get_user_model
 from django.db import migrations
+from django.contrib.auth.hashers import make_password
 
 
 def create_initial_users(apps, schema_editor):
-    User = get_user_model()
+    User = apps.get_model("auth", "User")
     Site = apps.get_model("inventory", "Site")
     SiteAssignment = apps.get_model("inventory", "SiteAssignment")
 
@@ -52,8 +52,8 @@ def create_initial_users(apps, schema_editor):
         if user.last_name != entry["last_name"]:
             user.last_name = entry["last_name"]
             update_fields.append("last_name")
-        if created or not user.has_usable_password():
-            user.set_password(default_password)
+        if created or not user.password:
+            user.password = make_password(default_password)
             update_fields.append("password")
         if update_fields:
             user.save(update_fields=update_fields)
@@ -61,7 +61,7 @@ def create_initial_users(apps, schema_editor):
 
 
 def remove_initial_users(apps, schema_editor):
-    User = get_user_model()
+    User = apps.get_model("auth", "User")
     Site = apps.get_model("inventory", "Site")
     SiteAssignment = apps.get_model("inventory", "SiteAssignment")
 

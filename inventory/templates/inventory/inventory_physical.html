@@ -1,0 +1,89 @@
+{% extends "inventory/base.html" %}
+{% block title %}Inventaire physique{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Inventaire</p>
+        <h1 class="page-title">Inventaire physique</h1>
+        <p class="lead">Comptage complet des articles par site, écarts et démarques.</p>
+        <div class="chip-row" style="margin-top:0.5rem;">
+            <span class="pill">Session : {{ session.name }}</span>
+            <span class="pill">Site : {{ current_site.name|default:"-" }}</span>
+            <span class="pill">Statut : {{ session.get_status_display }}</span>
+            {% if session.closed_at %}<span class="pill">Clôturé le {{ session.closed_at|date:"d/m/Y H:i" }}</span>{% endif %}
+        </div>
+    </div>
+    <div class="toolbar">
+        <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Retour inventaire</a>
+    </div>
+</section>
+
+<div class="surface" style="overflow-x:auto;">
+    <form method="post">
+        {% csrf_token %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="min-width:220px;">Produit</th>
+                    <th>Attendu</th>
+                    <th>Compté</th>
+                    <th>Écart</th>
+                    <th>Démarque</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in lines %}
+                    <tr>
+                        <td>
+                            <div style="font-weight:700;">{{ line.product.name }}</div>
+                            <div class="muted-text" style="font-size:0.9rem;">{{ line.product.sku }} · {{ line.product.brand.name }} / {{ line.product.category.name }}</div>
+                        </td>
+                        <td>{{ line.expected_qty }}</td>
+                        <td>
+                            {% if session.is_closed %}
+                                {{ line.counted_qty }}
+                            {% else %}
+                                <input type="number" name="counted_{{ line.id }}" value="{{ line.counted_qty }}" min="0" style="width:110px;" />
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if line.difference < 0 %}
+                                <span style="color:var(--danger); font-weight:700;">{{ line.difference }}</span>
+                            {% elif line.difference > 0 %}
+                                <span style="color:var(--success); font-weight:700;">+{{ line.difference }}</span>
+                            {% else %}
+                                <span class="muted-text">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if line.value_loss and line.value_loss > 0 %}
+                                <span style="color:var(--danger); font-weight:700;">-{{ line.value_loss }} FCFA</span>
+                            {% else %}
+                                <span class="muted-text">0</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="muted-text">Aucun produit à inventorier.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="surface" style="margin-top:0.75rem; display:flex; justify-content:space-between; align-items:center; gap:1rem;">
+            <div>
+                <div class="eyebrow" style="margin-bottom:0.2rem;">Synthèse</div>
+                <div class="chip-row">
+                    <span class="pill">Total écarts : {{ totals.total_difference }}</span>
+                    <span class="pill">Démarque estimée : {{ totals.total_loss }} FCFA</span>
+                    <span class="pill">Lignes : {{ lines|length }}</span>
+                </div>
+            </div>
+            {% if not session.is_closed %}
+                <div class="toolbar">
+                    <button type="submit" name="action" value="save" class="btn secondary">Enregistrer</button>
+                    <button type="submit" name="action" value="close" class="btn">Clôturer et générer les ajustements</button>
+                </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -22,6 +22,7 @@ from .forms import (
     InventoryAdjustmentForm,
     MovementHeaderForm,
     MovementLineForm,
+    StockMovementForm,
     ProductForm,
     SaleForm,
     SaleItemFormSet,
@@ -33,6 +34,8 @@ from .models import (
     Category,
     Customer,
     CustomerAccountEntry,
+    InventoryCountLine,
+    InventoryCountSession,
     MovementType,
     Product,
     Sale,
@@ -741,13 +744,27 @@ def record_movement(request):
         can_delete=True,
     )
     if request.method == "POST":
+        post_data = request.POST.copy()
+        if (
+            "product" in post_data
+            and "quantity" in post_data
+            and "lines-TOTAL_FORMS" not in post_data
+        ):
+            # Support single-line submissions (e.g., simple POST requests) by
+            # adapting them to the expected formset structure.
+            post_data["lines-TOTAL_FORMS"] = "1"
+            post_data["lines-INITIAL_FORMS"] = "0"
+            post_data["lines-MIN_NUM_FORMS"] = "0"
+            post_data["lines-MAX_NUM_FORMS"] = "1000"
+            post_data["lines-0-product"] = post_data.pop("product")
+            post_data["lines-0-quantity"] = post_data.pop("quantity")
         header_form = MovementHeaderForm(
-            request.POST,
+            post_data,
             current_site=action_site or view_site,
             site_locked=site_locked,
             user=request.user,
         )
-        line_formset = MovementLineFormSet(request.POST, prefix="lines")
+        line_formset = MovementLineFormSet(post_data, prefix="lines")
         if header_form.is_valid() and line_formset.is_valid():
             line_forms = [
                 form
@@ -757,7 +774,7 @@ def record_movement(request):
                 and not form.cleaned_data.get("DELETE")
             ]
             if not line_forms:
-                messages.error(request, "Ajoutez au moins un produit à déplacer.")
+                messages.error(request, "Ajoutez au moins un produit ? d?placer.")
             else:
                 with transaction.atomic():
                     created = 0
@@ -774,6 +791,17 @@ def record_movement(request):
                         )
                         created += 1
                 messages.success(request, f"{created} mouvement(s) ont été enregistrés avec succès.")
+                return redirect(reverse("inventory:dashboard"))
+        elif "product" in request.POST and "lines-TOTAL_FORMS" not in request.POST:
+            single_form = StockMovementForm(request.POST)
+            if site_locked and (action_site or view_site):
+                allowed_site = action_site or view_site
+                single_form.fields["site"].queryset = Site.objects.filter(pk=allowed_site.pk)
+            if single_form.is_valid():
+                movement = single_form.save(commit=False)
+                movement.performed_by = request.user if request.user.is_authenticated else None
+                movement.save()
+                messages.success(request, "Mouvement enregistré avec succès.")
                 return redirect(reverse("inventory:dashboard"))
     else:
         header_form = MovementHeaderForm(
@@ -798,7 +826,6 @@ def record_movement(request):
     }
     context.update(site_context)
     return render(request, "inventory/movement_form.html", context)
-
 
 def inventory_overview(request):
     site_context = _site_context(request)
@@ -885,6 +912,120 @@ def inventory_overview(request):
     }
     context.update(site_context)
     return render(request, "inventory/inventory_list.html", context)
+
+
+def inventory_physical(request):
+    site_context = _site_context(request)
+    view_site = site_context["active_site"]
+    action_site = site_context["action_site"]
+    site_locked = bool(action_site and not request.user.is_superuser)
+    current_site = action_site or view_site
+    if current_site is None:
+        messages.error(request, "S��lectionnez un site pour lancer un inventaire physique.")
+        return redirect(reverse("inventory:inventory_overview"))
+
+    session = (
+        InventoryCountSession.objects.filter(status=InventoryCountSession.Status.OPEN, site=current_site)
+        .order_by("-started_at")
+        .select_related("site", "created_by")
+        .first()
+    )
+    if session is None:
+        session = InventoryCountSession.objects.create(
+            name=f"Inventaire du {timezone.now().strftime('%d/%m/%Y %H:%M')}",
+            site=current_site,
+            created_by=request.user if request.user.is_authenticated else None,
+        )
+        products_snapshot = (
+            Product.objects.with_stock_quantity(site=current_site)
+            .select_related("brand", "category")
+            .order_by("name")
+        )
+        lines = []
+        for product in products_snapshot:
+            initial_qty = product.current_stock or 0
+            lines.append(
+                InventoryCountLine(
+                    session=session,
+                    product=product,
+                    expected_qty=initial_qty,
+                    counted_qty=initial_qty,
+                    difference=0,
+                    value_loss=Decimal("0.00"),
+                )
+            )
+        InventoryCountLine.objects.bulk_create(lines)
+
+    lines_qs = session.lines.select_related("product", "product__brand", "product__category")
+
+    if request.method == "POST" and not session.is_closed:
+        action = request.POST.get("action", "save")
+        updated = 0
+        with transaction.atomic():
+            for line in lines_qs:
+                field_name = f"counted_{line.id}"
+                if field_name not in request.POST:
+                    continue
+                try:
+                    counted_value = int(request.POST.get(field_name, line.counted_qty))
+                except (TypeError, ValueError):
+                    counted_value = line.counted_qty
+                if counted_value < 0:
+                    counted_value = 0
+                if counted_value != line.counted_qty:
+                    line.counted_qty = counted_value
+                    line.recompute()
+                    line.save(update_fields=["counted_qty", "difference", "value_loss", "updated_at"])
+                    updated += 1
+
+            if action == "close":
+                adjustments = []
+                for line in lines_qs:
+                    # recompute before clôture in case the loop above did not run (no changes)
+                    line.recompute()
+                    if line.difference == 0:
+                        continue
+                    movement_type = _get_adjustment_movement_type(line.difference > 0)
+                    if movement_type is None:
+                        messages.error(request, "Aucun type de mouvement d'ajustement disponible.")
+                        return redirect(reverse("inventory:inventory_physical"))
+                    adjustments.append(
+                        StockMovement(
+                            product=line.product,
+                            movement_type=movement_type,
+                            quantity=abs(line.difference),
+                            site=current_site,
+                            comment=f"Inventaire {session.name}",
+                            performed_by=request.user if request.user.is_authenticated else None,
+                        )
+                    )
+                if adjustments:
+                    StockMovement.objects.bulk_create(adjustments)
+                session.status = InventoryCountSession.Status.CLOSED
+                session.closed_at = timezone.now()
+                session.save(update_fields=["status", "closed_at", "updated_at"])
+                messages.success(request, "Inventaire clôturé et ajustements enregistrés.")
+                return redirect(reverse("inventory:inventory_physical"))
+        if updated:
+            messages.success(request, f"{updated} ligne(s) mises à jour.")
+        else:
+            messages.info(request, "Aucune ligne mise à jour.")
+        return redirect(reverse("inventory:inventory_physical"))
+
+    totals = lines_qs.aggregate(
+        total_difference=Coalesce(Sum("difference"), Value(0)),
+        total_loss=Coalesce(Sum("value_loss"), Value(Decimal("0.00")), output_field=DecimalField(max_digits=14, decimal_places=2)),
+    )
+
+    context = {
+        "session": session,
+        "lines": lines_qs,
+        "site_locked": site_locked,
+        "current_site": current_site,
+        "totals": totals,
+    }
+    context.update(site_context)
+    return render(request, "inventory/inventory_physical.html", context)
 
 
 def product_detail(request, pk):

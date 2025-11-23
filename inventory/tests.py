@@ -395,11 +395,7 @@ class SalesWorkflowTests(TestCase):
         self.assertEqual(self.product.stock_quantity, 15)
 
     def test_sale_create_view_records_sale_and_stock(self):
-        user = get_user_model().objects.create_user(
-            username="salesman",
-            password="strong-pass",
-            email="sales@example.com",
-        )
+        user = self.user
         self.client.force_login(user)
         sale_date = timezone.now()
         payload = {

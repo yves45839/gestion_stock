@@ -28,6 +28,11 @@ urlpatterns = [
         name="version_revert",
     ),
     path("inventaire/", login_required(views.inventory_overview), name="inventory_overview"),
+    path(
+        "inventaire/physique/",
+        login_required(views.inventory_physical),
+        name="inventory_physical",
+    ),
     path("ventes/", login_required(views.sales_list), name="sales_list"),
     path("ventes/nouvelle/", login_required(views.sale_create), name="sale_create"),
     path("ventes/<int:pk>/retour/", login_required(views.sale_return), name="sale_return"),

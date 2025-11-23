@@ -2,79 +2,7 @@
 {% block title %}Inventaire{% endblock %}
 {% block content %}
 <style>
-    .products-page {
-        display: grid;
-        gap: 1.25rem;
-        grid-template-columns: 2.2fr 1fr;
-        align-items: start;
-    }
-    .products-main {
-        display: grid;
-        gap: 1rem;
-    }
-    .products-hero {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        align-items: center;
-    }
-    .products-hero .title {
-        margin: 0;
-        font-size: 1.7rem;
-    }
-    .pill-row {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        margin-top: 0.25rem;
-    }
-    .pill-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        padding: 0.3rem 0.75rem;
-        border-radius: 999px;
-        background: #eef2f7;
-        color: var(--text);
-        font-weight: 600;
-        font-size: 0.85rem;
-        border: 1px solid var(--border);
-    }
-    .filters-card {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-    }
-    .filters-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 0.75rem;
-    }
-    .search-bar {
-        position: relative;
-    }
-    .search-bar input {
-        padding-left: 2.5rem;
-    }
-    .search-bar .icon {
-        position: absolute;
-        left: 0.8rem;
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--muted);
-        font-size: 0.95rem;
-    }
-    .filter-actions {
-        display: flex;
-        gap: 0.5rem;
-        align-items: flex-end;
-        flex-wrap: wrap;
-    }
-    .product-grid {
-        display: grid;
-        gap: 0.9rem;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    }
+    .product-grid { display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
     .product-card {
         position: relative;
         display: flex;
@@ -82,17 +10,13 @@
         gap: 0.65rem;
         border: 1px solid var(--border);
         border-radius: 16px;
-        padding: 0.85rem 0.9rem;
+        padding: 0.95rem 1rem;
         background: linear-gradient(180deg, #ffffff, #f9fbfc);
         text-decoration: none;
         color: inherit;
         transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
-    .product-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 25px rgba(15, 124, 144, 0.14);
-        border-color: rgba(15, 124, 144, 0.35);
-    }
+    .product-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(15, 124, 144, 0.14); border-color: rgba(15, 124, 144, 0.35); }
     .product-thumb {
         height: 120px;
         display: flex;
@@ -103,145 +27,66 @@
         border-radius: 12px;
         overflow: hidden;
     }
-    .product-thumb img {
-        max-height: 110px;
-        width: 100%;
-        object-fit: contain;
-    }
-    .product-thumb .placeholder {
-        font-size: 0.9rem;
-        color: var(--muted);
-        text-align: center;
-        padding: 0 0.75rem;
-        line-height: 1.4;
-    }
-    .product-meta h3 {
-        margin: 0 0 0.1rem;
-        font-size: 1rem;
-    }
-    .product-meta .sku {
-        margin: 0;
-        color: var(--muted);
-        font-size: 0.85rem;
-    }
-    .tags {
-        display: flex;
-        gap: 0.35rem;
-        flex-wrap: wrap;
-        margin-bottom: 0.15rem;
-    }
-    .tag {
-        font-size: 0.78rem;
-        padding: 0.2rem 0.55rem;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-        background: #fff;
-        color: var(--muted);
-        font-weight: 600;
-    }
-    .product-footer {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    .price {
-        font-weight: 700;
-        font-size: 1.05rem;
-        color: var(--accent);
-    }
-    .price.muted {
-        color: var(--muted);
-        font-size: 0.95rem;
-        font-weight: 600;
-    }
-    .stock {
-        padding: 0.3rem 0.65rem;
-        border-radius: 10px;
-        font-weight: 700;
-        font-size: 0.85rem;
-    }
-    .stock.safe {
-        background: #ecfdf5;
-        color: #047857;
-    }
-    .stock.warn {
-        background: #fff4e6;
-        color: #b45309;
-    }
-    .side-stack {
-        display: grid;
-        gap: 1rem;
-    }
-    .card-title {
-        margin: 0 0 0.35rem;
-        font-size: 1rem;
-    }
-    .eyebrow {
-        margin: 0;
-        color: var(--muted);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        font-size: 0.75rem;
-    }
-    @media (max-width: 1024px) {
-        .products-page {
-            grid-template-columns: 1fr;
-        }
-    }
+    .product-thumb img { max-height: 110px; width: 100%; object-fit: contain; }
+    .product-thumb .placeholder { font-size: 0.9rem; color: var(--muted); text-align: center; padding: 0 0.75rem; line-height: 1.4; }
+    .product-meta h3 { margin: 0 0 0.1rem; font-size: 1rem; }
+    .product-meta .sku { margin: 0; color: var(--muted); font-size: 0.85rem; }
+    .product-footer { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+    .price { font-weight: 700; font-size: 1.05rem; color: var(--accent); }
+    .price.muted { color: var(--muted); font-size: 0.95rem; font-weight: 600; }
+    .stock { padding: 0.3rem 0.65rem; border-radius: 10px; font-weight: 700; font-size: 0.85rem; }
+    .stock.safe { background: #ecfdf5; color: #047857; }
+    .stock.warn { background: #fff4e6; color: #b45309; }
 </style>
 
-<div class="products-page">
-    <div class="products-main">
-        <div class="card products-hero">
-            <div>
-                <p class="eyebrow">Catalogue produits</p>
-                <h1 class="title">Produits</h1>
-                <p style="margin:0;color:var(--muted);">Vue carte avec prix, stock et marque.</p>
-                <div class="pill-row">
-                    <span class="pill-chip">Total : {{ products|length }} produits</span>
-                    {% if search %}
-                        <span class="pill-chip">Recherche : {{ search }}</span>
+<section class="page-header reveal">
+    <div>
+        <p class="eyebrow">Catalogue produits</p>
+        <h1 class="page-title">Produits</h1>
+        <p class="lead">Vue carte avec prix, stock, marque et site.</p>
+        <div class="chip-row" style="margin-top:0.4rem;">
+            <span class="pill">Total : {{ products|length }} produits</span>
+            {% if search %}<span class="pill">Recherche : {{ search }}</span>{% endif %}
+            {% if selected_brand %}
+                {% for option in brands %}
+                    {% if option.brand_id|stringformat:"s" == selected_brand %}
+                        <span class="pill">Marque : {{ option.brand__name }}</span>
                     {% endif %}
-                    {% if selected_brand %}
-                        {% for option in brands %}
-                            {% if option.brand_id|stringformat:"s" == selected_brand %}
-                                <span class="pill-chip">Marque : {{ option.brand__name }}</span>
-                            {% endif %}
-                        {% endfor %}
+                {% endfor %}
+            {% endif %}
+            {% if selected_category %}
+                {% for option in categories %}
+                    {% if option.category_id|stringformat:"s" == selected_category %}
+                        <span class="pill">Catégorie : {{ option.category__name }}</span>
                     {% endif %}
-                    {% if selected_category %}
-                        {% for option in categories %}
-                            {% if option.category_id|stringformat:"s" == selected_category %}
-                                <span class="pill-chip">Categorie : {{ option.category__name }}</span>
-                            {% endif %}
-                        {% endfor %}
+                {% endfor %}
+            {% endif %}
+            {% if selected_site %}
+                {% for site in sites %}
+                    {% if selected_site == site.pk|stringformat:"s" %}
+                        <span class="pill">Site : {{ site.name }}</span>
                     {% endif %}
-                    {% if selected_site %}
-                        {% for site in sites %}
-                            {% if selected_site == site.pk|stringformat:"s" %}
-                                <span class="pill-chip">Site : {{ site.name }}</span>
-                            {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            </div>
-            <div class="filter-actions" style="margin:0;">
-                <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Vue tableau</a>
-                <a class="btn" href="{% url 'inventory:record_movement' %}">Mouvement stock</a>
-            </div>
+                {% endfor %}
+            {% endif %}
         </div>
+    </div>
+    <div class="toolbar">
+        <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Vue tableau</a>
+        <a class="btn" href="{% url 'inventory:record_movement' %}">Mouvement stock</a>
+    </div>
+</section>
 
-        <div class="card filters-card">
-            <form method="get" class="filters-row">
-                <div class="search-bar">
+<section class="split split-70">
+    <div class="stack">
+        <div class="surface reveal" data-delay="100">
+            <form method="get" class="form-grid">
+                <div class="field">
                     <label for="search">Recherche</label>
-                    <span class="icon">&#128269;</span>
-                    <input id="search" type="text" name="q" value="{{ search }}" class="form-control" placeholder="Nom, SKU ou reference">
+                    <input id="search" type="text" name="q" value="{{ search }}" placeholder="Nom, SKU ou référence">
                 </div>
-                <div>
+                <div class="field">
                     <label for="brand">Marque</label>
-                    <select id="brand" name="brand" class="form-control">
+                    <select id="brand" name="brand">
                         <option value="">Toutes</option>
                         {% for option in brands %}
                             <option value="{{ option.brand_id }}" {% if option.brand_id|stringformat:"s" == selected_brand %}selected{% endif %}>
@@ -250,9 +95,9 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label for="category">Categorie</label>
-                    <select id="category" name="category" class="form-control">
+                <div class="field">
+                    <label for="category">Catégorie</label>
+                    <select id="category" name="category">
                         <option value="">Toutes</option>
                         {% for option in categories %}
                             <option value="{{ option.category_id }}" {% if option.category_id|stringformat:"s" == selected_category %}selected{% endif %}>
@@ -261,56 +106,52 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div>
+                <div class="field">
                     <label for="site">Site</label>
                     {% if can_switch_site %}
-                        <select id="site" name="site" class="form-control">
+                        <select id="site" name="site">
                             <option value="" {% if not selected_site %}selected{% endif %}>Vue globale</option>
                             {% for site in sites %}
-                                <option value="{{ site.pk }}" {% if selected_site == site.pk|stringformat:"s" %}selected{% endif %}>
-                                    {{ site.name }}
-                                </option>
+                                <option value="{{ site.pk }}" {% if selected_site == site.pk|stringformat:"s" %}selected{% endif %}>{{ site.name }}</option>
                             {% endfor %}
                         </select>
                     {% else %}
-                        <div class="form-control" style="background:#f3f4f6;border:1px solid var(--border);border-radius:0.35rem;">
-                            {{ active_site.name|default:"Vue globale" }}
-                        </div>
+                        <div class="context-chip" style="width:100%;">{{ active_site.name|default:"Vue globale" }}</div>
                     {% endif %}
                 </div>
-                <div class="filter-actions">
-                    <button type="submit" class="btn">Filtrer</button>
-                    <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Reinitialiser</a>
+                <div class="field" style="align-self:flex-end;">
+                    <div class="toolbar">
+                        <button type="submit" class="btn">Filtrer</button>
+                        <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Réinitialiser</a>
+                    </div>
                 </div>
             </form>
         </div>
 
-        <div class="card" style="padding:1.1rem;">
+        <div class="surface reveal" data-delay="160">
             <div class="product-grid">
                 {% for product in products %}
-                    <a class="product-card" href="{% url 'inventory:product_detail' product.pk %}">
+                    <a class="product-card reveal pulse-border" data-delay="{% widthratio forloop.counter 1 30 %}" href="{% url 'inventory:product_detail' product.pk %}">
                         <div class="product-thumb">
                             {% if product.image %}
                                 <img src="{{ product.image.url }}" alt="Image de {{ product.name }}" loading="lazy">
                             {% else %}
-                                <div class="placeholder">
-                                    {{ product.sku|default:"SKU en attente" }}
-                                </div>
+                                <div class="placeholder">{{ product.sku|default:"SKU en attente" }}</div>
                             {% endif %}
                         </div>
                         <div class="product-meta">
-                            <div class="tags">
-                                <span class="tag">&#9733; {{ product.brand.name }}</span>
+                            <div class="chip-row">
+                                <span class="tag">★ {{ product.brand.name }}</span>
                                 <span class="tag">{{ product.category.name }}</span>
                             </div>
                             <h3>{{ product.name }}</h3>
-                            <p class="sku">{{ product.sku }}</p>
+                            <p class="product-meta sku">{{ product.sku }}</p>
                         </div>
                         <div class="product-footer">
                             {% if product.sale_price %}
                                 <div class="price">{{ product.sale_price|floatformat:0 }} FCFA</div>
                             {% else %}
-                                <div class="price muted">Prix non defini</div>
+                                <div class="price muted">Prix non défini</div>
                             {% endif %}
                             {% if product.is_below_minimum %}
                                 <div class="stock warn">{{ product.stock_quantity }} / min {{ product.minimum_stock }}</div>
@@ -320,66 +161,58 @@
                         </div>
                     </a>
                 {% empty %}
-                    <p style="margin:0;">Aucun produit trouve.</p>
+                    <p class="muted-text" style="margin:0;">Aucun produit trouvé.</p>
                 {% endfor %}
             </div>
         </div>
     </div>
 
-    <div class="side-stack">
-        <div class="card">
+    <div class="stack">
+        <div class="surface reveal" data-delay="120">
             <p class="eyebrow">Scan rapide</p>
-            <h3 class="card-title">Trouver ou creer un produit</h3>
-            <form method="get" style="display:flex;flex-direction:column;gap:0.75rem;">
-                {% if search %}
-                    <input type="hidden" name="q" value="{{ search }}">
-                {% endif %}
-                {% if selected_brand %}
-                    <input type="hidden" name="brand" value="{{ selected_brand }}">
-                {% endif %}
-                {% if selected_category %}
-                    <input type="hidden" name="category" value="{{ selected_category }}">
-                {% endif %}
-                {% if selected_site %}
-                    <input type="hidden" name="site" value="{{ selected_site }}">
-                {% endif %}
+            <h3 class="surface-title" style="margin-bottom:0.35rem;">Trouver ou créer un produit</h3>
+            <form method="get" class="stack">
+                {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+                {% if selected_brand %}<input type="hidden" name="brand" value="{{ selected_brand }}">{% endif %}
+                {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+                {% if selected_site %}<input type="hidden" name="site" value="{{ selected_site }}">{% endif %}
                 <label for="scan">Scan (SKU ou code-barres)</label>
-                <input id="scan" type="text" name="scan" class="form-control" placeholder="Scannez ici pour isoler un produit" autocomplete="off" autofocus>
-                <div style="font-size:0.8rem;color:var(--muted);">Le champ se reinitialise apres chaque scan. Appuyez sur Entree si besoin.</div>
+                <input id="scan" type="text" name="scan" placeholder="Scannez ici pour isoler un produit" autocomplete="off" autofocus>
+                <div class="muted-text" style="font-size:0.85rem;">Le champ se réinitialise après chaque scan. Appuyez sur Entrée si besoin.</div>
             </form>
             {% if scan_message %}
-                <p style="color:var(--accent);margin-top:0.5rem;">{{ scan_message }}</p>
+                <p style="color:var(--accent); margin-top:0.5rem;">{{ scan_message }}</p>
             {% endif %}
         </div>
 
-        <div class="card">
+        <div class="surface reveal" data-delay="180">
             <p class="eyebrow">Ajustement rapide</p>
-            <h3 class="card-title">Mettre a jour le stock</h3>
-            <p style="margin-top:0;margin-bottom:0.5rem;color:var(--muted);font-size:0.9rem;">
+            <h3 class="surface-title" style="margin-bottom:0.35rem;">Mettre à jour le stock</h3>
+            <p class="muted-text" style="margin-top:0; margin-bottom:0.75rem; font-size:0.9rem;">
                 Site actif : <strong>{{ active_site.name|default:"Vue globale" }}</strong>
             </p>
-            <form method="post">
+            <form method="post" class="stack">
                 {% csrf_token %}
-                <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;">
-                    <div>
+                <div class="form-grid">
+                    <div class="field">
                         <label for="{{ adjustment_form.product.id_for_label }}">{{ adjustment_form.product.label }}</label>
                         {{ adjustment_form.product }}
                         {{ adjustment_form.product.errors }}
                     </div>
-                    <div>
+                    <div class="field">
                         <label for="{{ adjustment_form.counted_quantity.id_for_label }}">{{ adjustment_form.counted_quantity.label }}</label>
                         {{ adjustment_form.counted_quantity }}
                         {{ adjustment_form.counted_quantity.errors }}
                     </div>
                     {% if can_switch_site %}
-                        <div>
+                        <div class="field">
                             <label for="{{ adjustment_form.site.id_for_label }}">{{ adjustment_form.site.label }}</label>
                             {{ adjustment_form.site }}
                             {{ adjustment_form.site.errors }}
                         </div>
                     {% endif %}
                 </div>
-                <div style="margin-top:1rem;">
+                <div class="field">
                     <label for="{{ adjustment_form.comment.id_for_label }}">{{ adjustment_form.comment.label }}</label>
                     {{ adjustment_form.comment }}
                     {{ adjustment_form.comment.errors }}
@@ -387,11 +220,11 @@
                 {% if not can_switch_site %}
                     {{ adjustment_form.site }}
                 {% endif %}
-                <div style="margin-top:1.5rem;">
+                <div style="margin-top:0.5rem;">
                     <button type="submit" class="btn">Enregistrer l'ajustement</button>
                 </div>
             </form>
         </div>
     </div>
-</div>
+</section>
 {% endblock %}
