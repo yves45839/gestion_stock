@@ -2,6 +2,9 @@
 {% block title %}Import CSV{% endblock %}
 {% block content %}
 <section class="card" style="max-width:800px;margin:0 auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <a href="{% url 'inventory:inventory_overview' %}" class="back-link">← Retour</a>
+    </div>
     <h2 style="margin-top:0;">Import CSV produits</h2>
     <p style="color:var(--muted);">Le modèle CSV accepte toutes les colonnes du produit : <strong>SKU</strong>, <strong>Ref</strong>, <strong>Désignation</strong>, <strong>Description</strong>, <strong>Marque</strong>, <strong>Catégorie</strong>, <strong>Code-barres</strong>, <strong>Stock minimal</strong>, <strong>Prix achat</strong>, <strong>Prix vente</strong>, <strong>Qté</strong> et <strong>Unité</strong>. Le séparateur peut être « ; » ou « , ».</p>
     {% if active_site %}

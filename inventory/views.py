@@ -141,6 +141,14 @@ def _parse_list_date_range(start_value, end_value):
     return start_dt, end_dt, errors
 
 
+def _get_return_url(request, default_name):
+    return (
+        request.GET.get("return")
+        or request.META.get("HTTP_REFERER")
+        or reverse(default_name)
+    )
+
+
 def dashboard(request):
     site_context = _site_context(request)
     active_site = site_context["active_site"]
@@ -872,6 +880,7 @@ def inventory_overview(request):
 def product_detail(request, pk):
     site_context = _site_context(request)
     active_site = site_context["active_site"]
+    return_url = _get_return_url(request, "inventory:inventory_overview")
     product = get_object_or_404(
         Product.objects.with_stock_quantity(site=active_site).select_related("brand", "category"),
         pk=pk,
@@ -901,6 +910,7 @@ def product_detail(request, pk):
         "recent_movements": recent_movements,
         "form": form,
         "versions": versions,
+        "return_url": return_url,
     }
     context.update(site_context)
     return render(request, "inventory/product_detail.html", context)
@@ -1480,16 +1490,20 @@ def _save_sale_with_customer(
 
 
 def quote_detail(request, pk):
+    site_context = _site_context(request)
     sale = get_object_or_404(
         Sale.objects.select_related("customer").prefetch_related("items__product"),
         pk=pk,
     )
+    return_url = _get_return_url(request, "inventory:quotes_list")
     items = sale.items.select_related("product").order_by("position", "id")
     context = {
         "sale": sale,
         "items": items,
         "can_confirm": sale.status != Sale.Status.CONFIRMED,
+        "return_url": return_url,
     }
+    context.update(site_context)
     return render(request, "inventory/quote_detail.html", context)
 
 
@@ -1511,8 +1525,13 @@ def sale_document_preview(request, pk, doc_type):
         Sale.objects.select_related("customer").prefetch_related("items__product"),
         pk=pk,
     )
-    doc_meta = _get_document_meta(sale, doc_type)
-    context = _build_document_context(sale, doc_meta)
+    return_url = _get_return_url(request, "inventory:sales_list")
+    try:
+        doc_meta = _get_document_meta(sale, doc_type)
+    except Http404 as exc:
+        messages.error(request, str(exc))
+        return redirect(return_url)
+    context = _build_document_context(sale, doc_meta) | {"return_url": return_url}
     return render(request, "inventory/document_preview.html", context)
 
 
@@ -1521,8 +1540,16 @@ def sale_document_pdf(request, pk, doc_type):
         Sale.objects.select_related("customer").prefetch_related("items__product"),
         pk=pk,
     )
-    doc_meta = _get_document_meta(sale, doc_type)
-    context = _build_document_context(sale, doc_meta) | {"pdf_export": True}
+    return_url = _get_return_url(request, "inventory:sales_list")
+    try:
+        doc_meta = _get_document_meta(sale, doc_type)
+    except Http404 as exc:
+        messages.error(request, str(exc))
+        return redirect(return_url)
+    context = _build_document_context(sale, doc_meta) | {
+        "pdf_export": True,
+        "return_url": return_url,
+    }
     html = render_to_string("inventory/document_preview.html", context, request=request)
     if HTML is None:  # pragma: no cover
         return HttpResponse(
