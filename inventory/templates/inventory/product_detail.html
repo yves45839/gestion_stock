@@ -2,6 +2,9 @@
 {% block title %}{{ product.name }} - Détail{% endblock %}
 {% block content %}
 <section class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;gap:1rem;">
+        <a href="{{ return_url }}" class="back-link">← Retour</a>
+    </div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:2rem;flex-wrap:wrap;">
         {% if product.image %}
             <div

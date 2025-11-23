@@ -223,6 +223,9 @@
                 <div>Abidjan, Cote d'Ivoire</div>
                 <div class="muted">+2252721585677 - info@label-ci.com</div>
                 <div class="toolbar">
+                    {% if return_url %}
+                        <a class="btn secondary" href="{{ return_url }}">Retour</a>
+                    {% endif %}
                     <a class="btn secondary" href="javascript:window.print()">Imprimer</a>
                     <a class="btn" href="{% url 'inventory:sale_document_pdf' sale.pk doc_meta.doc_type %}">Telecharger PDF</a>
                 </div>
