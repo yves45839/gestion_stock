@@ -78,35 +78,6 @@
 </style>
 
 <div class="dashboard-shell">
-    <section class="panel">
-        <div class="panel-header">
-            <div>
-                <p class="eyebrow">Vue {{ active_site.name|default:"globale" }}</p>
-                <h1 class="h1">Tableau de bord stock</h1>
-                <p style="margin:0;color:var(--muted);">Etat des stocks, ventes confirmees et mouvements recents.</p>
-            </div>
-            <div class="cta-row">
-                <a class="btn" href="{% url 'inventory:sale_create' %}">+ Nouvelle vente</a>
-                <a class="btn secondary" href="{% url 'inventory:record_movement' %}">Mouvement stock</a>
-                <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Inventaire</a>
-            </div>
-        </div>
-        {% if can_switch_site %}
-            <form method="get" style="margin-top:0.8rem; display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-                <label for="site-select" class="eyebrow" style="margin:0;">Selection site</label>
-                <select id="site-select" name="site" class="form-control" style="max-width:220px;">
-                    <option value="">Vue globale</option>
-                    {% for site in sites %}
-                        <option value="{{ site.pk }}" {% if selected_site == site.pk|stringformat:"s" %}selected{% endif %}>
-                            {{ site.name }}
-                        </option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="btn secondary" style="padding:0.45rem 1.1rem;">Appliquer</button>
-            </form>
-        {% endif %}
-    </section>
-
     <section class="kpi-grid">
         {% for card in module_cards %}
             <a class="kpi" href="{{ card.url }}">
