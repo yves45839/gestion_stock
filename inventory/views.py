@@ -144,6 +144,7 @@ def _parse_list_date_range(start_value, end_value):
 def dashboard(request):
     site_context = _site_context(request)
     active_site = site_context["active_site"]
+    tz = timezone.get_current_timezone()
     products = (
         Product.objects.with_stock_quantity(site=active_site)
         .select_related("brand", "category")
@@ -254,6 +255,124 @@ def dashboard(request):
     }
     customer_count = Customer.objects.count()
     movement_count = movement_queryset.count()
+
+    today = timezone.localdate()
+    current_week_start = today - timedelta(days=today.weekday())
+    current_week_end = current_week_start + timedelta(days=6)
+    default_start = timezone.make_aware(datetime.combine(current_week_start, time.min), tz)
+    default_end = timezone.make_aware(datetime.combine(current_week_end, time.max), tz)
+    graph_start_input = request.GET.get("start") or default_start.date().isoformat()
+    graph_end_input = request.GET.get("end") or default_end.date().isoformat()
+    graph_start, graph_end, date_errors = _parse_list_date_range(
+        graph_start_input, graph_end_input
+    )
+    if date_errors:
+        graph_start, graph_end = default_start, default_end
+    graph_site_id = request.GET.get("graph_site")
+    graph_site = None
+    if graph_site_id:
+        try:
+            graph_site = Site.objects.get(pk=graph_site_id)
+        except Site.DoesNotExist:
+            graph_site = None
+    elif active_site:
+        graph_site = active_site
+
+    confirmed_sales_period = Sale.objects.filter(
+        status=Sale.Status.CONFIRMED,
+        sale_date__gte=graph_start,
+        sale_date__lte=graph_end,
+    )
+    if graph_site:
+        confirmed_sales_period = confirmed_sales_period.filter(site=graph_site)
+
+    product_items = SaleItem.objects.filter(
+        sale__in=confirmed_sales_period,
+        line_type=SaleItem.LineType.PRODUCT,
+        product__isnull=False,
+    )
+    top_products = list(
+        product_items.values("product__name", "product__sku")
+        .annotate(
+            sold_quantity=Coalesce(Sum("quantity"), Value(0)),
+            sold_amount=Coalesce(Sum(sales_amount_expression), decimal_zero_value),
+        )
+        .order_by("-sold_quantity", "-sold_amount")[:5]
+    )
+
+    site_names = ["Abobo", "Treichville", "Riviera"]
+    sales_by_site_raw = (
+        confirmed_sales_period.values("site__name")
+        .annotate(
+            total_amount=Coalesce(
+                Sum(sales_amount_expression),
+                decimal_zero_value,
+            )
+        )
+        .order_by("site__name")
+    )
+    sales_by_site = {name: Decimal("0.00") for name in site_names}
+    for entry in sales_by_site_raw:
+        site_name = entry.get("site__name")
+        if site_name in sales_by_site:
+            sales_by_site[site_name] = entry.get("total_amount") or Decimal("0.00")
+
+    payment_totals = confirmed_sales_period.aggregate(
+        total_paid=Coalesce(Sum("amount_paid"), decimal_zero_value),
+        total_invoiced=Coalesce(Sum(sales_amount_expression), decimal_zero_value),
+    )
+    outstanding_amount = max(
+        payment_totals.get("total_invoiced") - payment_totals.get("total_paid"),
+        Decimal("0.00"),
+    )
+
+    year_start = timezone.make_aware(
+        datetime(today.year, 1, 1, 0, 0, 0), tz
+    )
+    top_customers_year = list(
+        Sale.objects.filter(
+            status=Sale.Status.CONFIRMED,
+            sale_date__gte=year_start,
+        )
+        .values("customer__name", "customer__company_name", "customer_name")
+        .annotate(
+            total_amount=Coalesce(Sum(sales_amount_expression), decimal_zero_value)
+        )
+        .order_by("-total_amount")[:5]
+    )
+
+    module_cards = [
+        {
+            "title": "Produits",
+            "value": total_products,
+            "hint": "Catalogue exploitable",
+            "url": reverse("inventory:inventory_overview"),
+        },
+        {
+            "title": "Mouvements de stock",
+            "value": movement_count,
+            "hint": "Historique cumulé",
+            "url": reverse("inventory:record_movement"),
+        },
+        {
+            "title": "Vente",
+            "value": confirmed_sales.count(),
+            "hint": f"{sales_amount} FCFA",
+            "url": reverse("inventory:sales_list"),
+        },
+        {
+            "title": "Compte client",
+            "value": customer_count,
+            "hint": "Clients enregistrés",
+            "url": reverse("inventory:customer_list"),
+        },
+        {
+            "title": "Analyse",
+            "value": "Vue détaillée",
+            "hint": "Performances & tendances",
+            "url": reverse("inventory:analytics"),
+        },
+    ]
     context = {
         "total_products": total_products,
         "total_stock": aggregates["total_stock"],
@@ -270,6 +389,15 @@ def dashboard(request):
         "customer_count": customer_count,
         "movement_count": movement_count,
         "site_breakdown": site_breakdown,
+        "top_products": top_products,
+        "graph_start_input": graph_start_input,
+        "graph_end_input": graph_end_input,
+        "graph_site": graph_site,
+        "sales_by_site": sales_by_site,
+        "payment_totals": payment_totals,
+        "outstanding_amount": outstanding_amount,
+        "top_customers_year": top_customers_year,
+        "module_cards": module_cards,
     }
     context.update(site_context)
     return render(request, "inventory/dashboard.html", context)

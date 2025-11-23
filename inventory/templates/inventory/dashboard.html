@@ -43,15 +43,24 @@
     .kpi-grid {
         display: grid;
         gap: 1rem;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
     .kpi {
         border-radius: 14px;
         padding: 1rem 1.1rem;
         border: 1px dashed var(--border);
         background: linear-gradient(145deg, #f9fbfc, #ffffff);
+        text-decoration: none;
+        color: inherit;
+        display: block;
+        transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
     }
-    .kpi .label { margin: 0; color: var(--muted); font-size: 0.85rem; }
+    .kpi:hover {
+        border-color: #0f7c90;
+        box-shadow: 0 12px 24px rgba(15, 124, 144, 0.12);
+        transform: translateY(-2px);
+    }
+    .kpi .label { margin: 0; color: var(--muted); font-size: 0.85rem; display:flex; justify-content:space-between; align-items:center; gap:0.4rem; }
     .kpi .value { margin: 0.35rem 0; font-size: 1.6rem; font-weight: 700; }
     .kpi .hint { margin: 0; color: var(--muted); font-size: 0.85rem; }
     .split { display: grid; gap: 1rem; grid-template-columns: 1.4fr 1fr; }
@@ -61,6 +70,10 @@
     .status-in { background: #ecfdf5; color: #047857; }
     .status-out { background: #fff4e6; color: #b45309; }
     .table-compact thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
+    .bar-row { display:flex; align-items:center; gap:0.6rem; }
+    .bar-track { flex:1; height:9px; background:#eef2f7; border-radius:999px; overflow:hidden; }
+    .bar-fill { height:100%; background:linear-gradient(90deg,#0f7c90,#38bdf8); }
+    .card-grid { display:grid; gap:1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
     @media (max-width: 960px) { .panel-header { flex-direction: column; align-items: flex-start; } .split { grid-template-columns: 1fr; } }
 </style>
 
@@ -95,35 +108,132 @@
     </section>
 
     <section class="kpi-grid">
-        <div class="kpi">
-            <p class="label">References actives</p>
-            <p class="value">{{ total_products }}</p>
-            <p class="hint">Catalogue exploitable</p>
+        {% for card in module_cards %}
+            <a class="kpi" href="{{ card.url }}">
+                <p class="label">{{ card.title }}<span aria-hidden="true">→</span></p>
+                <p class="value">{{ card.value }}</p>
+                <p class="hint">{{ card.hint }}</p>
+            </a>
+        {% endfor %}
+    </section>
+
+    <section class="panel">
+        <div class="panel-header" style="margin-bottom:0.65rem;">
+            <div>
+                <h2 class="h1" style="font-size:1.1rem; margin-bottom:0.15rem;">Analytique express</h2>
+                <p style="margin:0;color:var(--muted);">Semaine en cours par defaut, filtrable par site et dates.</p>
+            </div>
+            <div class="pill">Synthese</div>
         </div>
-        <div class="kpi">
-            <p class="label">Stock global</p>
-            <p class="value">{{ total_stock|floatformat:0 }}</p>
-            <p class="hint">Quantite disponible</p>
-        </div>
-        <div class="kpi">
-            <p class="label">Ventes confirmees</p>
-            <p class="value">{{ sales_summary.count }}</p>
-            <p class="hint">{{ sales_summary.amount|floatformat:2 }} FCFA encaisses</p>
-        </div>
-        <div class="kpi">
-            <p class="label">Retours</p>
-            <p class="value">{{ returns_summary.quantity }}</p>
-            <p class="hint">{{ returns_summary.amount|floatformat:2 }} FCFA re-integres</p>
-        </div>
-        <div class="kpi">
-            <p class="label">Mouvements</p>
-            <p class="value">{{ movement_count }}</p>
-            <p class="hint">Historique cumule</p>
-        </div>
-        <div class="kpi">
-            <p class="label">Flux du jour</p>
-            <p class="value">{{ totals_by_direction.IN|default:0 }} / {{ totals_by_direction.OUT|default:0 }}</p>
-            <p class="hint">Entrees / Sorties</p>
+        <form method="get" class="cta-row" style="margin-bottom:0.75rem; align-items:flex-end;">
+            <div>
+                <label class="eyebrow" for="graph-start">Du</label>
+                <input id="graph-start" type="date" name="start" value="{{ graph_start_input }}" class="form-control" />
+            </div>
+            <div>
+                <label class="eyebrow" for="graph-end">Au</label>
+                <input id="graph-end" type="date" name="end" value="{{ graph_end_input }}" class="form-control" />
+            </div>
+            <div>
+                <label class="eyebrow" for="graph-site">Site</label>
+                <select id="graph-site" name="graph_site" class="form-control" style="min-width:220px;">
+                    <option value="">Tous les sites</option>
+                    {% for site in sites %}
+                        <option value="{{ site.pk }}" {% if graph_site and graph_site.pk == site.pk %}selected{% endif %}>{{ site.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn" style="margin-top:1.45rem;">Actualiser</button>
+        </form>
+
+        <div class="card-grid">
+            <div class="card">
+                <h3 style="margin:0 0 0.35rem;">Articles les plus vendus</h3>
+                {% with max_qty=top_products.0.sold_quantity|default:0 %}
+                    {% if top_products %}
+                        <ul style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:0.55rem;">
+                            {% for product in top_products %}
+                                <li>
+                                    <div style="display:flex; justify-content:space-between; gap:0.5rem; font-weight:600;">
+                                        <span>{{ product.product__name }}</span>
+                                        <span>{{ product.sold_quantity }}</span>
+                                    </div>
+                                    <div class="bar-row">
+                                        <div class="bar-track">
+                                            {% if max_qty %}
+                                                <div class="bar-fill" style="width:{% widthratio product.sold_quantity max_qty 100 %}%;"></div>
+                                            {% else %}
+                                                <div class="bar-fill" style="width:0%;"></div>
+                                            {% endif %}
+                                        </div>
+                                        <span style="font-size:0.85rem; color:var(--muted);">{{ product.sold_amount|floatformat:0 }} FCFA</span>
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p style="margin:0; color:var(--muted);">Aucune vente sur la periode.</p>
+                    {% endif %}
+                {% endwith %}
+            </div>
+
+            <div class="card">
+                <h3 style="margin:0 0 0.35rem;">Sommes vendues par site</h3>
+                <ul style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:0.4rem;">
+                    {% for site_name, total in sales_by_site.items %}
+                        <li style="display:flex; justify-content:space-between;">
+                            <span>{{ site_name }}</span>
+                            <strong>{{ total|floatformat:0 }} FCFA</strong>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3 style="margin:0 0 0.35rem;">Encaiss&eacute; / D&ucirc;</h3>
+                <p style="margin:0 0 0.35rem; color:var(--muted);">Confirm&eacute;es sur la p&eacute;riode.</p>
+                <div style="display:flex; flex-direction:column; gap:0.35rem;">
+                    <div class="bar-row">
+                        <span style="width:120px;">Sommes encaiss&eacute;es</span>
+                        <div class="bar-track">
+                            {% if payment_totals.total_invoiced %}
+                                <div class="bar-fill" style="width:{% widthratio payment_totals.total_paid payment_totals.total_invoiced 100 %}%;"></div>
+                            {% else %}
+                                <div class="bar-fill" style="width:0%;"></div>
+                            {% endif %}
+                        </div>
+                        <strong>{{ payment_totals.total_paid|floatformat:0 }} FCFA</strong>
+                    </div>
+                    <div class="bar-row">
+                        <span style="width:120px;">Sommes d&ucirc;</span>
+                        <div class="bar-track">
+                            {% if payment_totals.total_invoiced %}
+                                <div class="bar-fill" style="width:{% widthratio outstanding_amount payment_totals.total_invoiced 100 %}%; background:linear-gradient(90deg,#b45309,#f97316);"></div>
+                            {% else %}
+                                <div class="bar-fill" style="width:0%;"></div>
+                            {% endif %}
+                        </div>
+                        <strong>{{ outstanding_amount|floatformat:0 }} FCFA</strong>
+                    </div>
+                    <p style="margin:0; color:var(--muted); font-size:0.9rem;">Total facture: {{ payment_totals.total_invoiced|floatformat:0 }} FCFA</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin:0 0 0.35rem;">Top clients (ann&eacute;e)</h3>
+                {% if top_customers_year %}
+                    <ol style="padding-left:1.1rem; margin:0; display:flex; flex-direction:column; gap:0.35rem;">
+                        {% for customer in top_customers_year %}
+                            <li style="font-weight:600;">
+                                {{ customer.customer__company_name|default:customer.customer__name|default:customer.customer_name|default:"Client" }}
+                                <span style="color:var(--muted); font-weight:400;">— {{ customer.total_amount|floatformat:0 }} FCFA</span>
+                            </li>
+                        {% endfor %}
+                    </ol>
+                {% else %}
+                    <p style="margin:0; color:var(--muted);">Pas de ventes enregistrees cette annee.</p>
+                {% endif %}
+            </div>
         </div>
     </section>
 
