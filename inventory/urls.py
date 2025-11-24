@@ -21,6 +21,7 @@ urlpatterns = [
     path("devis/<int:pk>/", login_required(views.quote_detail), name="quote_detail"),
     path("devis/<int:pk>/confirmer/", login_required(views.quote_confirm), name="quote_confirm"),
     path("mouvements/nouveau/", login_required(views.record_movement), name="record_movement"),
+    path("produits/nouveau/", login_required(views.product_create), name="product_create"),
     path("produits/<int:pk>/", login_required(views.product_detail), name="product_detail"),
     path(
         "versions/<int:version_id>/revert/",

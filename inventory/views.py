@@ -1091,6 +1091,27 @@ def product_detail(request, pk):
     return render(request, "inventory/product_detail.html", context)
 
 
+def product_create(request):
+    site_context = _site_context(request)
+    return_url = _get_return_url(request, "inventory:inventory_overview")
+    if request.method == "POST":
+        form = ProductForm(request.POST, request.FILES)
+        if form.is_valid():
+            product = form.save(commit=False)
+            product._history_user = request.user if request.user.is_authenticated else None
+            product.save()
+            messages.success(request, "Produit créé avec succès.")
+            return redirect(reverse("inventory:product_detail", args=[product.pk]))
+    else:
+        form = ProductForm()
+    context = {
+        "form": form,
+        "return_url": return_url,
+    }
+    context.update(site_context)
+    return render(request, "inventory/product_form.html", context)
+
+
 def version_revert(request, version_id):
     version = get_object_or_404(Version, pk=version_id)
     if request.method != "POST":

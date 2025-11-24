@@ -397,7 +397,7 @@
                         <a href="{% url 'inventory:customer_list' %}" class="{% if current == 'customer_list' or current == 'customer_create' or current == 'customer_detail' or current == 'customer_update' %}active{% endif %}">Clients</a>
                         <a href="{% url 'inventory:quotes_list' %}" class="{% if current == 'quotes_list' or current == 'quote_create' or current == 'quote_detail' %}active{% endif %}">Devis</a>
                         <a href="{% url 'inventory:record_movement' %}" class="{% if current == 'record_movement' %}active{% endif %}">Mouvements</a>
-                        <a href="{% url 'inventory:inventory_overview' %}" class="{% if current == 'inventory_overview' %}active{% endif %}">Inventaire</a>
+                        <a href="{% url 'inventory:inventory_overview' %}" class="{% if current == 'inventory_overview' %}active{% endif %}">Produits</a>
                         <a href="{% url 'inventory:inventory_physical' %}" class="{% if current == 'inventory_physical' %}active{% endif %}">Inventaire physique</a>
                         <a href="{% url 'inventory:sales_list' %}" class="{% if current == 'sales_list' or current == 'sale_create' %}active{% endif %}">Ventes</a>
                         <a href="{% url 'inventory:import_products' %}" class="{% if current == 'import_products' %}active{% endif %}">Import</a>

@@ -17,7 +17,7 @@
     <div class="toolbar">
         <a class="btn" href="{% url 'inventory:sale_create' %}">+ Nouvelle vente</a>
         <a class="btn secondary" href="{% url 'inventory:record_movement' %}">Mouvement de stock</a>
-        <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Inventaire</a>
+        <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Produits</a>
     </div>
 </section>
 
@@ -241,7 +241,7 @@
     <div class="surface reveal" data-delay="160">
         <div class="surface-header">
             <h2 class="surface-title">Alertes stock bas</h2>
-            <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Inventaire</a>
+            <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Produits</a>
         </div>
         <table aria-label="Alertes de stock">
             <thead>

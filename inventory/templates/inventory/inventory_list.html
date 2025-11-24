@@ -1,5 +1,5 @@
 {% extends "inventory/base.html" %}
-{% block title %}Inventaire{% endblock %}
+{% block title %}Produits{% endblock %}
 {% block content %}
 <style>
     .product-grid { display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
@@ -72,6 +72,7 @@
     </div>
     <div class="toolbar">
         <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Vue tableau</a>
+        <a class="btn secondary" href="{% url 'inventory:product_create' %}">+ Créer un produit</a>
         <a class="btn" href="{% url 'inventory:record_movement' %}">Mouvement stock</a>
     </div>
 </section>

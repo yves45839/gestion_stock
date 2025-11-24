@@ -1,0 +1,53 @@
+{% extends "inventory/base.html" %}
+{% block title %}Nouveau produit{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
+        <div>
+            <h1 style="margin:0;font-size:1.5rem;">Créer un produit</h1>
+            <p style="margin:0.25rem 0 0;color:var(--muted);">Renseignez les informations principales puis enregistrez.</p>
+        </div>
+        <a href="{{ return_url|default:request.path }}" class="btn secondary">Retour</a>
+    </div>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card" style="display:grid;gap:1rem;padding:1rem;max-width:900px;">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+        <div class="message error">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:1rem;">
+        {% for field in form %}
+            <div>
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<small style="color:var(--muted);">{{ field.help_text }}</small>{% endif %}
+                {% for error in field.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
+        <a href="{{ return_url|default:request.path }}" class="btn secondary">Annuler</a>
+        <button type="submit" class="btn">Enregistrer</button>
+    </div>
+</form>
+
+<style>
+.field-error { color:#b91c1c; font-size:0.85rem; }
+form input, form select, form textarea {
+    width:100%;
+    background:#fff;
+    color:#0f172a;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:0.45rem 0.5rem;
+}
+form input:focus, form select:focus, form textarea:focus {
+    outline:2px solid var(--accent-strong);
+    outline-offset:1px;
+    border-color: var(--accent-strong);
+}
+</style>
+{% endblock %}
