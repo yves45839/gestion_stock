@@ -11,12 +11,14 @@
     <style>
         :root {
             --bg: #050710;
-            --surface: #12203a;
-            --surface-muted: #0f1a30;
-            --border: #2b3d5c;
-            --border-strong: #3a5277;
+            --surface: #0f1c32;
+            --surface-muted: #0d172a;
+            --border: #364c6f;
+            --border-strong: #4a6a95;
             --text: #f6f8ff;
-            --muted: #d4e2ff;
+            --muted: #d8e5ff;
+            --field-bg: #0c1a2f;
+            --field-placeholder: #c1d0ee;
             --accent: #4df0ff;
             --accent-strong: #00c6ff;
             --accent-soft: rgba(77, 240, 255, 0.18);
@@ -130,9 +132,9 @@
         }
         .lead { margin: 0; color: var(--muted); font-size: 0.95rem; }
         .surface {
-            background: #111a2e;
+            background: var(--surface);
             border-radius: 16px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--border-strong);
             box-shadow: var(--shadow);
             padding: 1.25rem 1.35rem;
             position: relative;
@@ -156,9 +158,9 @@
         }
         .surface > * { position: relative; }
         .card {
-            background: #111a2e;
+            background: var(--surface);
             border-radius: 16px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--border-strong);
             box-shadow: var(--shadow);
             padding: 1.25rem 1.35rem;
         }
@@ -303,14 +305,15 @@
         label { font-size: 0.88rem; color: var(--muted); font-weight: 600; }
         input, select, textarea {
             width: 100%;
-            border: 1px solid var(--border);
+            border: 1px solid var(--border-strong);
             border-radius: 12px;
             padding: 0.7rem 0.85rem;
             font-size: 0.98rem;
-            background: rgba(7, 11, 22, 0.9);
+            background: var(--field-bg);
             color: var(--text);
             transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
+        input::placeholder, textarea::placeholder { color: var(--field-placeholder); opacity: 1; }
         input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: rgba(77, 240, 255, 0.7);
