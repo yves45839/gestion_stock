@@ -143,11 +143,10 @@
                     <div class="toolbar">
                         <button type="submit" class="btn">Filtrer</button>
                         <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Réinitialiser</a>
-                        <button type="button" class="btn secondary" id="save-filters">Sauvegarder</button>
-                        <button type="button" class="btn secondary" id="apply-saved-filters">Restaurer</button>
-                        <button type="button" class="btn secondary" id="share-filters">Partager</button>
                     </div>
-                    <p class="muted-text" id="filter-feedback" style="margin:0.35rem 0 0; font-size:0.9rem;"></p>
+                    <p class="muted-text" style="margin:0.35rem 0 0; font-size:0.9rem;">
+                        Les champs vides sont ignorés pour des requêtes plus légères.
+                    </p>
                 </div>
             </form>
         </div>
@@ -269,62 +268,16 @@
         const form = document.getElementById("inventory-filter-form");
         if (!form) return;
 
-        const storageKey = "inventory_filters";
-        const feedback = document.getElementById("filter-feedback");
-        const saveBtn = document.getElementById("save-filters");
-        const applyBtn = document.getElementById("apply-saved-filters");
-        const shareBtn = document.getElementById("share-filters");
-
-        const setFeedback = (message, tone = "muted") => {
-            if (!feedback) return;
-            feedback.textContent = message;
-            feedback.style.color =
-                tone === "success"
-                    ? "var(--success)"
-                    : tone === "warn"
-                        ? "var(--warning)"
-                        : "var(--muted)";
-        };
-
-        const buildQuery = () => {
-            const params = new URLSearchParams();
-            new FormData(form).forEach((value, key) => {
-                const trimmed = typeof value === "string" ? value.trim() : value;
-                if (trimmed !== "" && trimmed !== null) {
-                    params.set(key, trimmed);
+        form.addEventListener("submit", () => {
+            const fields = form.querySelectorAll("input[name], select[name]");
+            fields.forEach((field) => {
+                if (field instanceof HTMLInputElement && field.type === "text") {
+                    field.value = field.value.trim();
+                }
+                if (field.value === "") {
+                    field.disabled = true;
                 }
             });
-            return params.toString();
-        };
-
-        saveBtn?.addEventListener("click", (event) => {
-            event.preventDefault();
-            const query = buildQuery();
-            localStorage.setItem(storageKey, query);
-            setFeedback(query ? "Filtres sauvegardés pour cette vue." : "Filtres vides enregistrés.", "success");
-        });
-
-        applyBtn?.addEventListener("click", (event) => {
-            event.preventDefault();
-            const saved = localStorage.getItem(storageKey);
-            if (!saved) {
-                setFeedback("Aucun filtre sauvegardé à appliquer.", "warn");
-                return;
-            }
-            const baseUrl = window.location.pathname;
-            window.location.href = saved ? `${baseUrl}?${saved}` : baseUrl;
-        });
-
-        shareBtn?.addEventListener("click", async (event) => {
-            event.preventDefault();
-            const query = buildQuery();
-            const url = query ? `${window.location.origin}${window.location.pathname}?${query}` : window.location.href;
-            try {
-                await navigator.clipboard.writeText(url);
-                setFeedback("Lien copié : partagez cette vue facilement.", "success");
-            } catch (error) {
-                setFeedback("Impossible de copier automatiquement. Copiez l'URL manuellement.", "warn");
-            }
         });
     })();
 </script>
