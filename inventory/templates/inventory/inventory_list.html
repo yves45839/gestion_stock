@@ -81,7 +81,7 @@
 <section class="split split-70">
     <div class="stack">
         <div class="surface reveal" data-delay="100">
-            <form method="get" class="form-grid">
+            <form method="get" class="form-grid" id="inventory-filter-form">
                 <div class="field">
                     <label for="search">Recherche</label>
                     <input id="search" type="text" name="q" value="{{ search }}" placeholder="Nom, SKU ou référence">
@@ -121,11 +121,33 @@
                         <div class="context-chip" style="width:100%;">{{ active_site.name|default:"Vue globale" }}</div>
                     {% endif %}
                 </div>
+                <div class="field">
+                    <label for="sort">Tri</label>
+                    <select id="sort" name="sort">
+                        <option value="name" {% if selected_sort == "name" %}selected{% endif %}>Nom (A→Z)</option>
+                        <option value="price_asc" {% if selected_sort == "price_asc" %}selected{% endif %}>Prix croissant</option>
+                        <option value="price_desc" {% if selected_sort == "price_desc" %}selected{% endif %}>Prix décroissant</option>
+                        <option value="stock_desc" {% if selected_sort == "stock_desc" %}selected{% endif %}>Stock le plus élevé</option>
+                        <option value="newest" {% if selected_sort == "newest" %}selected{% endif %}>Nouveautés</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="page_size">Résultats par page</label>
+                    <select id="page_size" name="page_size">
+                        {% for size in allowed_page_sizes %}
+                            <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>{{ size }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div class="field" style="align-self:flex-end;">
                     <div class="toolbar">
                         <button type="submit" class="btn">Filtrer</button>
                         <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Réinitialiser</a>
+                        <button type="button" class="btn secondary" id="save-filters">Sauvegarder</button>
+                        <button type="button" class="btn secondary" id="apply-saved-filters">Restaurer</button>
+                        <button type="button" class="btn secondary" id="share-filters">Partager</button>
                     </div>
+                    <p class="muted-text" id="filter-feedback" style="margin:0.35rem 0 0; font-size:0.9rem;"></p>
                 </div>
             </form>
         </div>
@@ -242,4 +264,68 @@
         </div>
     </div>
 </section>
+<script>
+    (() => {
+        const form = document.getElementById("inventory-filter-form");
+        if (!form) return;
+
+        const storageKey = "inventory_filters";
+        const feedback = document.getElementById("filter-feedback");
+        const saveBtn = document.getElementById("save-filters");
+        const applyBtn = document.getElementById("apply-saved-filters");
+        const shareBtn = document.getElementById("share-filters");
+
+        const setFeedback = (message, tone = "muted") => {
+            if (!feedback) return;
+            feedback.textContent = message;
+            feedback.style.color =
+                tone === "success"
+                    ? "var(--success)"
+                    : tone === "warn"
+                        ? "var(--warning)"
+                        : "var(--muted)";
+        };
+
+        const buildQuery = () => {
+            const params = new URLSearchParams();
+            new FormData(form).forEach((value, key) => {
+                const trimmed = typeof value === "string" ? value.trim() : value;
+                if (trimmed !== "" && trimmed !== null) {
+                    params.set(key, trimmed);
+                }
+            });
+            return params.toString();
+        };
+
+        saveBtn?.addEventListener("click", (event) => {
+            event.preventDefault();
+            const query = buildQuery();
+            localStorage.setItem(storageKey, query);
+            setFeedback(query ? "Filtres sauvegardés pour cette vue." : "Filtres vides enregistrés.", "success");
+        });
+
+        applyBtn?.addEventListener("click", (event) => {
+            event.preventDefault();
+            const saved = localStorage.getItem(storageKey);
+            if (!saved) {
+                setFeedback("Aucun filtre sauvegardé à appliquer.", "warn");
+                return;
+            }
+            const baseUrl = window.location.pathname;
+            window.location.href = saved ? `${baseUrl}?${saved}` : baseUrl;
+        });
+
+        shareBtn?.addEventListener("click", async (event) => {
+            event.preventDefault();
+            const query = buildQuery();
+            const url = query ? `${window.location.origin}${window.location.pathname}?${query}` : window.location.href;
+            try {
+                await navigator.clipboard.writeText(url);
+                setFeedback("Lien copié : partagez cette vue facilement.", "success");
+            } catch (error) {
+                setFeedback("Impossible de copier automatiquement. Copiez l'URL manuellement.", "warn");
+            }
+        });
+    })();
+</script>
 {% endblock %}

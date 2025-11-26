@@ -876,6 +876,16 @@ def inventory_overview(request):
                 "Aucun produit ne correspond à ce scan. Créez-le depuis la page d'ajout de produit avant de poursuivre.",
             )
 
+    sort_param = request.GET.get("sort") or "name"
+    sort_options = {
+        "name": ("name",),
+        "price_desc": ("-sale_price", "name"),
+        "price_asc": ("sale_price", "name"),
+        "stock_desc": ("-current_stock", "name"),
+        "newest": ("-created_at",),
+    }
+    sort_choice = sort_param if sort_param in sort_options else "name"
+
     adjustment_form = InventoryAdjustmentForm(
         request.POST or None, current_site=action_site or view_site, site_locked=site_locked
     )
@@ -906,9 +916,18 @@ def inventory_overview(request):
         messages.success(request, "Ajustement d'inventaire enregistré.")
         return redirect(reverse("inventory:inventory_overview"))
 
-    products = products.order_by("name")
+    products = products.order_by(*sort_options[sort_choice])
 
-    paginator = Paginator(products, 12)
+    page_size_param = request.GET.get("page_size")
+    allowed_page_sizes = [12, 24, 48]
+    try:
+        page_size = int(page_size_param) if page_size_param else allowed_page_sizes[0]
+    except ValueError:
+        page_size = allowed_page_sizes[0]
+    if page_size not in allowed_page_sizes:
+        page_size = allowed_page_sizes[0]
+
+    paginator = Paginator(products, page_size)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
     query_params = request.GET.copy()
@@ -924,6 +943,10 @@ def inventory_overview(request):
         "search": search or "",
         "scan_code": scan_code or "",
         "scan_message": scan_message,
+        "selected_sort": sort_choice,
+        "sort_options": sort_options,
+        "page_size": page_size,
+        "allowed_page_sizes": allowed_page_sizes,
         "brands": Product.objects.values("brand_id", "brand__name").distinct().order_by(
             "brand__name"
         ),
