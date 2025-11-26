@@ -847,13 +847,15 @@ def inventory_overview(request):
         Product.objects.with_stock_quantity(site=view_site)
         .select_related("brand", "category")
     )
-    search = request.GET.get("q")
+    search = (request.GET.get("q") or "").strip()
     if search:
-        products = products.filter(
-            Q(name__icontains=search)
-            | Q(sku__icontains=search)
-            | Q(manufacturer_reference__icontains=search)
-        )
+        search_query = Q()
+        for term in search.split():
+            token = Q(name__icontains=term) | Q(sku__icontains=term) | Q(
+                manufacturer_reference__icontains=term
+            )
+            search_query &= token
+        products = products.filter(search_query)
     brand_id = request.GET.get("brand")
     if brand_id:
         products = products.filter(brand_id=brand_id)
