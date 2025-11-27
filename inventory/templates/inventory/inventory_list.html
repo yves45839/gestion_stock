@@ -38,6 +38,50 @@
     .stock { padding: 0.3rem 0.65rem; border-radius: 10px; font-weight: 700; font-size: 0.85rem; border: 1px solid transparent; }
     .stock.safe { background: rgba(110, 242, 166, 0.18); color: var(--success); border-color: rgba(110, 242, 166, 0.45); }
     .stock.warn { background: rgba(252, 179, 92, 0.16); color: var(--warning); border-color: rgba(252, 179, 92, 0.45); }
+    .autocomplete-panel { position: relative; }
+    .autocomplete-results {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        background: #0f172a;
+        color: #e2e8f0;
+        border: 1px solid var(--border-strong);
+        border-radius: 10px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+        z-index: 40;
+        max-height: 320px;
+        overflow-y: auto;
+    }
+    .autocomplete-option {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        width: 100%;
+        border: none;
+        background: transparent;
+        padding: 0.7rem 0.9rem;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+    }
+    .autocomplete-option:hover,
+    .autocomplete-option:focus { background: rgba(255,255,255,0.04); outline: none; }
+    .autocomplete-empty { padding: 0.7rem 0.9rem; color: #cbd5e1; }
+    .product-thumb {
+        width: 42px;
+        height: 42px;
+        border-radius: 9px;
+        background: #1b2b45;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
+        border: 1px solid var(--border-strong);
+    }
+    .product-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .product-thumb.fallback { font-weight: 700; color: #cbd5e1; }
 </style>
 
 <section class="page-header reveal">
@@ -84,7 +128,10 @@
             <form method="get" class="form-grid" id="inventory-filter-form">
                 <div class="field">
                     <label for="search">Recherche</label>
-                    <input id="search" type="text" name="q" value="{{ search }}" placeholder="Nom, SKU ou référence">
+                    <div class="autocomplete-panel">
+                        <input id="search" type="text" name="q" value="{{ search }}" placeholder="Nom, SKU ou référence" autocomplete="off">
+                        <div class="autocomplete-results" data-search-results></div>
+                    </div>
                 </div>
                 <div class="field">
                     <label for="brand">Marque</label>
@@ -213,7 +260,10 @@
                 {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
                 {% if selected_site %}<input type="hidden" name="site" value="{{ selected_site }}">{% endif %}
                 <label for="scan">Scan (SKU ou code-barres)</label>
-                <input id="scan" type="text" name="scan" placeholder="Scannez ici pour isoler un produit" autocomplete="off" autofocus>
+                <div class="autocomplete-panel">
+                    <input id="scan" type="text" name="scan" placeholder="Scannez ici pour isoler un produit" autocomplete="off" autofocus>
+                    <div class="autocomplete-results" data-scan-results></div>
+                </div>
                 <div class="muted-text" style="font-size:0.85rem;">Le champ se réinitialise après chaque scan. Appuyez sur Entrée si besoin.</div>
             </form>
             {% if scan_message %}
@@ -263,6 +313,98 @@
         </div>
     </div>
 </section>
+{{ product_dataset|json_script:"product-dataset" }}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const productDataset = JSON.parse(document.getElementById("product-dataset").textContent || "[]");
+    const searchInput = document.getElementById("search");
+    const scanInput = document.getElementById("scan");
+    const searchResults = document.querySelector("[data-search-results]");
+    const scanResults = document.querySelector("[data-scan-results]");
+    const filterForm = document.getElementById("inventory-filter-form");
+
+    const createThumb = (item) => {
+        const thumb = document.createElement("div");
+        thumb.className = "product-thumb";
+        if (item && item.image_url) {
+            const img = document.createElement("img");
+            img.src = item.image_url;
+            img.alt = item.name || "Produit";
+            thumb.appendChild(img);
+        } else {
+            thumb.classList.add("fallback");
+            thumb.textContent = (item?.name || "?").slice(0, 1).toUpperCase();
+        }
+        return thumb;
+    };
+
+    const filterProducts = (value) => {
+        const normalized = (value || "").toLowerCase().trim();
+        if (!normalized) return [];
+        return productDataset
+            .filter((p) =>
+                (p.name || "").toLowerCase().includes(normalized) ||
+                (p.sku || "").toLowerCase().includes(normalized) ||
+                (p.barcode || "").toLowerCase().includes(normalized)
+            )
+            .slice(0, 10);
+    };
+
+    const renderOptions = (input, container, onSelect) => {
+        if (!container) return;
+        const matches = filterProducts(input.value);
+        container.innerHTML = "";
+        if (!matches.length) {
+            const empty = document.createElement("div");
+            empty.className = "autocomplete-empty";
+            empty.textContent = "Aucun produit";
+            container.appendChild(empty);
+            return;
+        }
+        matches.forEach((item) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "autocomplete-option";
+            btn.appendChild(createThumb(item));
+            const meta = document.createElement("div");
+            const title = document.createElement("div");
+            title.textContent = item.name;
+            title.style.fontWeight = "700";
+            const subtitle = document.createElement("div");
+            subtitle.textContent = item.sku || item.barcode || "Sans référence";
+            subtitle.style.color = "var(--muted)";
+            meta.append(title, subtitle);
+            btn.appendChild(meta);
+            btn.addEventListener("mousedown", (e) => e.preventDefault());
+            btn.addEventListener("click", () => onSelect(item));
+            container.appendChild(btn);
+        });
+    };
+
+    if (searchInput) {
+        const selectSearch = (item) => {
+            searchInput.value = item.name;
+            if (filterForm) {
+                filterForm.submit();
+            }
+        };
+        searchInput.addEventListener("input", () => renderOptions(searchInput, searchResults, selectSearch));
+        searchInput.addEventListener("focus", () => renderOptions(searchInput, searchResults, selectSearch));
+        searchInput.addEventListener("blur", () => setTimeout(() => searchResults && (searchResults.innerHTML = ""), 150));
+    }
+
+    if (scanInput) {
+        const selectScan = (item) => {
+            scanInput.value = item.barcode || item.sku || item.name;
+            const parentForm = scanInput.closest("form");
+            if (parentForm) parentForm.submit();
+        };
+        scanInput.addEventListener("input", () => renderOptions(scanInput, scanResults, selectScan));
+        scanInput.addEventListener("focus", () => renderOptions(scanInput, scanResults, selectScan));
+        scanInput.addEventListener("blur", () => setTimeout(() => scanResults && (scanResults.innerHTML = ""), 150));
+    }
+});
+</script>
 <script>
     (() => {
         const form = document.getElementById("inventory-filter-form");

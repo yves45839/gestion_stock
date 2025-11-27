@@ -937,6 +937,19 @@ def inventory_overview(request):
         query_params.pop("page")
     pagination_query = query_params.urlencode()
 
+    product_dataset = [
+        {
+            "id": product.id,
+            "name": product.name,
+            "sku": product.sku,
+            "barcode": product.barcode,
+            "image_url": product.image.url if product.image else "",
+            "brand": getattr(product.brand, "name", ""),
+            "category": getattr(product.category, "name", ""),
+        }
+        for product in Product.objects.select_related("brand", "category").order_by("name")
+    ]
+
     context = {
         "products": page_obj,
         "page_obj": page_obj,
@@ -958,6 +971,7 @@ def inventory_overview(request):
         "selected_brand": brand_id or "",
         "selected_category": category_id or "",
         "total_products": paginator.count,
+        "product_dataset": product_dataset,
     }
     context.update(site_context)
     return render(request, "inventory/inventory_list.html", context)

@@ -72,6 +72,13 @@
                             {{ form.product }}
                             <div class="autocomplete-results" data-autocomplete></div>
                         </div>
+                        <div class="product-preview" data-product-preview>
+                            <div class="product-thumb fallback">?</div>
+                            <div>
+                                <strong>Aucun produit sélectionné</strong>
+                                <small style="color:var(--muted);">Tapez un nom ou une référence pour commencer.</small>
+                            </div>
+                        </div>
                         {% for error in form.product.errors %}
                             <div class="field-error">{{ error }}</div>
                         {% endfor %}
@@ -111,6 +118,13 @@
                 <input type="text" class="form-control product-search" placeholder="Rechercher un produit" autocomplete="off">
                 {{ line_formset.empty_form.product.as_widget|safe }}
                 <div class="autocomplete-results" data-autocomplete></div>
+            </div>
+            <div class="product-preview" data-product-preview>
+                <div class="product-thumb fallback">?</div>
+                <div>
+                    <strong>Aucun produit sélectionné</strong>
+                    <small style="color:var(--muted);">Tapez un nom ou une référence pour commencer.</small>
+                </div>
             </div>
         </td>
         <td>
@@ -172,6 +186,28 @@
 .autocomplete-option:hover,
 .autocomplete-option:focus { background:rgba(255,255,255,0.06); outline:none; }
 .autocomplete-empty { padding:0.55rem 0.7rem; color:#cbd5e1; }
+.product-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: #f3f4f6;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+}
+.product-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.product-thumb.fallback { font-weight: 600; color: #cbd5e1; }
+.product-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.4rem;
+    color: var(--muted);
+}
+.product-preview strong { color: inherit; display: block; }
 #id_movement_type {
     background:#fff;
     color:#0f172a;
@@ -193,6 +229,35 @@ document.addEventListener("DOMContentLoaded", () => {
     const template = document.getElementById("movement-line-template").innerHTML.trim();
     const totalInput = document.getElementById("id_lines-TOTAL_FORMS");
     const productDataset = JSON.parse(document.getElementById("product-dataset").textContent || "[]");
+
+    const createThumb = (item) => {
+        const thumb = document.createElement("div");
+        thumb.className = "product-thumb";
+        if (item && item.image_url) {
+            const img = document.createElement("img");
+            img.src = item.image_url;
+            img.alt = item.name || "Produit";
+            thumb.appendChild(img);
+        } else {
+            thumb.classList.add("fallback");
+            thumb.textContent = (item?.name || "?").slice(0, 1).toUpperCase();
+        }
+        return thumb;
+    };
+
+    const renderProductPreview = (wrapper, product) => {
+        if (!wrapper) return;
+        wrapper.innerHTML = "";
+        const thumb = createThumb(product);
+        const info = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = product ? product.name : "Aucun produit sélectionné";
+        const subtitle = document.createElement("small");
+        subtitle.style.color = "var(--muted)";
+        subtitle.textContent = product ? (product.sku || "Référence manquante") : "Tapez un nom ou une référence pour commencer.";
+        info.append(title, subtitle);
+        wrapper.append(thumb, info);
+    };
 
     const filterProducts = (value) => {
         const normalized = (value || "").toLowerCase().trim();
@@ -224,6 +289,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const sku = product.sku ? ` (${product.sku})` : "";
             searchInput.value = `${product.name}${sku}`;
         }
+        const preview = row.querySelector("[data-product-preview]");
+        renderProductPreview(preview, product);
     };
 
     const bindRow = (row) => {
@@ -240,6 +307,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const searchInput = row.querySelector(".product-search");
         const results = row.querySelector("[data-autocomplete]");
+        const preview = row.querySelector("[data-product-preview]");
         if (searchInput) {
             const select = row.querySelector(".product-select") || row.querySelector("select");
             if (select && select.value) {
@@ -247,7 +315,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (current) {
                     const sku = current.sku ? ` (${current.sku})` : "";
                     searchInput.value = `${current.name}${sku}`;
+                    renderProductPreview(preview, current);
                 }
+            } else {
+                renderProductPreview(preview, null);
             }
             const renderResults = (items) => {
                 if (!results) return;
@@ -263,6 +334,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const option = document.createElement("button");
                     option.type = "button";
                     option.className = "autocomplete-option";
+                    option.appendChild(createThumb(product));
                     const label = document.createElement("div");
                     const sku = product.sku ? ` (${product.sku})` : "";
                     label.textContent = `${product.name}${sku}`;
