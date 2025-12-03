@@ -101,9 +101,7 @@ class DuplicateProductFilter(admin.SimpleListFilter):
 
     def queryset(self, request, queryset):
         if self.value() == "yes":
-            return queryset.filter(
-                Q(duplicate_barcode_count__gt=1) | Q(duplicate_name_brand_count__gt=1)
-            )
+            return queryset.filter(duplicate_primary_count__gt=1)
         return queryset
 
 
@@ -159,6 +157,14 @@ class ProductAdmin(admin.ModelAdmin):
                 output_field=IntegerField(),
             ),
         )
+        barcode_present = ~Q(barcode__isnull=True) & ~Q(barcode="")
+        qs = qs.annotate(
+            duplicate_primary_count=Case(
+                When(barcode_present, then=F("duplicate_barcode_count")),
+                default=F("duplicate_name_brand_count"),
+                output_field=IntegerField(),
+            )
+        )
         return qs.annotate(
             current_stock=Coalesce(
                 Sum(
@@ -188,8 +194,9 @@ class ProductAdmin(admin.ModelAdmin):
 
     @admin.display(description="Doublon")
     def duplicate_info(self, obj):
-        duplicate_by_barcode = obj.duplicate_barcode_count > 1 if obj.barcode else False
-        duplicate_by_name_brand = obj.duplicate_name_brand_count > 1
+        barcode_value = (obj.barcode or "").strip()
+        duplicate_by_barcode = bool(barcode_value) and obj.duplicate_barcode_count > 1
+        duplicate_by_name_brand = not barcode_value and obj.duplicate_name_brand_count > 1
         if duplicate_by_barcode:
             return "Code-barres"
         if duplicate_by_name_brand:
@@ -199,14 +206,15 @@ class ProductAdmin(admin.ModelAdmin):
     @admin.action(description="Supprimer les doublons (garder le plus ancien)")
     def delete_duplicate_products(self, request, queryset):
         duplicates = queryset.filter(
-            Q(duplicate_barcode_count__gt=1) | Q(duplicate_name_brand_count__gt=1)
+            duplicate_primary_count__gt=1
         ).select_related("brand")
         kept = {}
         to_delete = []
         for product in duplicates.order_by("barcode", "name", "brand_id", "created_at", "pk"):
+            barcode_value = (product.barcode or "").strip()
             key = (
-                ("barcode", product.barcode.strip())
-                if product.barcode
+                ("barcode", barcode_value)
+                if barcode_value
                 else ("name_brand", product.name.strip().lower(), product.brand_id)
             )
             if key not in kept:

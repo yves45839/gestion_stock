@@ -1,0 +1,192 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}Gestion de stock | Administration{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg: #050710;
+        --surface: #0f1c32;
+        --surface-muted: #0d172a;
+        --border: #364c6f;
+        --border-strong: #4a6a95;
+        --text: #f6f8ff;
+        --muted: #d8e5ff;
+        --field-bg: #0c1a2f;
+        --field-placeholder: #c1d0ee;
+        --accent: #4df0ff;
+        --accent-strong: #00c6ff;
+        --accent-soft: rgba(77, 240, 255, 0.18);
+        --success: #6ef2a6;
+        --warning: #fcb35c;
+        --danger: #ff6f6f;
+        --shadow: 0 18px 45px rgba(0, 198, 255, 0.2);
+    }
+
+    body {
+        background:
+            radial-gradient(circle at 18% 25%, rgba(77, 240, 255, 0.16), transparent 35%),
+            radial-gradient(circle at 82% 18%, rgba(255, 117, 172, 0.14), transparent 32%),
+            linear-gradient(135deg, #050710 0%, #0a1224 40%, #050710 100%);
+        color: var(--text);
+        font-family: "Space Grotesk", "Manrope", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        min-height: 100vh;
+    }
+
+    #container {
+        background: transparent;
+    }
+
+    #header {
+        background: rgba(10, 16, 32, 0.96);
+        border-bottom: 1px solid var(--border-strong);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        padding: 18px 30px;
+    }
+
+    #user-tools, #header a {
+        color: var(--muted);
+        font-weight: 600;
+    }
+
+    #branding .admin-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        text-decoration: none;
+        color: var(--text);
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        text-transform: uppercase;
+    }
+
+    #branding .admin-brand .dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent-strong), #ff65c3);
+        box-shadow: 0 0 0 8px rgba(77, 240, 255, 0.16);
+    }
+
+    #branding .admin-brand small {
+        display: block;
+        font-size: 0.7rem;
+        color: var(--muted);
+        text-transform: none;
+    }
+
+    #content {
+        margin: 30px;
+        padding: 24px;
+        background: linear-gradient(145deg, rgba(15, 28, 50, 0.94), rgba(13, 23, 42, 0.92));
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        color: var(--text);
+    }
+
+    .breadcrumbs {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 12px;
+        color: var(--muted);
+        margin: 0 30px 18px;
+    }
+
+    .module {
+        background: rgba(12, 26, 47, 0.8);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px;
+    }
+
+    .module table {
+        border-color: var(--border);
+    }
+
+    .module caption, .module h2 {
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+    }
+
+    input, select, textarea {
+        background: var(--field-bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 10px;
+    }
+
+    input:focus, select:focus, textarea:focus {
+        border-color: var(--accent-strong);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .button, input[type="submit"], button {
+        background: linear-gradient(135deg, var(--accent-strong), #47b2ff);
+        border: 1px solid rgba(77, 240, 255, 0.45);
+        color: #0b1a30;
+        font-weight: 700;
+        border-radius: 10px;
+        padding: 9px 14px;
+        box-shadow: 0 12px 24px rgba(0, 198, 255, 0.25);
+    }
+
+    .button.default, input.default[type="submit"] {
+        background: linear-gradient(135deg, #4df0ff, #6ef2a6);
+    }
+
+    .submit-row {
+        background: transparent;
+        border-top: 1px solid var(--border);
+    }
+
+    table thead th {
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+    }
+
+    table tbody tr:nth-child(odd) {
+        background: rgba(0, 0, 0, 0.08);
+    }
+
+    .paginator, .help, .errornote, .errorlist {
+        color: var(--muted);
+    }
+
+    .errornote, .errorlist li {
+        border-color: var(--danger);
+        color: var(--danger);
+        background: rgba(255, 111, 111, 0.1);
+    }
+
+    .messagelist li {
+        background: rgba(77, 240, 255, 0.12);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
+    }
+</style>
+{% endblock %}
+
+{% block branding %}
+<a class="admin-brand" href="{% url 'admin:index' %}">
+    <span class="dot"></span>
+    <span>
+        Gestion de stock
+        <small>Administration</small>
+    </span>
+</a>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
