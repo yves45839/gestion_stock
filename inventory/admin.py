@@ -1,5 +1,17 @@
-from django.contrib import admin
-from django.db.models import Case, ExpressionWrapper, F, IntegerField, Sum, Value, When
+from django.contrib import admin, messages
+from django.db.models import (
+    Case,
+    Count,
+    ExpressionWrapper,
+    F,
+    IntegerField,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+    When,
+)
 from django.db.models.functions import Coalesce
 
 from .models import (
@@ -80,6 +92,21 @@ class StockMovementInline(admin.TabularInline):
     )
 
 
+class DuplicateProductFilter(admin.SimpleListFilter):
+    title = "Doublons"
+    parameter_name = "duplicate_filter"
+
+    def lookups(self, request, model_admin):
+        return (("yes", "Afficher uniquement les doublons"),)
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.filter(
+                Q(duplicate_barcode_count__gt=1) | Q(duplicate_name_brand_count__gt=1)
+            )
+        return queryset
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
@@ -90,10 +117,12 @@ class ProductAdmin(admin.ModelAdmin):
         "barcode",
         "minimum_stock",
         "stock_quantity_display",
+        "duplicate_info",
     )
     search_fields = ("sku", "manufacturer_reference", "name", "barcode")
-    list_filter = ("brand", "category")
+    list_filter = ("brand", "category", DuplicateProductFilter)
     inlines = (StockMovementInline,)
+    actions = ("delete_duplicate_products",)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -102,6 +131,33 @@ class ProductAdmin(admin.ModelAdmin):
         )
         exit_quantity = ExpressionWrapper(
             -F("stock_movements__quantity"), output_field=IntegerField()
+        )
+        barcode_count = Product.objects.exclude(barcode__isnull=True).exclude(
+            barcode=""
+        )
+        qs = qs.annotate(
+            duplicate_barcode_count=Coalesce(
+                Subquery(
+                    barcode_count.filter(barcode=OuterRef("barcode"))
+                    .values("barcode")
+                    .annotate(total=Count("id"))
+                    .values("total")[:1],
+                ),
+                Value(0),
+                output_field=IntegerField(),
+            ),
+            duplicate_name_brand_count=Coalesce(
+                Subquery(
+                    Product.objects.filter(
+                        name=OuterRef("name"), brand=OuterRef("brand")
+                    )
+                    .values("name")
+                    .annotate(total=Count("id"))
+                    .values("total")[:1],
+                ),
+                Value(0),
+                output_field=IntegerField(),
+            ),
         )
         return qs.annotate(
             current_stock=Coalesce(
@@ -129,6 +185,43 @@ class ProductAdmin(admin.ModelAdmin):
     def stock_quantity_display(self, obj):
         current_stock = getattr(obj, "current_stock", None)
         return current_stock if current_stock is not None else obj.stock_quantity
+
+    @admin.display(description="Doublon")
+    def duplicate_info(self, obj):
+        duplicate_by_barcode = obj.duplicate_barcode_count > 1 if obj.barcode else False
+        duplicate_by_name_brand = obj.duplicate_name_brand_count > 1
+        if duplicate_by_barcode:
+            return "Code-barres"
+        if duplicate_by_name_brand:
+            return "Nom + marque"
+        return False
+
+    @admin.action(description="Supprimer les doublons (garder le plus ancien)")
+    def delete_duplicate_products(self, request, queryset):
+        duplicates = queryset.filter(
+            Q(duplicate_barcode_count__gt=1) | Q(duplicate_name_brand_count__gt=1)
+        ).select_related("brand")
+        kept = {}
+        to_delete = []
+        for product in duplicates.order_by("barcode", "name", "brand_id", "created_at", "pk"):
+            key = (
+                ("barcode", product.barcode.strip())
+                if product.barcode
+                else ("name_brand", product.name.strip().lower(), product.brand_id)
+            )
+            if key not in kept:
+                kept[key] = product
+            else:
+                to_delete.append(product)
+
+        for product in to_delete:
+            product.delete()
+
+        self.message_user(
+            request,
+            f"{len(to_delete)} produit(s) en doublon supprimé(s).",
+            level=messages.INFO,
+        )
 
 
 @admin.register(MovementType)
