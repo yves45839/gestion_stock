@@ -120,7 +120,7 @@ class ProductAdmin(admin.ModelAdmin):
         "duplicate_info",
     )
     search_fields = ("sku", "manufacturer_reference", "name", "barcode")
-    list_filter = ("brand", "category", DuplicateProductFilter)
+    list_filter = (DuplicateProductFilter, "brand", "category")
     inlines = (StockMovementInline,)
     actions = ("delete_duplicate_products",)
 
