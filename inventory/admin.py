@@ -12,7 +12,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, Lower, Replace, Trim
 
 from .models import (
     Brand,
@@ -122,6 +122,20 @@ class ProductAdmin(admin.ModelAdmin):
     inlines = (StockMovementInline,)
     actions = ("delete_duplicate_products",)
 
+    @staticmethod
+    def _normalized_barcode_value(product):
+        annotated_value = getattr(product, "normalized_barcode", None)
+        if annotated_value is not None:
+            return annotated_value.strip()
+        return "".join((product.barcode or "").split()).lower()
+
+    @staticmethod
+    def _normalized_name_value(product):
+        annotated_value = getattr(product, "normalized_name", None)
+        if annotated_value is not None:
+            return annotated_value.strip()
+        return (product.name or "").strip().lower()
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         signed_quantity = ExpressionWrapper(
@@ -130,14 +144,21 @@ class ProductAdmin(admin.ModelAdmin):
         exit_quantity = ExpressionWrapper(
             -F("stock_movements__quantity"), output_field=IntegerField()
         )
-        barcode_count = Product.objects.exclude(barcode__isnull=True).exclude(
-            barcode=""
+        normalized_barcode = Lower(
+            Replace(Trim(Coalesce(F("barcode"), Value(""))), Value(" "), Value(""))
+        )
+        normalized_name = Lower(Trim(Coalesce(F("name"), Value(""))))
+        barcode_count = (
+            Product.objects.annotate(normalized_barcode=normalized_barcode)
+            .exclude(normalized_barcode="")
         )
         qs = qs.annotate(
+            normalized_barcode=normalized_barcode,
+            normalized_name=normalized_name,
             duplicate_barcode_count=Coalesce(
                 Subquery(
-                    barcode_count.filter(barcode=OuterRef("barcode"))
-                    .values("barcode")
+                    barcode_count.filter(normalized_barcode=OuterRef("normalized_barcode"))
+                    .values("normalized_barcode")
                     .annotate(total=Count("id"))
                     .values("total")[:1],
                 ),
@@ -146,10 +167,11 @@ class ProductAdmin(admin.ModelAdmin):
             ),
             duplicate_name_brand_count=Coalesce(
                 Subquery(
-                    Product.objects.filter(
-                        name=OuterRef("name"), brand=OuterRef("brand")
+                    Product.objects.annotate(
+                        normalized_name=Lower(Trim(Coalesce(F("name"), Value(""))))
                     )
-                    .values("name")
+                    .filter(normalized_name=OuterRef("normalized_name"), brand=OuterRef("brand"))
+                    .values("normalized_name")
                     .annotate(total=Count("id"))
                     .values("total")[:1],
                 ),
@@ -194,7 +216,7 @@ class ProductAdmin(admin.ModelAdmin):
 
     @admin.display(description="Doublon")
     def duplicate_info(self, obj):
-        barcode_value = (obj.barcode or "").strip()
+        barcode_value = self._normalized_barcode_value(obj)
         duplicate_by_barcode = bool(barcode_value) and obj.duplicate_barcode_count > 1
         duplicate_by_name_brand = not barcode_value and obj.duplicate_name_brand_count > 1
         if duplicate_by_barcode:
@@ -210,12 +232,18 @@ class ProductAdmin(admin.ModelAdmin):
         ).select_related("brand")
         kept = {}
         to_delete = []
-        for product in duplicates.order_by("barcode", "name", "brand_id", "created_at", "pk"):
-            barcode_value = (product.barcode or "").strip()
+        for product in duplicates.order_by(
+            "normalized_barcode", "normalized_name", "brand_id", "created_at", "pk"
+        ):
+            barcode_value = self._normalized_barcode_value(product)
             key = (
                 ("barcode", barcode_value)
                 if barcode_value
-                else ("name_brand", product.name.strip().lower(), product.brand_id)
+                else (
+                    "name_brand",
+                    self._normalized_name_value(product),
+                    product.brand_id,
+                )
             )
             if key not in kept:
                 kept[key] = product
