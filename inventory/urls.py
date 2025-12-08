@@ -19,6 +19,7 @@ urlpatterns = [
     path("devis/", login_required(views.quotes_list), name="quotes_list"),
     path("devis/nouveau/", login_required(views.quote_create), name="quote_create"),
     path("devis/<int:pk>/", login_required(views.quote_detail), name="quote_detail"),
+    path("devis/<int:pk>/modifier/", login_required(views.quote_edit), name="quote_edit"),
     path("devis/<int:pk>/confirmer/", login_required(views.quote_confirm), name="quote_confirm"),
     path("mouvements/nouveau/", login_required(views.record_movement), name="record_movement"),
     path("produits/nouveau/", login_required(views.product_create), name="product_create"),

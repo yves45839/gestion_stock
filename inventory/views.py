@@ -1764,6 +1764,131 @@ def quote_detail(request, pk):
     return render(request, "inventory/quote_detail.html", context)
 
 
+def quote_edit(request, pk):
+    site_context = _site_context(request)
+    active_site = site_context.get("active_site")
+    sale = get_object_or_404(
+        Sale.objects.select_related("customer").prefetch_related("items__product"),
+        pk=pk,
+    )
+    if sale.status == Sale.Status.CONFIRMED:
+        messages.error(request, "Ce devis a déjà été converti et ne peut plus être modifié.")
+        return redirect(reverse("inventory:quote_detail", args=[sale.pk]))
+
+    if request.method == "POST":
+        sale_form = SaleForm(request.POST, instance=sale)
+        formset = SaleItemFormSet(request.POST, prefix="items")
+        if sale_form.is_valid() and formset.is_valid():
+            cleaned_lines = []
+            sale_date = sale_form.cleaned_data["sale_date"]
+            for position, form in enumerate(formset):
+                if not form.cleaned_data or form.cleaned_data.get("DELETE"):
+                    continue
+                line_type = form.cleaned_data.get("line_type") or SaleItem.LineType.PRODUCT
+                description = form.cleaned_data.get("description") or ""
+                scan_code = (form.cleaned_data.get("scan_code") or "").strip()
+                product = form.cleaned_data.get("product")
+                unit_price = form.cleaned_data.get("unit_price")
+                quantity = form.cleaned_data.get("quantity") or 0
+                scanned_at = sale_date if line_type == SaleItem.LineType.PRODUCT else None
+                if unit_price is None and product:
+                    unit_price = product.sale_price or Decimal("0.00")
+                cleaned_lines.append(
+                    {
+                        "line_type": line_type,
+                        "product": product if line_type == SaleItem.LineType.PRODUCT else None,
+                        "quantity": quantity if line_type == SaleItem.LineType.PRODUCT else 0,
+                        "unit_price": unit_price if line_type == SaleItem.LineType.PRODUCT else Decimal("0.00"),
+                        "scan_code": scan_code if line_type == SaleItem.LineType.PRODUCT else "",
+                        "scanned_at": scanned_at,
+                        "description": description,
+                        "position": position,
+                    }
+                )
+            has_product_line = any(
+                line["line_type"] == SaleItem.LineType.PRODUCT for line in cleaned_lines
+            )
+            if not has_product_line:
+                messages.error(request, "Ajoutez au moins un produit au devis.")
+            if has_product_line:
+                with transaction.atomic():
+                    sale = _save_sale_with_customer(
+                        sale_form,
+                        status=Sale.Status.DRAFT,
+                        history_user=request.user if request.user.is_authenticated else None,
+                        site=active_site or sale.site,
+                    )
+                    sale.items.all().delete()
+                    items_to_create = []
+                    for line in cleaned_lines:
+                        item = SaleItem(
+                            sale=sale,
+                            line_type=line["line_type"],
+                            description=line["description"],
+                            position=line["position"],
+                            quantity=line["quantity"],
+                            unit_price=line["unit_price"],
+                            scan_code=line["scan_code"],
+                            scanned_at=line["scanned_at"],
+                        )
+                        if line["product"]:
+                            item.product = line["product"]
+                        items_to_create.append(item)
+                    SaleItem.objects.bulk_create(items_to_create)
+                messages.success(request, "Le devis a été mis à jour.")
+                return redirect(reverse("inventory:quote_detail", args=[sale.pk]))
+    else:
+        sale_form = SaleForm(instance=sale)
+        initial_items = []
+        for item in sale.items.select_related("product").order_by("position", "id"):
+            initial_items.append(
+                {
+                    "line_type": item.line_type,
+                    "product": item.product if item.line_type == SaleItem.LineType.PRODUCT else None,
+                    "quantity": item.quantity if item.line_type == SaleItem.LineType.PRODUCT else 0,
+                    "unit_price": item.unit_price if item.line_type == SaleItem.LineType.PRODUCT else Decimal("0.00"),
+                    "scan_code": item.scan_code if item.line_type == SaleItem.LineType.PRODUCT else "",
+                    "description": item.description,
+                }
+            )
+        if not initial_items:
+            initial_items = [{"line_type": SaleItem.LineType.PRODUCT}]
+        formset = SaleItemFormSet(prefix="items", initial=initial_items)
+
+    product_dataset = [
+        {
+            "id": product.id,
+            "name": product.name,
+            "sku": product.sku,
+            "sale_price": float(product.sale_price) if product.sale_price is not None else 0,
+            "image_url": product.image.url if product.image else "",
+        }
+        for product in Product.objects.order_by("name")
+    ]
+    customer_dataset = [
+        {
+            "id": customer.id,
+            "display_name": customer.display_name,
+            "reference": customer.reference,
+            "phone": customer.phone,
+        }
+        for customer in Customer.objects.order_by("name", "company_name")
+    ]
+    context = {
+        "sale_form": sale_form,
+        "formset": formset,
+        "product_dataset": product_dataset,
+        "customer_dataset": customer_dataset,
+        "form_title": f"Modifier le devis {sale.reference}",
+        "form_description": "Ajustez les lignes du devis avant confirmation.",
+        "submit_label": "Mettre à jour le devis",
+        "cancel_url": reverse("inventory:quote_detail", args=[sale.pk]),
+        "is_quote": True,
+    }
+    context.update(site_context)
+    return render(request, "inventory/sale_form.html", context)
+
+
 def quote_confirm(request, pk):
     sale = get_object_or_404(Sale, pk=pk)
     if request.method != "POST":
