@@ -12,6 +12,7 @@
             <a href="{% url 'inventory:sale_document_preview' sale.pk 'quote' %}" class="btn secondary">Prévisualiser</a>
             <a href="{% url 'inventory:sale_document_pdf' sale.pk 'quote' %}" class="btn secondary">Exporter PDF</a>
             {% if can_confirm %}
+                <a href="{% url 'inventory:quote_edit' sale.pk %}" class="btn secondary">Modifier</a>
                 <form method="post" action="{% url 'inventory:quote_confirm' sale.pk %}">
                     {% csrf_token %}
                     <button type="submit" class="btn">Convertir en facture</button>
