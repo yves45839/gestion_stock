@@ -997,7 +997,10 @@ def inventory_physical(request):
     site_locked = bool(action_site and not request.user.is_superuser)
     current_site = action_site or view_site
     if current_site is None:
-        messages.error(request, "S��lectionnez un site pour lancer un inventaire physique.")
+        messages.error(
+            request,
+            "Sélectionnez un site pour lancer un inventaire physique.",
+        )
         return redirect(reverse("inventory:inventory_overview"))
 
     session = (
@@ -1032,13 +1035,36 @@ def inventory_physical(request):
             )
         InventoryCountLine.objects.bulk_create(lines)
 
-    lines_qs = session.lines.select_related("product", "product__brand", "product__category")
+    all_lines_qs = session.lines.select_related(
+        "product",
+        "product__brand",
+        "product__category",
+    ).order_by("product__name")
+
+    search = (request.GET.get("q") or "").strip()
+    show_only_differences = request.GET.get("diff_only") == "1"
+
+    lines_qs = all_lines_qs
+    if search:
+        search_query = Q()
+        for term in search.split():
+            token = (
+                Q(product__name__icontains=term)
+                | Q(product__sku__icontains=term)
+                | Q(product__barcode__icontains=term)
+                | Q(product__brand__name__icontains=term)
+                | Q(product__category__name__icontains=term)
+            )
+            search_query &= token
+        lines_qs = lines_qs.filter(search_query)
+    if show_only_differences:
+        lines_qs = lines_qs.exclude(difference=0)
 
     if request.method == "POST" and not session.is_closed:
         action = request.POST.get("action", "save")
         updated = 0
         with transaction.atomic():
-            for line in lines_qs:
+            for line in all_lines_qs:
                 field_name = f"counted_{line.id}"
                 if field_name not in request.POST:
                     continue
@@ -1056,7 +1082,7 @@ def inventory_physical(request):
 
             if action == "close":
                 adjustments = []
-                for line in lines_qs:
+                for line in all_lines_qs:
                     # recompute before clôture in case the loop above did not run (no changes)
                     line.recompute()
                     if line.difference == 0:
@@ -1093,12 +1119,25 @@ def inventory_physical(request):
         total_loss=Coalesce(Sum("value_loss"), Value(Decimal("0.00")), output_field=DecimalField(max_digits=14, decimal_places=2)),
     )
 
+    overall_totals = all_lines_qs.aggregate(
+        total_difference=Coalesce(Sum("difference"), Value(0)),
+        total_loss=Coalesce(
+            Sum("value_loss"),
+            Value(Decimal("0.00")),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ),
+    )
+
     context = {
         "session": session,
         "lines": lines_qs,
         "site_locked": site_locked,
         "current_site": current_site,
+        "search": search,
+        "show_only_differences": show_only_differences,
+        "total_lines": all_lines_qs.count(),
         "totals": totals,
+        "overall_totals": overall_totals,
     }
     context.update(site_context)
     return render(request, "inventory/inventory_physical.html", context)
