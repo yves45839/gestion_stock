@@ -1015,19 +1015,27 @@ def inventory_physical(request):
         .select_related("site", "created_by")
         .first()
     )
+    products_snapshot = (
+        Product.objects.with_stock_quantity(site=current_site)
+        .select_related("brand", "category")
+        .order_by("name")
+    )
     if session is None:
         session = InventoryCountSession.objects.create(
             name=f"Inventaire du {timezone.now().strftime('%d/%m/%Y %H:%M')}",
             site=current_site,
             created_by=request.user if request.user.is_authenticated else None,
         )
-        products_snapshot = (
-            Product.objects.with_stock_quantity(site=current_site)
-            .select_related("brand", "category")
-            .order_by("name")
+        missing_products = products_snapshot
+    else:
+        existing_product_ids = set(
+            session.lines.values_list("product_id", flat=True)
         )
+        missing_products = products_snapshot.exclude(pk__in=existing_product_ids)
+
+    if missing_products:
         lines = []
-        for product in products_snapshot:
+        for product in missing_products:
             initial_qty = product.current_stock or 0
             lines.append(
                 InventoryCountLine(
