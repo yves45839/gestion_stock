@@ -859,10 +859,7 @@ def inventory_overview(request):
     view_site = site_context["active_site"]
     action_site = site_context["action_site"]
     site_locked = bool(action_site and not request.user.is_superuser)
-    products = (
-        Product.objects.with_stock_quantity(site=view_site)
-        .select_related("brand", "category")
-    )
+    products = Product.objects.select_related("brand", "category")
     search = (request.GET.get("q") or "").strip()
     if search:
         search_query = Q()
@@ -893,6 +890,8 @@ def inventory_overview(request):
                 request,
                 "Aucun produit ne correspond à ce scan. Créez-le depuis la page d'ajout de produit avant de poursuivre.",
             )
+
+    products = products.with_stock_quantity(site=view_site)
 
     sort_param = request.GET.get("sort") or "name"
     sort_options = {

@@ -44,11 +44,11 @@
         top: calc(100% + 6px);
         left: 0;
         right: 0;
-        background: #0f172a;
-        color: #e2e8f0;
-        border: 1px solid var(--border-strong);
+        background: #0b1424;
+        color: #f1f5f9;
+        border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 10px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
         z-index: 40;
         max-height: 320px;
         overflow-y: auto;
@@ -60,14 +60,25 @@
         width: 100%;
         border: none;
         background: transparent;
-        padding: 0.7rem 0.9rem;
+        padding: 0.75rem 1rem;
         cursor: pointer;
         text-align: left;
         color: inherit;
+        transition: background 0.15s ease, color 0.15s ease;
     }
     .autocomplete-option:hover,
-    .autocomplete-option:focus { background: rgba(255,255,255,0.04); outline: none; }
-    .autocomplete-empty { padding: 0.7rem 0.9rem; color: #cbd5e1; }
+    .autocomplete-option:focus,
+    .autocomplete-option:focus-visible {
+        background: rgba(110, 242, 166, 0.12);
+        color: #ffffff;
+        outline: 2px solid rgba(110, 242, 166, 0.45);
+        outline-offset: -2px;
+    }
+    .autocomplete-empty {
+        padding: 0.75rem 1rem;
+        color: #cbd5e1;
+        background: rgba(255, 255, 255, 0.03);
+    }
     .product-thumb {
         width: 42px;
         height: 42px;
