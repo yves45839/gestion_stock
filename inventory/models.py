@@ -418,7 +418,7 @@ class StockMovementQuerySet(models.QuerySet):
         return self.select_related("movement_type", "product", "performed_by", "site")
 
 
-class StockMovement(TimeStampedModel):
+class StockMovement(VersionedModelMixin, TimeStampedModel):
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name="stock_movements"
     )

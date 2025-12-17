@@ -801,8 +801,9 @@ def record_movement(request):
             else:
                 with transaction.atomic():
                     created = 0
+                    history_user = request.user if request.user.is_authenticated else None
                     for form in line_forms:
-                        StockMovement.objects.create(
+                        movement = StockMovement(
                             product=form.cleaned_data["product"],
                             movement_type=header_form.cleaned_data["movement_type"],
                             quantity=form.cleaned_data["quantity"],
@@ -810,8 +811,10 @@ def record_movement(request):
                             movement_date=header_form.cleaned_data["movement_date"],
                             document_number=header_form.cleaned_data.get("document_number", ""),
                             comment=header_form.cleaned_data.get("comment", ""),
-                            performed_by=request.user if request.user.is_authenticated else None,
+                            performed_by=history_user,
                         )
+                        movement._history_user = history_user
+                        movement.save()
                         created += 1
                 messages.success(request, f"{created} mouvement(s) ont été enregistrés avec succès.")
                 return redirect(reverse("inventory:dashboard"))
@@ -823,6 +826,7 @@ def record_movement(request):
             if single_form.is_valid():
                 movement = single_form.save(commit=False)
                 movement.performed_by = request.user if request.user.is_authenticated else None
+                movement._history_user = request.user if request.user.is_authenticated else None
                 movement.save()
                 messages.success(request, "Mouvement enregistré avec succès.")
                 return redirect(reverse("inventory:dashboard"))
@@ -920,13 +924,16 @@ def inventory_overview(request):
             messages.error(request, "Aucun type de mouvement d'ajustement disponible.")
             return redirect(reverse("inventory:inventory_overview"))
         adjustment_site = adjustment_form.cleaned_data["site"]
-        StockMovement.objects.create(
+        adjustment = StockMovement(
             product=product,
             movement_type=movement_type,
             quantity=abs(difference),
             comment=comment or "Ajustement inventaire",
             site=adjustment_site,
+            performed_by=request.user if request.user.is_authenticated else None,
         )
+        adjustment._history_user = request.user if request.user.is_authenticated else None
+        adjustment.save()
         messages.success(request, "Ajustement d'inventaire enregistré.")
         return redirect(reverse("inventory:inventory_overview"))
 
@@ -1091,18 +1098,21 @@ def inventory_physical(request):
                     if movement_type is None:
                         messages.error(request, "Aucun type de mouvement d'ajustement disponible.")
                         return redirect(reverse("inventory:inventory_physical"))
-                    adjustments.append(
-                        StockMovement(
-                            product=line.product,
-                            movement_type=movement_type,
-                            quantity=abs(line.difference),
-                            site=current_site,
-                            comment=f"Inventaire {session.name}",
-                            performed_by=request.user if request.user.is_authenticated else None,
-                        )
+                    movement = StockMovement(
+                        product=line.product,
+                        movement_type=movement_type,
+                        quantity=abs(line.difference),
+                        site=current_site,
+                        comment=f"Inventaire {session.name}",
+                        performed_by=request.user if request.user.is_authenticated else None,
                     )
+                    movement._history_user = (
+                        request.user if request.user.is_authenticated else None
+                    )
+                    adjustments.append(movement)
                 if adjustments:
-                    StockMovement.objects.bulk_create(adjustments)
+                    for movement in adjustments:
+                        movement.save()
                 session.status = InventoryCountSession.Status.CLOSED
                 session.closed_at = timezone.now()
                 session.save(update_fields=["status", "closed_at", "updated_at"])
@@ -1128,6 +1138,18 @@ def inventory_physical(request):
         ),
     )
 
+    product_dataset = [
+        {
+            "id": line.product.id,
+            "name": line.product.name,
+            "sku": line.product.sku,
+            "barcode": line.product.barcode,
+            "brand": getattr(line.product.brand, "name", ""),
+            "category": getattr(line.product.category, "name", ""),
+        }
+        for line in all_lines_qs
+    ]
+
     context = {
         "session": session,
         "lines": lines_qs,
@@ -1138,6 +1160,7 @@ def inventory_physical(request):
         "total_lines": all_lines_qs.count(),
         "totals": totals,
         "overall_totals": overall_totals,
+        "product_dataset": product_dataset,
     }
     context.update(site_context)
     return render(request, "inventory/inventory_physical.html", context)
