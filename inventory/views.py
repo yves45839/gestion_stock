@@ -2,12 +2,24 @@ import csv
 import io
 from datetime import datetime, time, timedelta
 
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum, Value
+from django.db.models import (
+    Case,
+    Count,
+    DecimalField,
+    ExpressionWrapper,
+    F,
+    IntegerField,
+    Q,
+    Sum,
+    Value,
+    When,
+)
 from django.db.models.functions import Coalesce
 from django.forms import formset_factory
 from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
@@ -932,6 +944,7 @@ def inventory_overview(request):
     paginator = Paginator(products, page_size)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    _attach_site_stocks(page_obj.object_list)
     query_params = request.GET.copy()
     if "page" in query_params:
         query_params.pop("page")
@@ -1099,6 +1112,7 @@ def product_detail(request, pk):
         Product.objects.with_stock_quantity(site=active_site).select_related("brand", "category"),
         pk=pk,
     )
+    _attach_site_stocks([product])
     recent_movements = (
         product.stock_movements.select_related("movement_type")
         .order_by("-movement_date", "-id")
@@ -2298,6 +2312,52 @@ def _site_context(request):
         "can_switch_site": True,
         "selected_site": selected_site_id or "",
     }
+
+
+def _build_site_stock_map(products):
+    product_ids = [product.pk for product in products if product.pk]
+    if not product_ids:
+        return {}
+    signed_quantity = Case(
+        When(
+            movement_type__direction=MovementType.MovementDirection.ENTRY,
+            then=F("quantity"),
+        ),
+        When(
+            movement_type__direction=MovementType.MovementDirection.EXIT,
+            then=-F("quantity"),
+        ),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
+    aggregates = (
+        StockMovement.objects.filter(product_id__in=product_ids)
+        .values("product_id", "site_id", "site__name")
+        .annotate(
+            quantity=Coalesce(
+                Sum(signed_quantity),
+                Value(0),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("site__name")
+    )
+    site_stock_map = defaultdict(list)
+    for entry in aggregates:
+        site_stock_map[entry["product_id"]].append(
+            {
+                "site_id": entry["site_id"],
+                "site_name": entry["site__name"],
+                "quantity": entry["quantity"],
+            }
+        )
+    return site_stock_map
+
+
+def _attach_site_stocks(products):
+    site_stock_map = _build_site_stock_map(products)
+    for product in products:
+        product.site_stocks = site_stock_map.get(product.pk, [])
 
 
 def _process_csv_import(
