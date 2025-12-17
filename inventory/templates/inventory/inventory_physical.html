@@ -18,6 +18,27 @@
     </div>
 </section>
 
+<div class="surface" style="margin-bottom:0.75rem;">
+    <form method="get" class="toolbar" style="gap:0.75rem; flex-wrap:wrap;">
+        <div style="flex:1; min-width:260px;">
+            <label class="eyebrow" for="search">Rechercher un produit ou une référence</label>
+            <input id="search" name="q" type="search" value="{{ search }}" placeholder="Nom, SKU, code-barres, marque, catégorie" style="width:100%;" />
+        </div>
+        <label style="display:flex; align-items:center; gap:0.4rem; margin-top:1.4rem;">
+            <input type="checkbox" name="diff_only" value="1" {% if show_only_differences %}checked{% endif %} />
+            <span>Uniquement les écarts</span>
+        </label>
+        <button type="submit" class="btn secondary" style="margin-top:1.1rem;">Appliquer les filtres</button>
+    </form>
+    <div class="chip-row" style="margin-top:0.5rem;">
+        <span class="pill">{{ lines|length }} ligne(s) affichée(s) sur {{ total_lines }}</span>
+        <span class="pill">Écarts filtrés : {{ totals.total_difference }} | Démarque filtrée : {{ totals.total_loss }} FCFA</span>
+        {% if totals.total_difference != overall_totals.total_difference or totals.total_loss != overall_totals.total_loss %}
+            <span class="pill muted-text">Inventaire complet : {{ overall_totals.total_difference }} écart(s), {{ overall_totals.total_loss }} FCFA</span>
+        {% endif %}
+    </div>
+</div>
+
 <div class="surface" style="overflow-x:auto;">
     <form method="post">
         {% csrf_token %}
