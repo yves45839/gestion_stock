@@ -229,6 +229,16 @@
                                 <div class="stock safe">{{ product.stock_quantity }} en stock</div>
                             {% endif %}
                         </div>
+                        {% if product.site_stocks %}
+                            <div class="muted-text" style="margin-top:0.5rem;font-size:0.9rem;">
+                                {% for site_stock in product.site_stocks %}
+                                    <div style="display:flex;justify-content:space-between;gap:0.75rem;">
+                                        <span>{{ site_stock.site_name }}</span>
+                                        <span style="font-weight:600;">{{ site_stock.quantity }}</span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </a>
                 {% empty %}
                     <p class="muted-text" style="margin:0;">Aucun produit trouvé.</p>
