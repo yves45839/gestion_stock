@@ -403,6 +403,7 @@
                         <a href="{% url 'inventory:record_movement' %}" class="{% if current == 'record_movement' %}active{% endif %}">Mouvements</a>
                         <a href="{% url 'inventory:inventory_overview' %}" class="{% if current == 'inventory_overview' %}active{% endif %}">Produits</a>
                         <a href="{% url 'inventory:inventory_physical' %}" class="{% if current == 'inventory_physical' %}active{% endif %}">Inventaire physique</a>
+                        <a href="{% url 'inventory:stock_valuation' %}" class="{% if current == 'stock_valuation' %}active{% endif %}">Valorisation</a>
                         <a href="{% url 'inventory:sales_list' %}" class="{% if current == 'sales_list' or current == 'sale_create' %}active{% endif %}">Ventes</a>
                         <a href="{% url 'inventory:import_products' %}" class="{% if current == 'import_products' %}active{% endif %}">Import</a>
                     {% endwith %}

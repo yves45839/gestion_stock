@@ -996,6 +996,112 @@ def inventory_overview(request):
     return render(request, "inventory/inventory_list.html", context)
 
 
+def stock_valuation(request):
+    site_context = _site_context(request)
+    include_negative = request.GET.get("include_negative") == "1"
+    use_sale_fallback = request.GET.get("use_sale_fallback", "1") == "1"
+    signed_quantity = Case(
+        When(
+            movement_type__direction=MovementType.MovementDirection.ENTRY,
+            then=F("quantity"),
+        ),
+        When(
+            movement_type__direction=MovementType.MovementDirection.EXIT,
+            then=-F("quantity"),
+        ),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
+    aggregates = (
+        StockMovement.objects.select_related("site", "product")
+        .values(
+            "site_id",
+            "site__name",
+            "product_id",
+            "product__sku",
+            "product__name",
+            "product__purchase_price",
+            "product__sale_price",
+        )
+        .annotate(
+            quantity=Coalesce(
+                Sum(signed_quantity),
+                Value(0),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("site__name", "product__name")
+    )
+    site_totals = {}
+    for site in site_context["sites"]:
+        site_totals[site.pk] = {
+            "site": site,
+            "total_quantity": 0,
+            "total_value": Decimal("0.00"),
+            "negative_count": 0,
+            "missing_purchase_count": 0,
+            "missing_price_count": 0,
+        }
+    detail_rows = []
+    for entry in aggregates:
+        quantity = entry["quantity"] or 0
+        if quantity == 0:
+            continue
+        purchase_price = entry["product__purchase_price"]
+        sale_price = entry["product__sale_price"]
+        unit_price = purchase_price
+        price_source = "Achat"
+        if unit_price is None:
+            if use_sale_fallback and sale_price is not None:
+                unit_price = sale_price
+                price_source = "Vente"
+            else:
+                unit_price = None
+                price_source = "Manquant"
+        negative_stock = quantity < 0
+        quantity_for_value = quantity
+        if negative_stock and not include_negative:
+            quantity_for_value = 0
+        value = (
+            Decimal(quantity_for_value) * unit_price
+            if unit_price is not None
+            else Decimal("0.00")
+        )
+        site_data = site_totals.get(entry["site_id"])
+        if site_data is None:
+            continue
+        site_data["total_quantity"] += quantity_for_value
+        site_data["total_value"] += value
+        if negative_stock:
+            site_data["negative_count"] += 1
+        if purchase_price is None:
+            site_data["missing_purchase_count"] += 1
+        if unit_price is None:
+            site_data["missing_price_count"] += 1
+        detail_rows.append(
+            {
+                "site_name": entry["site__name"],
+                "product_sku": entry["product__sku"],
+                "product_name": entry["product__name"],
+                "quantity": quantity,
+                "quantity_for_value": quantity_for_value,
+                "unit_price": unit_price,
+                "price_source": price_source,
+                "value": value,
+                "negative_stock": negative_stock,
+                "missing_purchase": purchase_price is None,
+            }
+        )
+    context = {
+        "include_negative": include_negative,
+        "use_sale_fallback": use_sale_fallback,
+        "site_totals": list(site_totals.values()),
+        "detail_rows": detail_rows,
+    }
+    context.update(site_context)
+    return render(request, "inventory/stock_valuation.html", context)
+
+
 def inventory_physical(request):
     site_context = _site_context(request)
     view_site = site_context["active_site"]

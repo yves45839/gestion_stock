@@ -1,0 +1,105 @@
+{% extends "inventory/base.html" %}
+{% block title %}Valorisation du stock{% endblock %}
+{% block content %}
+<section class="page-header reveal">
+    <div>
+        <p class="eyebrow">Valorisation</p>
+        <h1 class="page-title">Valorisation du stock par site</h1>
+        <p class="lead">Calcule la valeur du stock selon le prix d'achat, avec option de repli sur le prix de vente.</p>
+    </div>
+</section>
+
+<section class="surface reveal" data-delay="100">
+    <form method="get" class="form-grid">
+        <div class="field">
+            <label for="include_negative">Stock négatif</label>
+            <select id="include_negative" name="include_negative">
+                <option value="0" {% if not include_negative %}selected{% endif %}>Ignorer les quantités négatives</option>
+                <option value="1" {% if include_negative %}selected{% endif %}>Inclure les quantités négatives</option>
+            </select>
+            <p class="hint">Les stocks négatifs proviennent de sorties non compensées par des entrées.</p>
+        </div>
+        <div class="field">
+            <label for="use_sale_fallback">Prix d'achat manquant</label>
+            <select id="use_sale_fallback" name="use_sale_fallback">
+                <option value="1" {% if use_sale_fallback %}selected{% endif %}>Utiliser le prix de vente comme repli</option>
+                <option value="0" {% if not use_sale_fallback %}selected{% endif %}>Ignorer les articles sans prix</option>
+            </select>
+            <p class="hint">Les articles sans prix d'achat seront valorisés à 0 si le repli est désactivé.</p>
+        </div>
+        <div class="field" style="align-self:flex-end;">
+            <button class="btn" type="submit">Mettre à jour</button>
+        </div>
+    </form>
+</section>
+
+<section class="grid auto-3 reveal" data-delay="160">
+    {% for item in site_totals %}
+        <div class="card">
+            <p class="eyebrow">{{ item.site.name }}</p>
+            <p class="value">{{ item.total_value|floatformat:2 }}</p>
+            <p class="lead">Quantité valorisée : {{ item.total_quantity }}</p>
+            <div class="meta">
+                <p class="hint">Stocks négatifs : {{ item.negative_count }}</p>
+                <p class="hint">Prix d'achat manquants : {{ item.missing_purchase_count }}</p>
+                <p class="hint">Articles non valorisés : {{ item.missing_price_count }}</p>
+            </div>
+        </div>
+    {% empty %}
+        <div class="card surface-muted">
+            <p class="lead">Aucun site disponible pour la valorisation.</p>
+        </div>
+    {% endfor %}
+</section>
+
+<section class="surface reveal" data-delay="220">
+    <div class="surface-header">
+        <h2 class="surface-title">Détail des articles valorisés</h2>
+        <p class="lead">Les lignes affichent la quantité réelle et celle prise en compte dans la valorisation.</p>
+    </div>
+    <div style="overflow:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Site</th>
+                    <th>SKU</th>
+                    <th>Article</th>
+                    <th>Quantité</th>
+                    <th>Quantité valorisée</th>
+                    <th>Prix unitaire</th>
+                    <th>Source prix</th>
+                    <th>Valeur</th>
+                    <th>Signal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in detail_rows %}
+                    <tr>
+                        <td>{{ row.site_name }}</td>
+                        <td>{{ row.product_sku }}</td>
+                        <td>{{ row.product_name }}</td>
+                        <td>{{ row.quantity }}</td>
+                        <td>{{ row.quantity_for_value }}</td>
+                        <td>{% if row.unit_price is not None %}{{ row.unit_price|floatformat:2 }}{% else %}—{% endif %}</td>
+                        <td>{{ row.price_source }}</td>
+                        <td>{{ row.value|floatformat:2 }}</td>
+                        <td>
+                            {% if row.negative_stock %}
+                                Stock négatif
+                            {% elif row.missing_purchase %}
+                                Prix d'achat manquant
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="9">Aucun mouvement de stock pour valoriser.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
