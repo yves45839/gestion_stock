@@ -1085,6 +1085,8 @@ def stock_valuation(request):
                 "product_name": entry["product__name"],
                 "quantity": quantity,
                 "quantity_for_value": quantity_for_value,
+                "purchase_price": purchase_price,
+                "sale_price": sale_price,
                 "unit_price": unit_price,
                 "price_source": price_source,
                 "value": value,
