@@ -66,6 +66,8 @@
                     <th>Article</th>
                     <th>Quantité</th>
                     <th>Quantité valorisée</th>
+                    <th>Prix d'achat</th>
+                    <th>Prix de vente</th>
                     <th>Prix unitaire</th>
                     <th>Source prix</th>
                     <th>Valeur</th>
@@ -80,6 +82,8 @@
                         <td>{{ row.product_name }}</td>
                         <td>{{ row.quantity }}</td>
                         <td>{{ row.quantity_for_value }}</td>
+                        <td>{% if row.purchase_price is not None %}{{ row.purchase_price|floatformat:2 }}{% else %}—{% endif %}</td>
+                        <td>{% if row.sale_price is not None %}{{ row.sale_price|floatformat:2 }}{% else %}—{% endif %}</td>
                         <td>{% if row.unit_price is not None %}{{ row.unit_price|floatformat:2 }}{% else %}—{% endif %}</td>
                         <td>{{ row.price_source }}</td>
                         <td>{{ row.value|floatformat:2 }}</td>
@@ -95,7 +99,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="9">Aucun mouvement de stock pour valoriser.</td>
+                        <td colspan="11">Aucun mouvement de stock pour valoriser.</td>
                     </tr>
                 {% endfor %}
             </tbody>
