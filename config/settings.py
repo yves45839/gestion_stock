@@ -25,7 +25,16 @@ SECRET_KEY = 'django-insecure-e0m0an3&@t*boxg)ypht0*2@^6&zs42ia9b1i^=93=f3^_siaq
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["samr.pythonanywhere.com", "127.0.0.1", "localhost"] 
+ALLOWED_HOSTS = [
+    "samr.pythonanywhere.com",
+    "127.0.0.1",
+    "localhost",
+    "petit-budget.net",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://petit-budget.net",
+]
 
 # Application definition
 
