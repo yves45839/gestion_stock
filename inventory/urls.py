@@ -54,6 +54,7 @@ urlpatterns = [
         login_required(views.sale_document_pdf),
         name="sale_document_pdf",
     ),
+    path("api/products/", views.products_feed, name="products_feed"),
     path("api/products/scan/", login_required(views.lookup_product), name="lookup_product"),
     path("api/sales/scan/", login_required(views.scan_sale_product), name="scan_sale_product"),
     path("produits/import/", login_required(views.import_products), name="import_products"),
