@@ -2371,6 +2371,37 @@ def lookup_product(request):
     )
 
 
+def products_feed(request):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+    products = (
+        Product.objects.with_stock_quantity()
+        .select_related("brand", "category")
+        .order_by("name")
+    )
+    payload = []
+    for product in products:
+        payload.append(
+            {
+                "id": product.id,
+                "sku": product.sku,
+                "name": product.name,
+                "description": product.description,
+                "brand": product.brand.name,
+                "category": product.category.name,
+                "barcode": product.barcode,
+                "sale_price": str(product.sale_price) if product.sale_price is not None else None,
+                "purchase_price": str(product.purchase_price)
+                if product.purchase_price is not None
+                else None,
+                "stock_quantity": product.current_stock,
+                "image_url": product.image.url if product.image else None,
+                "updated_at": product.updated_at.isoformat(),
+            }
+        )
+    return JsonResponse({"count": len(payload), "results": payload})
+
+
 def _create_product_from_scan(code: str) -> Product:
     normalized = (code or "").strip()
     brand = _get_default_brand()
