@@ -24,6 +24,13 @@
             <p style="margin:0.25rem 0 0;color:var(--muted);">
                 {{ product.manufacturer_reference|default:"Aucune référence fabricant" }}
             </p>
+            <div style="margin-top:0.45rem;">
+                {% if product.is_online %}
+                    <span class="badge info">En ligne</span>
+                {% else %}
+                    <span class="badge warn">Hors ligne</span>
+                {% endif %}
+            </div>
         </div>
         <div style="text-align:right;">
             <p style="margin:0;color:var(--muted);font-size:0.85rem;">Stock actuel</p>
@@ -82,6 +89,26 @@
             <p style="margin:0;">{{ product.description }}</p>
         </div>
     {% endif %}
+    {% if product.datasheet_pdf or product.datasheet_url %}
+        <div style="margin-top:1.5rem;">
+            <p class="muted-label">Fiche technique</p>
+            <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center;">
+                {% if product.datasheet_pdf %}
+                    <a class="btn ghost" href="{{ product.datasheet_pdf.url }}" target="_blank" rel="noopener">
+                        Ouvrir le PDF
+                    </a>
+                {% endif %}
+                {% if product.datasheet_url %}
+                    <a class="btn ghost" href="{{ product.datasheet_url }}" target="_blank" rel="noopener">
+                        Lien source
+                    </a>
+                {% endif %}
+                {% if product.datasheet_fetched_at %}
+                    <span class="muted-text">Maj: {{ product.datasheet_fetched_at|date:"d/m/Y H:i" }}</span>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
 </section>
 
 <section class="card" style="margin-top:1.5rem;">
@@ -126,6 +153,13 @@
                 {{ form.category.label_tag }}
                 {{ form.category }}
                 {% for error in form.category.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div>
+                {{ form.is_online.label_tag }}
+                {{ form.is_online }}
+                {% for error in form.is_online.errors %}
                     <div class="field-error">{{ error }}</div>
                 {% endfor %}
             </div>

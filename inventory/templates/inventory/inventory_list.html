@@ -117,6 +117,11 @@
                     {% endif %}
                 {% endfor %}
             {% endif %}
+            {% if selected_online %}
+                <span class="pill">
+                    {% if selected_online == "1" %}En ligne{% else %}Hors ligne{% endif %}
+                </span>
+            {% endif %}
             {% if selected_site %}
                 {% for site in sites %}
                     {% if selected_site == site.pk|stringformat:"s" %}
@@ -164,6 +169,14 @@
                                 {{ option.category__name }}
                             </option>
                         {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="online">Visibilité</label>
+                    <select id="online" name="online">
+                        <option value="">Toutes</option>
+                        <option value="1" {% if selected_online == "1" %}selected{% endif %}>En ligne</option>
+                        <option value="0" {% if selected_online == "0" %}selected{% endif %}>Hors ligne</option>
                     </select>
                 </div>
                 <div class="field">
@@ -224,6 +237,9 @@
                             <div class="chip-row">
                                 <span class="tag">★ {{ product.brand.name }}</span>
                                 <span class="tag">{{ product.category.name }}</span>
+                                {% if not product.is_online %}
+                                    <span class="badge warn">Hors ligne</span>
+                                {% endif %}
                             </div>
                             <h3>{{ product.name }}</h3>
                             <p class="product-meta sku">{{ product.sku }}</p>

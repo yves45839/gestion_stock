@@ -31,3 +31,46 @@
 ## Dependances
 
 - `openpyxl` (lecture des fichiers `.xlsx`)
+
+## Bot IA pour enrichir les produits
+
+1. Installe les dépendances (inclut le client officiel `mistralai`) :
+   ```
+   pip install -r requirements.txt
+   ```
+2. Configure `.env` avec `REDIS_URL`, `MISTRAL_API_KEY` et (optionnellement) `MISTRAL_MODEL` (`mistral-medium-latest` par défaut) ou `MISTRAL_AGENT_ID` si tu veux appeler un agent Mistral existant.
+3. Le worker IA s'exécute désormais automatiquement dans l'application : tu n'as plus besoin de taper `celery -A config worker --loglevel=info` tant que tout tourne sous Django. Si tu veux malgré tout utiliser Celery pour une raison particulière, le task `generate_product_assets` est toujours disponible.
+4. Enfile les produits à enrichir :
+   ```
+   python manage.py product_asset_bot
+   ```
+   Utilise `--limit`, `--force-description` ou `--force-image` pour adapter la sélection.
+5. Le bot utilise Mistral pour générer la description (modèle ou agent selon ce qui est fourni) et récupère l'image via `PRODUCT_BOT_IMAGE_URL_TEMPLATE` (utilise de préférence `{reference}` pour viser la vraie image du produit). Les placeholders sont désactivés par défaut (active `PRODUCT_BOT_ALLOW_PLACEHOLDERS=true` si besoin).
+6. (Optionnel) Pour chercher des images via Google Custom Search: configure `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ENGINE_ID`, puis active `PRODUCT_BOT_GOOGLE_IMAGE_SEARCH_ENABLED=true` et fixe `PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT` pour rester sous le quota journalier.
+
+**Mode local instantané**  
+Si tu veux que le bot s'exécute immédiatement dans la même requête sans passer par la file (par exemple pour des tests rapides), active `PRODUCT_BOT_INLINE_RUN=true` dans `.env` ou lance `python manage.py product_asset_bot --inline`. Le formulaire IA réagit de la même façon : les descriptions/images sont générées sur-le-champ et les messages remontent directement dans l'interface.
+
+## Attribution automatique des categories
+
+Utilise la commande suivante pour attribuer des categories selon des mots-cles trouves dans le SKU/nom :
+```
+python manage.py auto_assign_categories
+```
+
+Options utiles :
+- `--all` : remplace la categorie pour tous les produits (sinon seulement les non classes).
+- `--limit 200` : limite le nombre de produits traites.
+- `--dry-run` : affiche les changements sans sauvegarder.
+- `--rules path\\to\\category_rules.json` : charge un fichier de regles JSON.
+
+Exemple de fichier `category_rules.json` :
+```
+{
+  "default_category": "Non classe",
+  "rules": [
+    { "category": "Camera", "keywords": ["camera", "cam", "dome", "bullet"], "regex": ["\\bptz\\b"] },
+    { "category": "Switch", "keywords": ["switch", "poe", "ethernet"] }
+  ]
+}
+```

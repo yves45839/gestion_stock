@@ -10,31 +10,41 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / '.env')
+
+
+def _env_list(key, default):
+    """Parse a comma-separated list stored in an environment variable."""
+    value = os.getenv(key, default)
+    return [item.strip() for item in value.split(',') if item.strip()]
+
 
 # Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+# See https://docs.djangoproject.com/en/5.2/howto/deployment-checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-e0m0an3&@t*boxg)ypht0*2@^6&zs42ia9b1i^=93=f3^_siaq'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-e0m0an3&@t*boxg)ypht0*2@^6&zs42ia9b1i^=93=f3^_siaq')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = [
-    "samr.pythonanywhere.com",
-    "127.0.0.1",
-    "localhost",
-    "petit-budget.net",
-]
+ALLOWED_HOSTS = _env_list(
+    'DJANGO_ALLOWED_HOSTS',
+    'samr.pythonanywhere.com,127.0.0.1,localhost,petit-budget.net',
+)
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://petit-budget.net",
-]
+CSRF_TRUSTED_ORIGINS = _env_list(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    'https://petit-budget.net',
+)
 
 # Application definition
 
@@ -81,10 +91,18 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+database_name = os.getenv('DATABASE_NAME')
+if not database_name:
+    database_name = BASE_DIR / 'db.sqlite3'
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': os.getenv('DATABASE_ENGINE', 'django.db.backends.sqlite3'),
+        'NAME': database_name,
+        'USER': os.getenv('DATABASE_USER', ''),
+        'PASSWORD': os.getenv('DATABASE_PASSWORD', ''),
+        'HOST': os.getenv('DATABASE_HOST', ''),
+        'PORT': os.getenv('DATABASE_PORT', ''),
         'OPTIONS': {
             # Give SQLite a few seconds to wait for competing writers before failing.
             'timeout': 20,
@@ -137,3 +155,55 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Redis / Celery defaults
+REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = False
+CELERY_WORKER_POOL = os.getenv('CELERY_WORKER_POOL', 'solo')
+
+MISTRAL_AGENT_ID = os.getenv('MISTRAL_AGENT_ID')
+MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
+MISTRAL_MODEL = os.getenv('MISTRAL_MODEL', 'mistral-medium-latest')
+GOOGLE_CUSTOM_SEARCH_API_KEY = os.getenv('GOOGLE_CUSTOM_SEARCH_API_KEY')
+GOOGLE_CUSTOM_SEARCH_ENGINE_ID = os.getenv('GOOGLE_CUSTOM_SEARCH_ENGINE_ID')
+GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY") or GOOGLE_CUSTOM_SEARCH_API_KEY
+GOOGLE_CSE_CX = os.getenv("GOOGLE_CSE_CX") or GOOGLE_CUSTOM_SEARCH_ENGINE_ID
+GOOGLE_CSE_ENDPOINT = os.getenv(
+    "GOOGLE_CSE_ENDPOINT",
+    "https://www.googleapis.com/customsearch/v1",
+)
+HIKVISION_DATASHEET_MAX_MB = int(os.getenv("HIKVISION_DATASHEET_MAX_MB", "20"))
+HIKVISION_DATASHEET_SLEEP = float(os.getenv("HIKVISION_DATASHEET_SLEEP", "1.0"))
+HIKVISION_DATASHEET_HTML_LIMIT_KB = int(os.getenv("HIKVISION_DATASHEET_HTML_LIMIT_KB", "512"))
+PRODUCT_BOT_IMAGE_URL_TEMPLATE = os.getenv(
+    'PRODUCT_BOT_IMAGE_URL_TEMPLATE',
+    'https://dummyimage.com/600x600/eeeeee/111111&text={name}',
+)
+PRODUCT_BOT_IMAGE_TIMEOUT = int(os.getenv('PRODUCT_BOT_IMAGE_TIMEOUT', '20'))
+PRODUCT_BOT_ALLOW_PLACEHOLDERS = os.getenv('PRODUCT_BOT_ALLOW_PLACEHOLDERS', 'false').lower() in (
+    '1',
+    'true',
+    'yes',
+)
+PRODUCT_BOT_PLACEHOLDER_DOMAINS = _env_list(
+    'PRODUCT_BOT_PLACEHOLDER_DOMAINS',
+    'dummyimage.com,via.placeholder.com,placehold.co',
+)
+PRODUCT_BOT_GOOGLE_IMAGE_SEARCH_ENABLED = os.getenv(
+    'PRODUCT_BOT_GOOGLE_IMAGE_SEARCH_ENABLED',
+    'false',
+).lower() in ('1', 'true', 'yes')
+PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT = int(os.getenv('PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT', '10'))
+PRODUCT_BOT_GOOGLE_IMAGE_MAX_TRIES = int(os.getenv('PRODUCT_BOT_GOOGLE_IMAGE_MAX_TRIES', '1'))
+PRODUCT_BOT_GOOGLE_IMAGE_SAFE = os.getenv('PRODUCT_BOT_GOOGLE_IMAGE_SAFE', 'active')
+PRODUCT_BOT_INLINE_RUN = os.getenv('PRODUCT_BOT_INLINE_RUN', 'false').lower() in (
+    '1',
+    'true',
+    'yes',
+)

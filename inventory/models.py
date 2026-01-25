@@ -6,8 +6,8 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
+from django.db.models import Case, DecimalField, F, IntegerField, Q, SET_NULL, Sum, Value, When
 from django.db.models.fields.files import FieldFile
-from django.db.models import Case, DecimalField, F, IntegerField, Q, Sum, Value, When
 from django.db.models.functions import Coalesce
 from django.forms.models import model_to_dict
 from django.urls import reverse
@@ -233,6 +233,26 @@ class Product(VersionedModelMixin, TimeStampedModel):
         blank=True,
         null=True,
     )
+    is_online = models.BooleanField(
+        "Visible en ligne",
+        default=True,
+    )
+    datasheet_url = models.URLField(
+        "Fiche technique (URL)",
+        blank=True,
+        null=True,
+    )
+    datasheet_pdf = models.FileField(
+        "Fiche technique (PDF)",
+        upload_to="products/datasheets",
+        blank=True,
+        null=True,
+    )
+    datasheet_fetched_at = models.DateTimeField(
+        "Fiche technique rÃ©cupÃ©rÃ©e",
+        blank=True,
+        null=True,
+    )
 
     objects = ProductQuerySet.as_manager()
 
@@ -263,6 +283,71 @@ class Product(VersionedModelMixin, TimeStampedModel):
 
     def get_absolute_url(self) -> str:
         return reverse("inventory:product_detail", args=[self.pk])
+
+
+class ProductAssetJob(TimeStampedModel):
+    class Mode(models.TextChoices):
+        SINGLE = "single", "Cible unique"
+        BATCH = "batch", "Lot"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "En attente"
+        RUNNING = "running", "En cours"
+        SUCCESS = "success", "Terminé"
+        FAILED = "failed", "Erreur"
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="asset_jobs",
+    )
+    mode = models.CharField(max_length=12, choices=Mode.choices, default=Mode.BATCH)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.QUEUED)
+    total_products = models.PositiveIntegerField("Total produits", default=0)
+    processed_products = models.PositiveIntegerField("Produits traités", default=0)
+    force_description = models.BooleanField("Forcer description", default=False)
+    force_image = models.BooleanField("Forcer image", default=False)
+    description_changed = models.BooleanField("Description modifiée", default=False)
+    image_changed = models.BooleanField("Image modifiée", default=False)
+    started_at = models.DateTimeField("Début", null=True, blank=True)
+    finished_at = models.DateTimeField("Fin", null=True, blank=True)
+    last_message = models.TextField("Dernier message", blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "job d'enrichissement"
+        verbose_name_plural = "jobs d'enrichissement"
+
+    @property
+    def progress(self) -> int:
+        if not self.total_products:
+            return 0
+        return int((self.processed_products / self.total_products) * 100)
+
+
+class ProductAssetJobLog(TimeStampedModel):
+    class Level(models.TextChoices):
+        INFO = "info", "Info"
+        WARNING = "warning", "Avertissement"
+        ERROR = "error", "Erreur"
+
+    job = models.ForeignKey(
+        ProductAssetJob,
+        on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    level = models.CharField(max_length=10, choices=Level.choices, default=Level.INFO)
+    message = models.TextField()
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "ligne de journal IA"
+        verbose_name_plural = "lignes de journal IA"
+
+    def __str__(self) -> str:
+        return f"{self.get_level_display()} - {self.message[:60]}"
 
 
 class CustomerQuerySet(models.QuerySet):

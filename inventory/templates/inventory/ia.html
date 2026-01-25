@@ -1,0 +1,608 @@
+{% extends "inventory/base.html" %}
+{% block title %}IA - Enrichissement produits{% endblock %}
+{% block content %}
+<section class="page-header reveal">
+    <div>
+        <p class="eyebrow">Agent IA</p>
+        <h1 class="page-title">Amélioration automatique des fiches produit</h1>
+        <p class="lead">
+            Lance le bot pour générer des descriptions plus accrocheuses et
+            récupérer un visuel produit basé sur la référence.
+        </p>
+    </div>
+    <div class="toolbar">
+        <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Produits</a>
+        <a class="btn ghost" href="{% url 'inventory:import_products' %}">Import</a>
+    </div>
+</section>
+
+<section class="stat-grid">
+    <div class="surface reveal" data-delay="40">
+        <p class="eyebrow">Références</p>
+        <p class="surface-title">Total suivi</p>
+        <p class="value">{{ stats.total_products }}</p>
+        <p class="muted-text">Toutes les références disponibles</p>
+    </div>
+    <div class="surface reveal" data-delay="80">
+        <p class="eyebrow">Contenu manquant</p>
+        <p class="surface-title">Descriptions vides</p>
+        <p class="value">{{ stats.missing_description }}</p>
+        <p class="muted-text">
+            {{ stats.missing_both }} sont aussi sans visuel.
+        </p>
+    </div>
+    <div class="surface surface-muted reveal" data-delay="120">
+        <p class="eyebrow">Visuels</p>
+        <p class="surface-title">Images manquantes</p>
+        <p class="value">{{ stats.missing_image }}</p>
+        <p class="muted-text">Image récupérée depuis la source configurée.</p>
+    </div>
+    <div class="surface reveal" data-delay="160">
+        <p class="eyebrow">Fiches techniques</p>
+        <p class="surface-title">PDF téléchargés</p>
+        <p class="value">{{ datasheet_downloaded_count }}</p>
+        <p class="muted-text">Fiches PDF déjà associées aux produits.</p>
+    </div>
+</section>
+
+<section class="surface surface-muted reveal" data-delay="200">
+    <div class="surface-header">
+        <div>
+            <p class="eyebrow">Fonctionnement</p>
+            <h2 class="surface-title">Mistral + images produits</h2>
+        </div>
+        <span class="pill">IA</span>
+    </div>
+    <p class="lead" style="margin:0 0 0.75rem;">
+        Le bot utilise Mistral pour générer un texte en deux phrases max
+        et récupère un visuel via la variable
+        <code>PRODUCT_BOT_IMAGE_URL_TEMPLATE</code> (utilise de préférence
+        <code>{reference}</code>). Choisis un produit, force le regroupement
+        désiré ou lance un lot.
+    </p>
+    <p class="muted-text" style="margin:0;">
+        Chaque action est mise en file via Celery (assure-toi d'avoir un worker
+        actif) et peut être filtrée par description et image existantes.
+    </p>
+</section>
+
+<section class="surface reveal" data-delay="220">
+    <div class="surface-header">
+        <div>
+            <p class="eyebrow">Enrichissement IA</p>
+            <h2 class="surface-title">Lancer des actions ciblées</h2>
+        </div>
+        <span class="pill">Actions</span>
+    </div>
+    <p class="muted-text" style="margin:0;">
+        Choisis une action selon ton besoin : un SKU unique, un lot intelligent ou une sélection personnalisée.
+    </p>
+</section>
+
+<section class="split split-70">
+    <div class="surface reveal" data-delay="240">
+        <h2 class="surface-title">Cible unique</h2>
+        <p class="muted-text" style="margin-top:0.25rem;">
+            Sélectionne un SKU et choisis si le bot doit forcer la réécriture
+            ou le remplacement d'image.
+        </p>
+        <form method="post" class="form-grid" novalidate>
+            {% csrf_token %}
+            <div class="field">
+                {{ manual_form.product.label_tag }}
+                {{ manual_form.product }}
+                {% for error in manual_form.product.errors %}
+                    <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+                {% endfor %}
+            </div>
+            <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ manual_form.force_description }}
+                    {{ manual_form.force_description.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ manual_form.force_image }}
+                    {{ manual_form.force_image.label }}
+                </label>
+                {% if manual_form.force_description.errors %}
+                    <p class="muted-text" style="color: var(--danger);">
+                        {{ manual_form.force_description.errors.0 }}
+                    </p>
+                {% endif %}
+            </div>
+            <button type="submit" name="bot_action" value="single" class="btn">Lancer le bot sur ce produit</button>
+        </form>
+    </div>
+    <div class="surface surface-muted reveal" data-delay="260">
+        <h2 class="surface-title">Lot intelligent</h2>
+        <p class="muted-text" style="margin-top:0.25rem;">
+            Appliquer à un lot de produits pour rattraper les fiches incomplètes.
+            Laisse le champ vide pour toucher tous les produits filtrés.
+        </p>
+        <form method="post" class="form-grid" novalidate>
+            {% csrf_token %}
+            <div class="field">
+                {{ bulk_form.limit.label_tag }}
+                {{ bulk_form.limit }}
+                {% for error in bulk_form.limit.errors %}
+                    <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+                {% endfor %}
+            </div>
+            <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ bulk_form.force_description }}
+                    {{ bulk_form.force_description.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ bulk_form.force_image }}
+                    {{ bulk_form.force_image.label }}
+                </label>
+            </div>
+            <button type="submit" name="bot_action" value="batch" class="btn secondary">Envoyer le lot</button>
+        </form>
+    </div>
+</section>
+
+<section class="surface reveal" data-delay="280">
+    <div class="surface-header">
+        <div>
+            <p class="eyebrow">Selection ciblee</p>
+            <h2 class="surface-title">Filtrer et selectionner</h2>
+        </div>
+        <span class="pill">IA</span>
+    </div>
+    <p class="muted-text" style="margin:0 0 0.75rem;">
+        Filtre les produits sans image ou sans description, selectionne-les,
+        puis lance la generation.
+    </p>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <div class="field">
+            {{ selection_form.query.label_tag }}
+            {{ selection_form.query }}
+            {% for error in selection_form.query.errors %}
+                <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+            {% endfor %}
+        </div>
+        <div class="field">
+            {{ selection_form.limit.label_tag }}
+            {{ selection_form.limit }}
+            {% for error in selection_form.limit.errors %}
+                <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+            {% endfor %}
+        </div>
+        <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem;">
+                {{ selection_form.filter_missing_description }}
+                {{ selection_form.filter_missing_description.label }}
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5rem;">
+                {{ selection_form.filter_missing_image }}
+                {{ selection_form.filter_missing_image.label }}
+            </label>
+        </div>
+        <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem;">
+                {{ selection_form.force_description }}
+                {{ selection_form.force_description.label }}
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5rem;">
+                {{ selection_form.force_image }}
+                {{ selection_form.force_image.label }}
+            </label>
+        </div>
+        <div class="field" style="grid-column:1/-1; display:flex; gap:0.6rem; flex-wrap:wrap;">
+            <button type="submit" name="bot_action" value="filter" class="btn secondary">Filtrer la liste</button>
+            <button type="submit" name="bot_action" value="select" class="btn">Lancer la selection</button>
+            <button type="submit" name="bot_action" value="select_filtered" class="btn ghost">Lancer sur filtres</button>
+        </div>
+        {% if selection_form.non_field_errors %}
+            {% for error in selection_form.non_field_errors %}
+                <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+            {% endfor %}
+        {% endif %}
+    </form>
+    <div data-selection-grid style="margin-top:0.75rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.35rem;">
+            <p class="muted-text" style="margin:0;">
+                {{ selection_total }} produits trouves{% if selection_displayed != selection_total %} (affichage {{ selection_displayed }}){% endif %}
+            </p>
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+                <span class="pill" data-selected-count>0 selectionnes</span>
+                <button type="button" class="btn ghost" data-select-all style="padding:0.35rem 0.7rem; font-size:0.9rem;">Tout cocher</button>
+                <button type="button" class="btn ghost" data-select-none style="padding:0.35rem 0.7rem; font-size:0.9rem;">Tout decocher</button>
+                <button type="button" class="btn ghost" data-select-missing-image style="padding:0.35rem 0.7rem; font-size:0.9rem;">Cocher sans image</button>
+                <button type="button" class="btn ghost" data-select-missing-description style="padding:0.35rem 0.7rem; font-size:0.9rem;">Cocher sans desc</button>
+            </div>
+        </div>
+        {% if selection_displayed %}
+            {% with selected_ids=selection_form.products.value %}
+            <div style="border:1px solid var(--border); border-radius:14px; padding:0.6rem; max-height:360px; overflow:auto;">
+                <div style="display:grid; gap:0.5rem;">
+                    {% for item in selection_products %}
+                        <label style="display:grid; grid-template-columns:auto 1fr auto; gap:0.75rem; align-items:center; padding:0.55rem 0.65rem; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02);">
+                            <input type="checkbox" name="products" value="{{ item.id }}"
+                                   data-missing-image="{% if not item.has_image %}1{% else %}0{% endif %}"
+                                   data-missing-description="{% if not item.has_description %}1{% else %}0{% endif %}"
+                                   {% if selected_ids and item.id|stringformat:"s" in selected_ids %} checked{% endif %}>
+                            <div>
+                                <strong>{{ item.sku }}</strong>
+                                <div class="muted-text" style="margin-top:0.15rem;">{{ item.name }}</div>
+                            </div>
+                            <div style="display:flex; gap:0.35rem; flex-wrap:wrap; justify-content:flex-end;">
+                                {% if not item.has_description %}
+                                    <span class="pill">sans desc</span>
+                                {% endif %}
+                                {% if not item.has_image %}
+                                    <span class="pill">sans image</span>
+                                {% endif %}
+                                {% if item.has_description and item.has_image %}
+                                    <span class="pill">ok</span>
+                                {% endif %}
+                            </div>
+                        </label>
+                    {% endfor %}
+                </div>
+                {% for error in selection_form.products.errors %}
+                    <p class="muted-text" style="color: var(--danger); margin:0.35rem 0 0;">{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endwith %}
+        {% else %}
+            <p class="muted-text" style="margin:0;">Aucun produit ne correspond aux filtres.</p>
+        {% endif %}
+    </div>
+    <script>
+        (() => {
+            const root = document.querySelector("[data-selection-grid]");
+            if (!root) return;
+            const getBoxes = () => Array.from(root.querySelectorAll('input[name="products"]'));
+            const selectAll = root.querySelector("[data-select-all]");
+            const selectNone = root.querySelector("[data-select-none]");
+            const selectMissingImage = root.querySelector("[data-select-missing-image]");
+            const selectMissingDescription = root.querySelector("[data-select-missing-description]");
+            const countEl = root.querySelector("[data-selected-count]");
+            const updateCount = () => {
+                if (!countEl) return;
+                const count = getBoxes().filter((box) => box.checked).length;
+                countEl.textContent = `${count} selectionnes`;
+            };
+            updateCount();
+            if (selectAll) {
+                selectAll.addEventListener("click", () => {
+                    getBoxes().forEach((box) => { box.checked = true; });
+                    updateCount();
+                });
+            }
+            if (selectNone) {
+                selectNone.addEventListener("click", () => {
+                    getBoxes().forEach((box) => { box.checked = false; });
+                    updateCount();
+                });
+            }
+            if (selectMissingImage) {
+                selectMissingImage.addEventListener("click", () => {
+                    getBoxes().forEach((box) => {
+                        box.checked = box.dataset.missingImage === "1";
+                    });
+                    updateCount();
+                });
+            }
+            if (selectMissingDescription) {
+                selectMissingDescription.addEventListener("click", () => {
+                    getBoxes().forEach((box) => {
+                        box.checked = box.dataset.missingDescription === "1";
+                    });
+                    updateCount();
+                });
+            }
+            root.addEventListener("change", (event) => {
+                if (event.target && event.target.matches('input[name="products"]')) {
+                    updateCount();
+                }
+            });
+        })();
+    </script>
+</section>
+
+<section class="surface reveal" data-delay="300">
+    <div class="surface-header">
+        <div>
+            <p class="eyebrow">Automatisation & donnees</p>
+            <h2 class="surface-title">Enrichissement technique & categories</h2>
+        </div>
+        <span class="pill">Ops</span>
+    </div>
+    <p class="muted-text" style="margin:0;">
+        Centralise la recuperation des fiches techniques et l'attribution automatique des categories.
+    </p>
+</section>
+
+<section class="grid auto-2">
+    <div class="surface surface-muted reveal" data-delay="320">
+        <div class="surface-header">
+            <div>
+                <p class="eyebrow">Hikvision</p>
+                <h2 class="surface-title">Fiches techniques PDF</h2>
+            </div>
+            <span class="pill">PDF</span>
+        </div>
+        <p class="muted-text" style="margin:0 0 0.75rem;">
+            Recherche via Google CSE, puis telecharge les fiches techniques Hikvision (PDF).
+            Deduplication par modele pour limiter le quota.
+        </p>
+        <form method="post" class="form-grid" novalidate>
+            {% csrf_token %}
+            <div class="field">
+                {{ datasheet_form.limit.label_tag }}
+                {{ datasheet_form.limit }}
+                {% for error in datasheet_form.limit.errors %}
+                    <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+                {% endfor %}
+            </div>
+            <div class="field">
+                {{ datasheet_form.prefer_lang.label_tag }}
+                {{ datasheet_form.prefer_lang }}
+                {% for error in datasheet_form.prefer_lang.errors %}
+                    <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+                {% endfor %}
+            </div>
+            <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ datasheet_form.force }}
+                    {{ datasheet_form.force.label }}
+                </label>
+                {% if not datasheet_configured %}
+                    <p class="muted-text" style="margin:0;">Google CSE n'est pas configure.</p>
+                {% endif %}
+            </div>
+            <div class="field" style="display:flex; align-items:flex-end;">
+                <button type="submit" name="bot_action" value="datasheet_fetch" class="btn">
+                    Lancer le telechargement
+                </button>
+            </div>
+        </form>
+        {% if datasheet_result %}
+            <div style="margin-top:0.85rem;">
+                <p class="muted-text" style="margin:0 0 0.35rem;">
+                    Modeles: {{ datasheet_result.models }} · Produits: {{ datasheet_result.products }}
+                    · OK: {{ datasheet_result.updated }} · Ignores: {{ datasheet_result.skipped }}
+                    · Erreurs: {{ datasheet_result.failed }}
+                </p>
+                {% if datasheet_result.errors %}
+                    <div style="border:1px solid var(--border); border-radius:14px; padding:0.6rem; max-height:220px; overflow:auto;">
+                        <div style="display:grid; gap:0.5rem;">
+                            {% for item in datasheet_result.errors %}
+                                <div style="display:flex; justify-content:space-between; gap:0.75rem; align-items:center; padding:0.45rem 0.6rem; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02);">
+                                    <div>
+                                        <strong>{{ item.model|default:"Modele inconnu" }}</strong>
+                                        {% if item.product_id %}
+                                            <div class="muted-text">Produit {{ item.product_id }}</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="muted-text" style="text-align:right;">{{ item.error }}</div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="surface surface-muted reveal" data-delay="340">
+        <div class="surface-header">
+            <div>
+                <p class="eyebrow">Categories</p>
+                <h2 class="surface-title">Attribution automatique</h2>
+            </div>
+            <span class="pill">Auto</span>
+        </div>
+        <p class="muted-text" style="margin:0 0 0.75rem;">
+            Lance l'attribution automatique des categories pour les produits.
+        </p>
+        <form method="post" class="form-grid" novalidate>
+            {% csrf_token %}
+            <div class="field">
+                {{ category_form.limit.label_tag }}
+                {{ category_form.limit }}
+                {% for error in category_form.limit.errors %}
+                    <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+                {% endfor %}
+            </div>
+            <div class="field">
+                {{ category_form.rules_path.label_tag }}
+                {{ category_form.rules_path }}
+                {% for error in category_form.rules_path.errors %}
+                    <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+                {% endfor %}
+            </div>
+            <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ category_form.apply_all }}
+                    {{ category_form.apply_all.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ category_form.dry_run }}
+                    {{ category_form.dry_run.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ category_form.use_ai }}
+                    {{ category_form.use_ai.label }}
+                </label>
+                {% if not category_ai_available %}
+                    <p class="muted-text" style="margin:0;">Mistral n'est pas configure.</p>
+                {% endif %}
+            </div>
+            <div class="field" style="display:flex; align-items:flex-end;">
+                <button type="submit" name="bot_action" value="auto_category" class="btn">Lancer la categorisation</button>
+            </div>
+        </form>
+        {% if category_result %}
+            <div style="margin-top:0.85rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.45rem;">
+                    <p class="muted-text" style="margin:0;">
+                        {{ category_mode_label }} : {{ category_result.updated }} ajoutes, {{ category_result.skipped }} inchanges, {{ category_result.unmatched }} sans correspondance.
+                    </p>
+                    <div style="display:flex; gap:0.35rem; flex-wrap:wrap; justify-content:flex-end;">
+                        <span class="pill">{{ category_result.evaluated }} evalues</span>
+                        {% if category_result.ai_used %}
+                            <span class="pill">IA: {{ category_result.ai_used }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <p class="muted-text" style="margin:0 0 0.5rem;">
+                    Cible : {{ category_scope_label }}{% if category_limit_value %} · Limite {{ category_limit_value }}{% endif %}
+                </p>
+                {% if category_evaluations %}
+                    <div style="border:1px solid var(--border); border-radius:14px; padding:0.6rem; max-height:300px; overflow:auto;">
+                        <div style="display:grid; gap:0.5rem;">
+                            {% for item in category_evaluations %}
+                                <div style="display:grid; grid-template-columns:1fr auto; gap:0.75rem; align-items:center; padding:0.55rem 0.65rem; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02);">
+                                    <div>
+                                        <strong>{{ item.sku }}</strong>
+                                        <div class="muted-text" style="margin-top:0.15rem;">{{ item.name }}</div>
+                                        <div class="muted-text" style="margin-top:0.15rem;">Categorie actuelle : {{ item.current_category }}</div>
+                                    </div>
+                                    <div style="display:flex; gap:0.35rem; flex-wrap:wrap; justify-content:flex-end;">
+                                        {% if item.status == "updated" %}
+                                            <span class="pill">{% if category_is_dry_run %}proposee{% else %}ajoutee{% endif %}</span>
+                                            <span class="pill">{{ item.suggested_category }}</span>
+                                        {% elif item.status == "skipped" %}
+                                            <span class="pill">inchanges</span>
+                                            <span class="pill">{{ item.suggested_category }}</span>
+                                        {% else %}
+                                            <span class="pill">sans correspondance</span>
+                                        {% endif %}
+                                        {% if item.source %}
+                                            <span class="pill">{{ item.source }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% if category_evaluations_truncated %}
+                        <p class="muted-text" style="margin:0.35rem 0 0;">Affichage limite a 200 produits.</p>
+                    {% endif %}
+                {% else %}
+                    <p class="muted-text" style="margin:0;">Aucun produit evalue.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="surface surface-muted reveal" data-delay="360">
+    <div class="surface-header">
+        <div>
+            <p class="eyebrow">File IA</p>
+            <h2 class="surface-title">Dernières activités</h2>
+        </div>
+        <span class="pill">{{ queue_pending }} en attente</span>
+    </div>
+    {% if recent_jobs %}
+        <div class="stack" style="margin-top:0.5rem;">
+            {% for job in recent_jobs %}
+                <article class="stack-item" style="padding:0.65rem 0; border-bottom:1px solid var(--border);">
+                    <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start;">
+                        <div>
+                            <strong>{{ job.product.sku|default:"Produit supprimé" }}</strong>
+                            {% if job.product %}
+                                <p class="muted-text" style="margin:0;">{{ job.product.name }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="muted-text" style="text-align:right;">
+                            <span class="pill">{{ job.get_status_display }}</span>
+                            <p style="margin:0;" class="muted-text">{{ job.created_at|date:"d/m H:i" }}</p>
+                        </div>
+                    </div>
+                    <p class="muted-text" style="margin:0.25rem 0 0;">
+                        Description : <strong>{% if job.description_changed %}oui{% else %}non{% endif %}</strong>
+                        · Image : <strong>{% if job.image_changed %}oui{% else %}non{% endif %}</strong>
+                    </p>
+                    {% if job.last_message %}
+                        <p class="muted-text" style="margin:0.35rem 0 0;">{{ job.last_message }}</p>
+                    {% endif %}
+                </article>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="muted-text" style="margin:0;">Aucune activité récente.</p>
+    {% endif %}
+</section>
+
+<section class="grid auto-3">
+    <div class="surface surface-muted reveal" data-delay="380">
+        <div class="surface-header">
+            <div>
+                <p class="eyebrow">Sans description</p>
+                <h2 class="surface-title">Quelques produits</h2>
+            </div>
+        </div>
+        {% if missing_description_products %}
+            <ul class="stack" style="list-style:none; margin:0; padding:0;">
+                {% for product in missing_description_products %}
+                    <li style="display:flex; justify-content:space-between; padding:0.35rem 0; border-bottom:1px solid var(--border);">
+                        <span>{{ product.sku }}</span>
+                        <span class="muted-text">{{ product.name }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted-text">Toutes les descriptions sont renseignées.</p>
+        {% endif %}
+    </div>
+    <div class="surface surface-muted reveal" data-delay="400">
+        <div class="surface-header">
+            <div>
+                <p class="eyebrow">Sans visuel</p>
+                <h2 class="surface-title">Suivi rapide</h2>
+            </div>
+        </div>
+        {% if missing_image_products %}
+            <ul class="stack" style="list-style:none; margin:0; padding:0;">
+                {% for product in missing_image_products %}
+                    <li style="display:flex; justify-content:space-between; padding:0.35rem 0; border-bottom:1px solid var(--border);">
+                        <span>{{ product.sku }}</span>
+                        <span class="muted-text">{{ product.name }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted-text">Tous les produits ont un visuel.</p>
+        {% endif %}
+    </div>
+    <div class="surface surface-muted reveal" data-delay="420">
+        <div class="surface-header">
+            <div>
+                <p class="eyebrow">Fiches techniques</p>
+                <h2 class="surface-title">Telechargees</h2>
+            </div>
+            <span class="pill">{{ datasheet_downloaded_count }}</span>
+        </div>
+        {% if datasheet_products %}
+            <ul class="stack" style="list-style:none; margin:0; padding:0;">
+                {% for product in datasheet_products %}
+                    <li style="display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0; border-bottom:1px solid var(--border); gap:0.6rem;">
+                        <div>
+                            <span>{{ product.sku }}</span>
+                            <span class="muted-text" style="margin-left:0.4rem;">{{ product.name }}</span>
+                        </div>
+                        <div style="display:flex; gap:0.35rem; flex-wrap:wrap; justify-content:flex-end;">
+                            {% if product.datasheet_pdf %}
+                                <a class="btn ghost" href="{{ product.datasheet_pdf.url }}" target="_blank" rel="noopener">PDF</a>
+                            {% endif %}
+                            {% if product.datasheet_url %}
+                                <a class="btn ghost" href="{{ product.datasheet_url }}" target="_blank" rel="noopener">Source</a>
+                            {% endif %}
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted-text">Aucune fiche technique telechargee.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

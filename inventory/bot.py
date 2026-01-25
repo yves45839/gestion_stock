@@ -1,0 +1,606 @@
+import json
+import logging
+import mimetypes
+import re
+from datetime import date
+from pathlib import Path
+from threading import Lock
+from typing import Any, Dict, Iterable, Optional
+from urllib.parse import quote_plus, urlparse
+
+import requests
+from mistralai import Mistral
+from mistralai.models import UserMessage
+from django.conf import settings
+from django.core.files import File
+from django.core.files.base import ContentFile
+
+try:
+    from pypdf import PdfReader
+except Exception:  # noqa: BLE001
+    PdfReader = None
+
+logger = logging.getLogger(__name__)
+
+
+class MistralTextGenerator:
+    """Thin client for Mistral's SDK."""
+
+    def __init__(self, api_key: str, model: str = "mistral-medium-latest", agent_id: Optional[str] = None):
+        self.api_key = api_key
+        self.model = model
+        self.agent_id = agent_id
+        self.client = Mistral(api_key=self.api_key)
+
+    def generate_text(self, prompt: str, temperature: float = 0.35, max_tokens: int = 400) -> Optional[str]:
+        if not self.api_key:
+            return None
+        try:
+            if self.agent_id:
+                response = self.client.agents.complete(
+                    agent_id=self.agent_id,
+                    messages=[UserMessage(content=prompt)],
+                    max_tokens=max_tokens,
+                )
+            else:
+                response = self.client.chat.complete(
+                    model=self.model,
+                    messages=[UserMessage(content=prompt)],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Mistral request failed (%s): %s", self.agent_id or self.model, exc)
+            return None
+        return self._extract_text(response)
+
+    def _extract_text(self, payload: Dict[str, Any]) -> Optional[str]:
+        candidates = getattr(payload, "choices", None)
+        if not candidates and isinstance(payload, dict):
+            candidates = payload.get("choices")
+        if not candidates:
+            candidates = getattr(payload, "outputs", None)
+        if not candidates and isinstance(payload, dict):
+            candidates = payload.get("outputs")
+        candidates = candidates or [payload]
+
+        for candidate in candidates:
+            message = getattr(candidate, "message", None) if not isinstance(candidate, dict) else candidate.get("message")
+            content = getattr(message, "content", None) if message is not None else None
+            if content is None:
+                content = candidate.get("content") if isinstance(candidate, dict) else candidate
+            text = self._text_from_content(content)
+            if text:
+                return text.strip()
+        return None
+
+    def _text_from_content(self, content: Any) -> Optional[str]:
+        if isinstance(content, str):
+            return content
+        if hasattr(content, "text"):
+            return getattr(content, "text")
+        if isinstance(content, dict):
+            for key in ("text", "output_text", "message"):
+                value = content.get(key)
+                if isinstance(value, str):
+                    return value
+            nested = content.get("content")
+            if isinstance(nested, Iterable):
+                for item in nested:
+                    text = self._text_from_content(item)
+                    if text:
+                        return text
+        if isinstance(content, Iterable) and not isinstance(content, str):
+            for item in content:
+                text = self._text_from_content(item)
+                if text:
+                    return text
+        return None
+
+
+class _DailyQuota:
+    def __init__(self, path: Path, daily_limit: int):
+        self.path = path
+        self.daily_limit = daily_limit
+        self._lock = Lock()
+
+    def reserve(self) -> bool:
+        if self.daily_limit <= 0:
+            return False
+        today = date.today().isoformat()
+        with self._lock:
+            data = self._read()
+            if data.get("date") != today:
+                data = {"date": today, "count": 0}
+            if data.get("count", 0) >= self.daily_limit:
+                return False
+            data["count"] = int(data.get("count", 0)) + 1
+            self._write(data)
+        return True
+
+    def _read(self) -> dict:
+        try:
+            raw = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return {}
+        except OSError:
+            return {}
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+
+    def _write(self, data: dict) -> None:
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+        except OSError:
+            return
+
+
+class GoogleImageSearchClient:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        engine_id: str,
+        safe: str,
+        daily_limit: int,
+        session: requests.Session,
+        timeout: int,
+        usage_path: Path,
+    ):
+        self.api_key = api_key
+        self.engine_id = engine_id
+        self.safe = safe or "active"
+        self.daily_limit = daily_limit
+        self.session = session
+        self.timeout = timeout
+        self.quota = _DailyQuota(usage_path, daily_limit)
+        self.last_status = None
+        self.last_error = None
+        self.last_query = None
+
+    def search_image(self, query: str) -> Optional[str]:
+        self.last_status = None
+        self.last_error = None
+        self.last_query = query
+        if not query:
+            self.last_status = "empty_query"
+            return None
+        if not self.api_key or not self.engine_id:
+            self.last_status = "missing_config"
+            return None
+        if not self.quota.reserve():
+            self.last_status = "quota"
+            logger.info("Google image search quota reached (%s/day).", self.daily_limit)
+            return None
+        params = {
+            "key": self.api_key,
+            "cx": self.engine_id,
+            "q": query,
+            "searchType": "image",
+            "num": 1,
+            "safe": self.safe,
+            "fields": "items(link,mime,image/contextLink)",
+        }
+        try:
+            response = self.session.get(
+                "https://www.googleapis.com/customsearch/v1",
+                params=params,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            self.last_status = "request_error"
+            self.last_error = str(exc)
+            logger.warning("Google image search failed: %s", exc)
+            return None
+        try:
+            payload = response.json()
+        except ValueError:
+            self.last_status = "bad_json"
+            return None
+        items = payload.get("items") or []
+        if not items:
+            self.last_status = "no_results"
+            return None
+        self.last_status = "ok"
+        return items[0].get("link")
+
+
+class ProductAssetBot:
+    def __init__(
+        self,
+        text_generator: Optional[MistralTextGenerator] = None,
+        image_url_template: Optional[str] = None,
+        image_timeout: Optional[int] = None,
+    ):
+        self.text_generator = (
+            text_generator
+            if text_generator
+            else self._build_text_generator(settings.MISTRAL_API_KEY)
+        )
+        self.image_url_template = image_url_template or settings.PRODUCT_BOT_IMAGE_URL_TEMPLATE
+        self.image_timeout = image_timeout or settings.PRODUCT_BOT_IMAGE_TIMEOUT
+        self.image_session = requests.Session()
+        self.image_session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            }
+        )
+        self.allow_placeholders = getattr(settings, "PRODUCT_BOT_ALLOW_PLACEHOLDERS", False)
+        self.placeholder_domains = {
+            domain.lower()
+            for domain in getattr(
+                settings,
+                "PRODUCT_BOT_PLACEHOLDER_DOMAINS",
+                ("dummyimage.com", "via.placeholder.com", "placehold.co"),
+            )
+        }
+        self.last_image_log = None
+        self.last_google_status = None
+        self.last_google_query = None
+        self.google_search_status = "disabled"
+        self.google_search = self._build_google_search()
+
+    def _build_text_generator(self, api_key: Optional[str]) -> Optional[MistralTextGenerator]:
+        if not api_key:
+            return None
+        return MistralTextGenerator(
+            api_key=api_key,
+            model=settings.MISTRAL_MODEL,
+            agent_id=settings.MISTRAL_AGENT_ID,
+        )
+
+    def _build_google_search(self) -> Optional[GoogleImageSearchClient]:
+        enabled = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_SEARCH_ENABLED", False)
+        if not enabled:
+            self.google_search_status = "disabled"
+            return None
+        api_key = getattr(settings, "GOOGLE_CUSTOM_SEARCH_API_KEY", None)
+        engine_id = getattr(settings, "GOOGLE_CUSTOM_SEARCH_ENGINE_ID", None)
+        if not api_key or not engine_id:
+            self.google_search_status = "missing_config"
+            logger.warning("Google image search enabled but missing API key or engine id.")
+            return None
+        self.google_search_status = "enabled"
+        daily_limit = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT", 0)
+        safe = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_SAFE", "active")
+        usage_path = Path(settings.BASE_DIR) / "var" / "google_cse_usage.json"
+        return GoogleImageSearchClient(
+            api_key=api_key,
+            engine_id=engine_id,
+            safe=safe,
+            daily_limit=daily_limit,
+            session=self.image_session,
+            timeout=self.image_timeout,
+            usage_path=usage_path,
+        )
+
+    def ensure_assets(self, product, force_description=False, force_image=False) -> tuple[bool, bool]:
+        description_changed = self.ensure_description(product, force_description)
+        image_changed = self.ensure_image(product, force_image)
+        return description_changed, image_changed
+
+    def ensure_description(self, product, force: bool = False) -> bool:
+        if not self.text_generator or (product.description and not force):
+            return False
+        prompt = self._build_description_prompt(product)
+        if not prompt:
+            return False
+        description = self.text_generator.generate_text(prompt)
+        if not description:
+            return False
+        sanitized = description.strip()
+        if sanitized and sanitized != (product.description or "").strip():
+            product.description = sanitized
+            return True
+        return False
+
+    def ensure_image(self, product, force: bool = False) -> bool:
+        self.last_image_log = None
+        if product.image and not force:
+            self._set_image_log("skip", "already has image")
+            return False
+        local_path = self._find_local_image(product)
+        if local_path:
+            applied = self._apply_local_image(product, local_path)
+            if applied:
+                self._set_image_log("ok", f"local file {local_path.name}")
+            else:
+                self._set_image_log("skip", f"local file already set ({local_path.name})")
+            return applied
+        image_url = self._find_google_image(product)
+        image_source = "google" if image_url else None
+        if not image_url:
+            image_url = self._build_image_url(product)
+            image_source = "template" if image_url else None
+        if not image_url:
+            reason = self._format_google_status() or "no_image_source"
+            self._set_image_log("skip", reason)
+            return False
+        if self._is_placeholder_url(image_url) and not self.allow_placeholders:
+            detail = "placeholder blocked"
+            google_status = self._format_google_status()
+            if google_status and self.last_google_status != "ok":
+                detail = f"{detail} ({google_status})"
+            self._set_image_log("skip", detail)
+            logger.info("Skipping placeholder image url for %s", product)
+            return False
+        try:
+            response = self.image_session.get(image_url, timeout=self.image_timeout)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            source_label = image_source or "url"
+            self._set_image_log("fail", f"download {source_label} error")
+            logger.warning("Unable to download product image for %s: %s", product, exc)
+            return False
+        if not self._is_image_response(response):
+            source_label = image_source or "url"
+            self._set_image_log("fail", f"not image from {source_label}")
+            logger.warning("Downloaded payload is not an image for %s", product)
+            return False
+        filename = self._build_image_filename(
+            product,
+            source_name=self._image_source_name(image_url),
+            extension=self._image_extension(response, image_url),
+        )
+        product.image.save(filename, ContentFile(response.content), save=False)
+        source_label = image_source or "url"
+        self._set_image_log("ok", f"downloaded from {source_label}")
+        return True
+
+    def _build_description_prompt(self, product) -> str:
+        details = [
+            f"Produit: {product.name}",
+            f"SKU: {product.sku}",
+        ]
+        if brand := getattr(product, "brand", None):
+            details.append(f"Marque: {brand}")
+        if category := getattr(product, "category", None):
+            details.append(f"Catégorie: {category}")
+        if product.sale_price:
+            details.append(f"Prix de vente: {product.sale_price} FCFA")
+        if product.purchase_price:
+            details.append(f"Prix d'achat: {product.purchase_price} FCFA")
+        if existing := (product.description or "").strip():
+            details.append(f"Description existante: {existing}")
+        datasheet_excerpt = self._datasheet_excerpt(product)
+        if datasheet_excerpt:
+            details.append(f"Extraits fiche technique: {datasheet_excerpt}")
+        elif product.datasheet_url:
+            details.append(f"Fiche technique: {product.datasheet_url}")
+        return (
+            "Tu es un assistant produisant des descriptions produits concises et informatives en francais.\n"
+            "Si des extraits de fiche technique sont fournis, base-toi dessus pour les caracteristiques.\n"
+            "N'invente pas de caracteristiques absentes et garde les prix en FCFA.\n"
+            "Utilise les informations suivantes pour rediger un texte commercial de deux phrases maximum.\n"
+            + "\n".join(details)
+        )
+
+    def _datasheet_excerpt(self, product) -> str:
+        if not product.datasheet_pdf:
+            return ""
+        if PdfReader is None:
+            return ""
+        max_pages = int(getattr(settings, "PRODUCT_BOT_DATASHEET_MAX_PAGES", 2))
+        max_chars = int(getattr(settings, "PRODUCT_BOT_DATASHEET_MAX_CHARS", 1200))
+        try:
+            with product.datasheet_pdf.open("rb") as handle:
+                reader = PdfReader(handle)
+                chunks = []
+                for page in reader.pages[: max_pages or 1]:
+                    try:
+                        text = page.extract_text() or ""
+                    except Exception:
+                        continue
+                    if text:
+                        chunks.append(text)
+                    if sum(len(chunk) for chunk in chunks) >= max_chars:
+                        break
+        except Exception:
+            return ""
+        if not chunks:
+            return ""
+        cleaned = re.sub(r"\s+", " ", " ".join(chunks)).strip()
+        if max_chars and len(cleaned) > max_chars:
+            trimmed = cleaned[:max_chars].rsplit(" ", 1)[0].strip()
+            return trimmed or cleaned[:max_chars]
+        return cleaned
+
+    def _find_google_image(self, product) -> Optional[str]:
+        self.last_google_status = None
+        self.last_google_query = None
+        if not self.google_search:
+            self.last_google_status = self.google_search_status
+            return None
+        queries = self._build_google_queries(product)
+        if not queries:
+            self.last_google_status = "empty_query"
+            return None
+        max_tries = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_MAX_TRIES", 1)
+        tries = max(max_tries or 1, 1)
+        for query in queries[:tries]:
+            url = self.google_search.search_image(query)
+            self.last_google_query = query
+            self.last_google_status = self.google_search.last_status or "no_results"
+            if url:
+                return url
+        return None
+
+    def _build_google_query(self, product) -> str:
+        reference = product.manufacturer_reference or product.sku or product.barcode or ""
+        parts = []
+        if brand := getattr(product, "brand", None):
+            parts.append(str(brand))
+        if reference:
+            parts.append(reference)
+        if product.name:
+            parts.append(product.name)
+        if category := getattr(product, "category", None):
+            parts.append(str(category))
+        return " ".join(part.strip() for part in parts if part).strip()
+
+    def _build_google_queries(self, product) -> list[str]:
+        reference = product.manufacturer_reference or product.sku or product.barcode or ""
+        brand = str(getattr(product, "brand", "") or "").strip()
+        name = (product.name or "").strip()
+        queries = []
+        if brand and reference:
+            queries.append(f"{brand} \"{reference}\"")
+        if reference:
+            queries.append(f"\"{reference}\"")
+        if brand and name:
+            queries.append(f"{brand} {name}")
+        if name:
+            queries.append(name)
+        seen = set()
+        unique = []
+        for query in queries:
+            cleaned = " ".join(query.split())
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                unique.append(cleaned)
+        return unique
+
+    def _format_google_status(self) -> str:
+        if not self.last_google_status:
+            return ""
+        if self.last_google_query:
+            query = self.last_google_query
+            if len(query) > 60:
+                query = f"{query[:57]}..."
+            return f"google: {self.last_google_status}, q: {query}"
+        return f"google: {self.last_google_status}"
+
+    def _build_image_url(self, product) -> Optional[str]:
+        if not self.image_url_template:
+            return None
+        reference = product.manufacturer_reference or product.sku or product.barcode or ""
+        brand = getattr(product, "brand", None)
+        category = getattr(product, "category", None)
+        safe = _FormatDict(
+            name=quote_plus(product.name or "produit"),
+            sku=quote_plus(product.sku or ""),
+            reference=quote_plus(reference),
+            manufacturer_reference=quote_plus(product.manufacturer_reference or ""),
+            barcode=quote_plus(product.barcode or ""),
+            brand=quote_plus(str(brand)) if brand else "",
+            category=quote_plus(str(category)) if category else "",
+            product_id=str(product.pk or ""),
+        )
+        try:
+            return self.image_url_template.format_map(safe)
+        except KeyError:
+            return self.image_url_template
+
+    def _build_image_filename(
+        self,
+        product,
+        *,
+        source_name: Optional[str] = None,
+        extension: Optional[str] = None,
+    ) -> str:
+        base = product.sku or product.manufacturer_reference or product.name or str(product.pk)
+        slug = quote_plus(base).replace("%", "_")
+        if source_name:
+            cleaned_source = re.sub(r"[^0-9A-Za-z._-]+", "_", source_name).strip("_")
+            filename = f"{slug[:50]}_{cleaned_source or 'image'}"
+            return filename[:200]
+        ext = extension or ".jpg"
+        if not ext.startswith("."):
+            ext = f".{ext}"
+        return f"{slug[:50]}-bot{ext}"
+
+    def _find_local_image(self, product) -> Optional[Path]:
+        images_root = Path(settings.MEDIA_ROOT) / "products" / "images"
+        if not images_root.exists():
+            return None
+        prefixes = self._image_prefixes(product)
+        if not prefixes:
+            return None
+        for path in images_root.iterdir():
+            if not path.is_file():
+                continue
+            name_lower = path.name.lower()
+            if name_lower.endswith(("-ai.png", "-ai.jpg", "-ai.jpeg", "-ai.webp")):
+                continue
+            if any(name_lower.startswith(prefix) for prefix in prefixes):
+                if path.stat().st_size > 0:
+                    return path
+        return None
+
+    def _image_prefixes(self, product) -> list[str]:
+        identifiers = [
+            product.manufacturer_reference,
+            product.sku,
+            product.barcode,
+        ]
+        prefixes = []
+        for raw in identifiers:
+            normalized = self._normalize_identifier(raw)
+            if normalized:
+                prefixes.append(normalized.lower())
+        return prefixes
+
+    @staticmethod
+    def _normalize_identifier(value: Optional[str]) -> str:
+        if not value:
+            return ""
+        cleaned = re.sub(r"[^0-9A-Za-z._-]+", "-", str(value)).strip("-_")
+        return cleaned
+
+    def _apply_local_image(self, product, path: Path) -> bool:
+        media_root = Path(settings.MEDIA_ROOT)
+        try:
+            relative = path.relative_to(media_root)
+        except ValueError:
+            with path.open("rb") as handle:
+                product.image.save(path.name, File(handle), save=False)
+            return True
+        relative_name = str(relative).replace("\\", "/")
+        if str(product.image) == relative_name:
+            return False
+        product.image.name = relative_name
+        return True
+
+    def _set_image_log(self, status: str, detail: str) -> None:
+        status_label = status.strip().lower()
+        detail_text = detail.strip()
+        self.last_image_log = f"image {status_label}: {detail_text}" if detail_text else f"image {status_label}"
+
+    def _is_placeholder_url(self, image_url: str) -> bool:
+        parsed = urlparse(image_url)
+        domain = parsed.netloc.lower()
+        return domain in self.placeholder_domains
+
+    @staticmethod
+    def _is_image_response(response: requests.Response) -> bool:
+        if not response.content:
+            return False
+        content_type = (response.headers.get("content-type") or "").lower()
+        if content_type and not content_type.startswith("image/"):
+            return False
+        return True
+
+    @staticmethod
+    def _image_source_name(image_url: str) -> Optional[str]:
+        parsed = urlparse(image_url)
+        name = Path(parsed.path).name
+        return name or None
+
+    @staticmethod
+    def _image_extension(response: requests.Response, image_url: str) -> Optional[str]:
+        parsed = urlparse(image_url)
+        ext = Path(parsed.path).suffix
+        if ext:
+            return ext
+        content_type = (response.headers.get("content-type") or "").split(";")[0].strip()
+        return mimetypes.guess_extension(content_type) if content_type else None
+
+
+class _FormatDict(dict):
+    def __missing__(self, key: str) -> str:
+        return ""

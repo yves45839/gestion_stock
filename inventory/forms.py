@@ -235,6 +235,7 @@ class ProductForm(forms.ModelForm):
             "name",
             "description",
             "image",
+            "is_online",
             "brand",
             "category",
             "barcode",
@@ -305,6 +306,137 @@ class CSVImportForm(forms.Form):
                 raise forms.ValidationError("Le site ne peut pas etre modifie.")
             return self._current_site
         return site
+
+
+class ProductAssetBotForm(forms.Form):
+    product = forms.ModelChoiceField(
+        queryset=Product.objects.order_by("name"),
+        label="Produit ciblé",
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    force_description = forms.BooleanField(
+        required=False,
+        label="Regénérer la description même si elle existe",
+    )
+    force_image = forms.BooleanField(
+        required=False,
+        label="Télécharger un nouvel visuel même si un fichier est présent",
+    )
+
+
+class ProductAssetBotBulkForm(forms.Form):
+    limit = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="Nombre maximal de produits",
+        widget=forms.NumberInput(
+            attrs={"class": "form-control", "placeholder": "Illimitée si vide"}
+        ),
+    )
+    force_description = forms.BooleanField(
+        required=False,
+        label="Forcer la génération des descriptions",
+    )
+    force_image = forms.BooleanField(
+        required=False,
+        label="Forcer le téléchargement des visuels",
+    )
+
+
+class ProductAssetBotSelectionForm(forms.Form):
+    query = forms.CharField(
+        required=False,
+        label="Recherche",
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "placeholder": "Nom, SKU, reference, code-barres"}
+        ),
+    )
+    limit = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="Limiter l'affichage",
+        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "Illimite si vide"}),
+    )
+    filter_missing_description = forms.BooleanField(
+        required=False,
+        label="Sans description",
+    )
+    filter_missing_image = forms.BooleanField(
+        required=False,
+        label="Sans image",
+    )
+    force_description = forms.BooleanField(
+        required=False,
+        label="Forcer la generation des descriptions",
+    )
+    force_image = forms.BooleanField(
+        required=False,
+        label="Forcer le telechargement des visuels",
+    )
+    products = forms.ModelMultipleChoiceField(
+        queryset=Product.objects.none(),
+        required=False,
+        label="Produits a traiter",
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    def __init__(self, *args, queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["products"].queryset = queryset if queryset is not None else Product.objects.none()
+
+
+class HikvisionDatasheetForm(forms.Form):
+    limit = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="Nombre maximal de produits",
+        widget=forms.NumberInput(
+            attrs={"class": "form-control", "placeholder": "Illimite si vide"}
+        ),
+    )
+    force = forms.BooleanField(
+        required=False,
+        label="Forcer le telechargement meme si un PDF est present",
+    )
+    prefer_lang = forms.ChoiceField(
+        label="Langue preferee",
+        choices=(
+            ("fr", "Francais"),
+            ("en", "Anglais"),
+            ("any", "Indifferent"),
+        ),
+        initial="fr",
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+
+
+class CategoryAutoAssignForm(forms.Form):
+    limit = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="Limiter le traitement",
+        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "Illimite si vide"}),
+    )
+    apply_all = forms.BooleanField(
+        required=False,
+        label="Appliquer a tous les produits",
+    )
+    dry_run = forms.BooleanField(
+        required=False,
+        label="Simulation (aucune sauvegarde)",
+    )
+    rules_path = forms.CharField(
+        required=False,
+        label="Fichier de regles",
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "placeholder": "category_rules.json"}
+        ),
+    )
+    use_ai = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Utiliser Mistral pour les correspondances manquantes",
+    )
 
 
 class SaleForm(forms.ModelForm):

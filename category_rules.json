@@ -1,0 +1,149 @@
+{
+  "rules": [
+    {
+      "category": "Videosurveillance > Cameras IP",
+      "regex": [
+        "\\b(?:i?DS-2CD|i?DS-2CV|i?DS-2DE|i?DS-2DF|i?DS-2TD|i?DS-2XS)"
+      ]
+    },
+    {
+      "category": "Videosurveillance > Cameras analogiques / TurboHD",
+      "regex": [
+        "\\b(?:i?DS-2C(?!D|V)[A-Z0-9-]*)"
+      ]
+    },
+    {
+      "category": "Videosurveillance > NVR",
+      "regex": [
+        "\\b(?:i?DS-(?:7[1678]|86|96)\\d{2}N)"
+      ]
+    },
+    {
+      "category": "Videosurveillance > DVR",
+      "regex": [
+        "\\b(?:i?DS-7\\d{3}H)"
+      ]
+    },
+    {
+      "category": "Controle d acces > Terminaux",
+      "regex": [
+        "\\bDS-K1T",
+        "\\bDS-K1A"
+      ]
+    },
+    {
+      "category": "Controle d acces > Controleurs",
+      "regex": [
+        "\\bDS-K2"
+      ]
+    },
+    {
+      "category": "Controle d acces > Lecteurs",
+      "regex": [
+        "\\bDS-K1(?!T|A|F)"
+      ]
+    },
+    {
+      "category": "Controle d acces > Enrolement",
+      "regex": [
+        "\\bDS-K1F"
+      ]
+    },
+    {
+      "category": "Interphonie video > Moniteurs",
+      "regex": [
+        "\\bDS-KH"
+      ]
+    },
+    {
+      "category": "Interphonie video > Plaques de rue",
+      "regex": [
+        "\\bDS-KD"
+      ]
+    },
+    {
+      "category": "Interphonie video > Villa",
+      "regex": [
+        "\\bDS-KV"
+      ]
+    },
+    {
+      "category": "Interphonie video > Doorbell",
+      "regex": [
+        "\\bDS-KB"
+      ]
+    },
+    {
+      "category": "Interphonie video > Master station",
+      "regex": [
+        "\\bDS-KM"
+      ]
+    },
+    {
+      "category": "Interphonie video > Kits",
+      "regex": [
+        "\\bDS-KIS"
+      ]
+    },
+    {
+      "category": "Interphonie video > Alimentations",
+      "regex": [
+        "\\bDS-KAW"
+      ]
+    },
+    {
+      "category": "Alarme intrusion > Centrales",
+      "regex": [
+        "\\bDS-PWA"
+      ]
+    },
+    {
+      "category": "Alarme intrusion > Detecteurs",
+      "regex": [
+        "\\bDS-PD"
+      ]
+    },
+    {
+      "category": "Alarme intrusion > Sirenes",
+      "regex": [
+        "\\bDS-PS"
+      ]
+    },
+    {
+      "category": "Alarme intrusion > Modules",
+      "regex": [
+        "\\bDS-PM"
+      ]
+    },
+    {
+      "category": "Reseau > Switches",
+      "regex": [
+        "\\bDS-3E"
+      ]
+    },
+    {
+      "category": "Reseau > Ponts sans fil",
+      "regex": [
+        "\\bDS-3WF"
+      ]
+    },
+    {
+      "category": "Stockage & serveurs > Stockage",
+      "regex": [
+        "\\bDS-AT",
+        "\\bDS-A"
+      ]
+    },
+    {
+      "category": "Stockage & serveurs > Serveurs",
+      "regex": [
+        "\\bDS-IE",
+        "\\bDS-IF",
+        "\\bDS-IX",
+        "\\bDS-IN",
+        "\\bDS-VBD",
+        "\\biDS-U"
+      ]
+    }
+  ]
+}

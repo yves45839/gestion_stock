@@ -1,11 +1,14 @@
 import csv
 import io
+from pathlib import Path
 from datetime import datetime, time, timedelta
 
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import (
@@ -28,8 +31,14 @@ from django.urls import reverse
 from django.utils import timezone
 from django.template.loader import render_to_string
 
+from .background import enqueue_product_asset_job
 from .forms import (
     CSVImportForm,
+    CategoryAutoAssignForm,
+    HikvisionDatasheetForm,
+    ProductAssetBotBulkForm,
+    ProductAssetBotForm,
+    ProductAssetBotSelectionForm,
     CustomerAccountEntryForm,
     CustomerForm,
     InventoryAdjustmentForm,
@@ -51,6 +60,7 @@ from .models import (
     InventoryCountSession,
     MovementType,
     Product,
+    ProductAssetJob,
     Sale,
     SaleItem,
     SaleScan,
@@ -59,6 +69,12 @@ from .models import (
     Version,
     get_default_site,
 )
+from .product_asset import (
+    reserve_product_asset_job,
+    run_product_asset_bot,
+)
+from .category_auto import run_auto_assign_categories
+from .datasheets import fetch_hikvision_datasheets
 
 try:
     from weasyprint import HTML
@@ -162,6 +178,56 @@ def _get_return_url(request, default_name):
         request.GET.get("return")
         or request.META.get("HTTP_REFERER")
         or reverse(default_name)
+    )
+
+
+def _dispatch_product_asset_bot(product, force_description, force_image, mode, inline_mode):
+    job, created = reserve_product_asset_job(
+        product,
+        mode=mode,
+        force_description=force_description,
+        force_image=force_image,
+    )
+    if not created:
+        return {"status": "pending", "job": job}
+    if inline_mode:
+        result = run_product_asset_bot(
+            product.pk,
+            force_description=force_description,
+            force_image=force_image,
+            job_id=job.pk,
+        )
+        return {"status": "inline", "result": result, "job": job}
+    enqueue_product_asset_job(
+        job.pk,
+        [product.pk],
+        force_description=force_description,
+        force_image=force_image,
+    )
+    return {"status": "queued", "job": job}
+
+
+def _inline_result_message(result, product):
+    if not result:
+        return None, None
+    if result.get("status") == "missing":
+        return (
+            "warning",
+            f"Le bot IA n'a pas trouvé {product.sku}.",
+        )
+    changes = []
+    if result.get("description_changed"):
+        changes.append("description")
+    if result.get("image_changed"):
+        changes.append("image")
+    if changes:
+        return (
+            "success",
+            f"Le bot IA a mis à jour {product.sku} ({', '.join(changes)}).",
+        )
+    return (
+        "info",
+        f"Le bot IA n'avait rien à changer pour {product.sku}.",
     )
 
 
@@ -875,6 +941,11 @@ def inventory_overview(request):
     category_id = request.GET.get("category")
     if category_id:
         products = products.filter(category_id=category_id)
+    online_filter = request.GET.get("online")
+    if online_filter == "1":
+        products = products.filter(is_online=True)
+    elif online_filter == "0":
+        products = products.filter(is_online=False)
     scan_code = request.GET.get("scan")
     scan_message = None
     if scan_code:
@@ -965,6 +1036,7 @@ def inventory_overview(request):
             "image_url": product.image.url if product.image else "",
             "brand": getattr(product.brand, "name", ""),
             "category": getattr(product.category, "name", ""),
+            "is_online": product.is_online,
         }
         for product in Product.objects.select_related("brand", "category").order_by("name")
     ]
@@ -989,6 +1061,7 @@ def inventory_overview(request):
         ),
         "selected_brand": brand_id or "",
         "selected_category": category_id or "",
+        "selected_online": online_filter or "",
         "total_products": paginator.count,
         "product_dataset": product_dataset,
     }
@@ -2213,6 +2286,439 @@ def scan_sale_product(request):
     )
 
 
+def product_asset_bot(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    site_context = _site_context(request)
+    manual_form = ProductAssetBotForm()
+    bulk_form = ProductAssetBotBulkForm()
+    datasheet_form = HikvisionDatasheetForm()
+    category_form = CategoryAutoAssignForm()
+    category_result = None
+    category_mode_label = None
+    category_scope_label = None
+    category_limit_value = None
+    category_is_dry_run = False
+    category_evaluations = []
+    category_evaluations_truncated = False
+    category_ai_available = bool(getattr(settings, "MISTRAL_API_KEY", None))
+    datasheet_result = None
+    datasheet_configured = bool(
+        getattr(settings, "GOOGLE_CSE_API_KEY", None) and getattr(settings, "GOOGLE_CSE_CX", None)
+    )
+    inline_mode = settings.PRODUCT_BOT_INLINE_RUN
+    missing_description_qs = Product.objects.filter(Q(description="") | Q(description__isnull=True))
+    missing_image_qs = Product.objects.filter(Q(image="") | Q(image__isnull=True))
+    missing_both_qs = missing_description_qs.filter(Q(image="") | Q(image__isnull=True))
+    datasheet_qs = Product.objects.filter(
+        Q(datasheet_pdf__isnull=False) & ~Q(datasheet_pdf="")
+    )
+    action = request.POST.get("bot_action") if request.method == "POST" else None
+
+    selection_defaults = {
+        "filter_missing_description": True,
+        "filter_missing_image": True,
+        "query": "",
+        "limit": None,
+        "force_description": False,
+        "force_image": False,
+    }
+
+    def _parse_bool(payload, key, default=False):
+        if not payload or key not in payload:
+            return default
+        return str(payload.get(key)).lower() in ("1", "true", "yes", "on")
+
+    def _parse_limit(payload):
+        if not payload:
+            return None
+        raw = (payload.get("limit") or "").strip()
+        if not raw:
+            return None
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    def _parse_query(payload):
+        if not payload:
+            return ""
+        return (payload.get("query") or "").strip()
+
+    selection_payload = request.POST if action in ("filter", "select") else None
+    selection_filters = selection_defaults.copy()
+    if selection_payload is not None:
+        selection_filters["filter_missing_description"] = _parse_bool(
+            selection_payload, "filter_missing_description", False
+        )
+        selection_filters["filter_missing_image"] = _parse_bool(
+            selection_payload, "filter_missing_image", False
+        )
+        selection_filters["query"] = _parse_query(selection_payload)
+        selection_filters["limit"] = _parse_limit(selection_payload)
+        selection_filters["force_description"] = _parse_bool(
+            selection_payload, "force_description", False
+        )
+        selection_filters["force_image"] = _parse_bool(
+            selection_payload, "force_image", False
+        )
+
+    selection_queryset = Product.objects.order_by("name")
+    selection_conditions = Q()
+    has_condition = False
+    if selection_filters["filter_missing_description"]:
+        selection_conditions |= Q(description="") | Q(description__isnull=True)
+        has_condition = True
+    if selection_filters["filter_missing_image"]:
+        selection_conditions |= Q(image="") | Q(image__isnull=True)
+        has_condition = True
+    if has_condition:
+        selection_queryset = selection_queryset.filter(selection_conditions)
+    if selection_filters["query"]:
+        selection_queryset = selection_queryset.filter(
+            Q(sku__icontains=selection_filters["query"])
+            | Q(name__icontains=selection_filters["query"])
+            | Q(manufacturer_reference__icontains=selection_filters["query"])
+            | Q(barcode__icontains=selection_filters["query"])
+        )
+
+    selection_total = selection_queryset.count()
+    if selection_filters["limit"]:
+        selection_queryset = selection_queryset[:selection_filters["limit"]]
+    selection_displayed = (
+        min(selection_total, selection_filters["limit"])
+        if selection_filters["limit"]
+        else selection_total
+    )
+    selection_form = ProductAssetBotSelectionForm(
+        selection_payload or None,
+        queryset=selection_queryset,
+        initial=selection_filters if selection_payload is None else None,
+    )
+    selection_products = [
+        {
+            "id": row["id"],
+            "sku": row["sku"],
+            "name": row["name"],
+            "has_image": bool(row["image"]),
+            "has_description": bool((row["description"] or "").strip()),
+        }
+        for row in selection_queryset.values("id", "sku", "name", "description", "image")
+    ]
+
+    def _run_selection(products, force_description, force_image, empty_message):
+        if not products:
+            messages.warning(request, empty_message)
+            return
+        inline_results = []
+        queued = 0
+        pending = 0
+        for product in products:
+            dispatch_info = _dispatch_product_asset_bot(
+                product,
+                force_description=force_description,
+                force_image=force_image,
+                mode=ProductAssetJob.Mode.BATCH,
+                inline_mode=inline_mode,
+            )
+            status = dispatch_info.get("status")
+            if status == "inline":
+                inline_results.append(dispatch_info.get("result"))
+            elif status == "queued":
+                queued += 1
+            elif status == "pending":
+                pending += 1
+        if inline_mode:
+            updates = sum(
+                1
+                for result in inline_results
+                if result and (
+                    result.get("description_changed")
+                    or result.get("image_changed")
+                )
+            )
+            messages.success(
+                request,
+                f"{len(products)} produits ont ete traites en local "
+                f"({updates} mises a jour).",
+            )
+            if pending:
+                messages.info(
+                    request,
+                    f"{pending} produits etaient deja en file d'attente.",
+                )
+        else:
+            if queued:
+                messages.success(
+                    request,
+                    f"{queued} produits ont ete envoyes en file d'attente.",
+                )
+            else:
+                messages.info(
+                    request,
+                    "Aucun produit n'a ete envoye en file d'attente.",
+                )
+            if pending:
+                messages.info(
+                    request,
+                    f"{pending} produits etaient deja en file d'attente.",
+                )
+
+    if request.method == "POST":
+        if action == "single":
+            manual_form = ProductAssetBotForm(request.POST)
+            if manual_form.is_valid():
+                product = manual_form.cleaned_data["product"]
+                dispatch_info = _dispatch_product_asset_bot(
+                    product,
+                    force_description=manual_form.cleaned_data["force_description"],
+                    force_image=manual_form.cleaned_data["force_image"],
+                    mode=ProductAssetJob.Mode.SINGLE,
+                    inline_mode=inline_mode,
+                )
+                status = dispatch_info.get("status")
+                if status == "pending":
+                    messages.info(
+                        request,
+                        f"{product.sku} est deja en file d'attente.",
+                    )
+                elif status == "inline":
+                    result = dispatch_info.get("result")
+                    level, message_text = _inline_result_message(result, product)
+                    if level and message_text:
+                        getattr(messages, level)(request, message_text)
+                else:
+                    messages.success(
+                        request,
+                        f"Le bot IA a ete mis en file d'attente pour {product.sku} ({product.name}).",
+                    )
+                manual_form = ProductAssetBotForm()
+        elif action == "batch":
+            bulk_form = ProductAssetBotBulkForm(request.POST)
+            if bulk_form.is_valid():
+                queryset = Product.objects.order_by("name")
+                if not bulk_form.cleaned_data["force_description"]:
+                    queryset = queryset.filter(Q(description="") | Q(description__isnull=True))
+                if not bulk_form.cleaned_data["force_image"]:
+                    queryset = queryset.filter(Q(image="") | Q(image__isnull=True))
+                limit = bulk_form.cleaned_data["limit"]
+                products = list(queryset[:limit]) if limit else list(queryset)
+                if not products:
+                    messages.warning(
+                        request,
+                        "Aucun produit n'a satisfait les criteres selectionnes pour le lot.",
+                    )
+                else:
+                    inline_results = []
+                    queued = 0
+                    pending = 0
+                    for product in products:
+                        dispatch_info = _dispatch_product_asset_bot(
+                            product,
+                            force_description=bulk_form.cleaned_data["force_description"],
+                            force_image=bulk_form.cleaned_data["force_image"],
+                            mode=ProductAssetJob.Mode.BATCH,
+                            inline_mode=inline_mode,
+                        )
+                        status = dispatch_info.get("status")
+                        if status == "inline":
+                            inline_results.append(dispatch_info.get("result"))
+                        elif status == "queued":
+                            queued += 1
+                        elif status == "pending":
+                            pending += 1
+                    if inline_mode:
+                        updates = sum(
+                            1
+                            for result in inline_results
+                            if result and (
+                                result.get("description_changed")
+                                or result.get("image_changed")
+                            )
+                        )
+                        messages.success(
+                            request,
+                            f"{len(products)} produits ont ete traites en local "
+                            f"({updates} mises a jour).",
+                        )
+                        if pending:
+                            messages.info(
+                                request,
+                                f"{pending} produits etaient deja en file d'attente.",
+                            )
+                    else:
+                        if queued:
+                            messages.success(
+                                request,
+                                f"{queued} produits ont ete envoyes en file d'attente.",
+                            )
+                        else:
+                            messages.info(
+                                request,
+                                "Aucun produit n'a ete envoye en file d'attente.",
+                            )
+                        if pending:
+                            messages.info(
+                                request,
+                                f"{pending} produits etaient deja en file d'attente.",
+                            )
+                bulk_form = ProductAssetBotBulkForm()
+        elif action == "datasheet_fetch":
+            datasheet_form = HikvisionDatasheetForm(request.POST)
+            if datasheet_form.is_valid():
+                if not datasheet_configured:
+                    messages.warning(
+                        request,
+                        "Google CSE n'est pas configure. Renseignez GOOGLE_CSE_API_KEY et GOOGLE_CSE_CX.",
+                    )
+                else:
+                    try:
+                        result = fetch_hikvision_datasheets(
+                            brand_name="HIKVISION",
+                            limit=datasheet_form.cleaned_data["limit"],
+                            prefer_lang=datasheet_form.cleaned_data["prefer_lang"],
+                            force=datasheet_form.cleaned_data["force"],
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        messages.error(request, f"Erreur lors du telechargement: {exc}")
+                    else:
+                        datasheet_result = result
+                        if result.products == 0:
+                            messages.info(request, "Aucun produit Hikvision a traiter.")
+                        elif result.failed:
+                            messages.warning(
+                                request,
+                                f"Fiches techniques: {result.updated} ok, {result.failed} en erreur.",
+                            )
+                        else:
+                            messages.success(
+                                request,
+                                f"Fiches techniques: {result.updated} telechargees, {result.skipped} ignorees.",
+                            )
+                datasheet_form = HikvisionDatasheetForm()
+        elif action == "auto_category":
+            category_form = CategoryAutoAssignForm(request.POST)
+            if category_form.is_valid():
+                use_ai = bool(category_form.cleaned_data.get("use_ai"))
+                if use_ai and not category_ai_available:
+                    use_ai = False
+                    messages.warning(
+                        request,
+                        "Mistral n'est pas configure, attribution IA ignoree.",
+                    )
+                rules_path = (
+                    category_form.cleaned_data.get("rules_path") or "category_rules.json"
+                )
+                result = run_auto_assign_categories(
+                    rules_path=Path(rules_path).expanduser(),
+                    apply_all=category_form.cleaned_data.get("apply_all"),
+                    limit=category_form.cleaned_data.get("limit"),
+                    dry_run=category_form.cleaned_data.get("dry_run"),
+                    max_details=200,
+                    use_ai=use_ai,
+                )
+                category_result = result
+                category_evaluations = result.get("evaluations") or []
+                category_evaluations_truncated = result.get(
+                    "evaluations_truncated", False
+                ) or (result.get("evaluated", 0) > len(category_evaluations))
+                category_mode_label = (
+                    "Simulation"
+                    if category_form.cleaned_data.get("dry_run")
+                    else "Traitement"
+                )
+                category_is_dry_run = bool(category_form.cleaned_data.get("dry_run"))
+                category_scope_label = (
+                    "Tous les produits"
+                    if category_form.cleaned_data.get("apply_all")
+                    else "Produits non classes"
+                )
+                category_limit_value = category_form.cleaned_data.get("limit")
+                if result.get("empty"):
+                    messages.info(request, "Aucun produit non classe a traiter.")
+                else:
+                    messages.success(
+                        request,
+                        f"{category_mode_label} categories: {result['updated']} maj, {result['skipped']} inchanges, "
+                        f"{result['unmatched']} sans correspondance.",
+                    )
+                    if category_is_dry_run and result.get("evaluated"):
+                        messages.info(
+                            request,
+                            "Details affiches ci-dessous.",
+                        )
+        elif action == "filter":
+            selection_form.is_valid()
+        elif action == "select":
+            selection_form = ProductAssetBotSelectionForm(
+                request.POST,
+                queryset=selection_queryset,
+            )
+            if selection_form.is_valid():
+                products = list(selection_form.cleaned_data["products"])
+                _run_selection(
+                    products,
+                    force_description=selection_form.cleaned_data["force_description"],
+                    force_image=selection_form.cleaned_data["force_image"],
+                    empty_message="Aucun produit selectionne.",
+                )
+        elif action == "select_filtered":
+            products = list(selection_queryset)
+            _run_selection(
+                products,
+                force_description=selection_filters["force_description"],
+                force_image=selection_filters["force_image"],
+                empty_message="Aucun produit ne correspond aux filtres.",
+            )
+
+    stats = {
+        "total_products": Product.objects.count(),
+        "missing_description": missing_description_qs.count(),
+        "missing_image": missing_image_qs.count(),
+        "missing_both": missing_both_qs.count(),
+    }
+    recent_jobs = list(
+        ProductAssetJob.objects.select_related("product")
+        .order_by("-created_at")
+        [:10]
+    )
+    queue_pending = ProductAssetJob.objects.filter(
+        status__in=(ProductAssetJob.Status.QUEUED, ProductAssetJob.Status.RUNNING)
+    ).count()
+    context = {
+        "manual_form": manual_form,
+        "bulk_form": bulk_form,
+        "datasheet_form": datasheet_form,
+        "datasheet_result": datasheet_result,
+        "datasheet_configured": datasheet_configured,
+        "category_form": category_form,
+        "category_result": category_result,
+        "category_mode_label": category_mode_label,
+        "category_scope_label": category_scope_label,
+        "category_limit_value": category_limit_value,
+        "category_is_dry_run": category_is_dry_run,
+        "category_evaluations": category_evaluations,
+        "category_evaluations_truncated": category_evaluations_truncated,
+        "category_ai_available": category_ai_available,
+        "selection_form": selection_form,
+        "selection_total": selection_total,
+        "selection_displayed": selection_displayed,
+        "selection_products": selection_products,
+        "stats": stats,
+        "missing_description_products": list(missing_description_qs.order_by("name")[:5]),
+        "missing_image_products": list(missing_image_qs.order_by("name")[:5]),
+        "datasheet_products": list(
+            datasheet_qs.order_by("-datasheet_fetched_at", "name")[:5]
+        ),
+        "datasheet_downloaded_count": datasheet_qs.count(),
+        "recent_jobs": recent_jobs,
+        "queue_pending": queue_pending,
+    }
+    context.update(site_context)
+    return render(request, "inventory/ia.html", context)
+
+
 def import_products(request):
     site_context = _site_context(request)
     active_site = site_context["active_site"]
@@ -2396,6 +2902,12 @@ def products_feed(request):
                 else None,
                 "stock_quantity": product.current_stock,
                 "image_url": product.image.url if product.image else None,
+                "datasheet_url": product.datasheet_url,
+                "datasheet_pdf_url": product.datasheet_pdf.url if product.datasheet_pdf else None,
+                "datasheet_fetched_at": product.datasheet_fetched_at.isoformat()
+                if product.datasheet_fetched_at
+                else None,
+                "is_online": product.is_online,
                 "updated_at": product.updated_at.isoformat(),
             }
         )
