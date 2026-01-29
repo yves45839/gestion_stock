@@ -2564,6 +2564,49 @@ def product_asset_bot(request):
                                 f"{pending} produits etaient deja en file d'attente.",
                             )
                 bulk_form = ProductAssetBotBulkForm()
+        elif action == "generate_image":
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            dispatch_info = _dispatch_product_asset_bot(
+                product,
+                force_description=False,
+                force_image=True,
+                mode=ProductAssetJob.Mode.SINGLE,
+                inline_mode=inline_mode,
+            )
+            status = dispatch_info.get("status")
+            if status == "pending":
+                messages.info(
+                    request,
+                    f"{product.sku} est deja en file d'attente.",
+                )
+            elif status == "inline":
+                result = dispatch_info.get("result")
+                level, message_text = _inline_result_message(result, product)
+                if level and message_text:
+                    getattr(messages, level)(request, message_text)
+            else:
+                messages.success(
+                    request,
+                    f"Le bot IA a ete lance pour l'image de {product.sku}.",
+                )
+        elif action == "update_category":
+            product_id = request.POST.get("product_id")
+            category_id = request.POST.get("category_id")
+            product = get_object_or_404(Product, pk=product_id)
+            category = get_object_or_404(Category, pk=category_id)
+            if product.category_id != category.id:
+                product.category = category
+                product.save(update_fields=["category"])
+                messages.success(
+                    request,
+                    f"Categorie mise a jour pour {product.sku}.",
+                )
+            else:
+                messages.info(
+                    request,
+                    f"{product.sku} est deja dans cette categorie.",
+                )
         elif action == "datasheet_fetch":
             datasheet_form = HikvisionDatasheetForm(request.POST)
             if datasheet_form.is_valid():
@@ -2705,6 +2748,10 @@ def product_asset_bot(request):
         "selection_total": selection_total,
         "selection_displayed": selection_displayed,
         "selection_products": selection_products,
+        "catalog_products": list(
+            Product.objects.select_related("category").order_by("name")
+        ),
+        "catalog_categories": list(Category.objects.order_by("name")),
         "stats": stats,
         "missing_description_products": list(missing_description_qs.order_by("name")[:5]),
         "missing_image_products": list(missing_image_qs.order_by("name")[:5]),
