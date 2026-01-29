@@ -181,7 +181,15 @@ def _get_return_url(request, default_name):
     )
 
 
-def _dispatch_product_asset_bot(product, force_description, force_image, mode, inline_mode):
+def _dispatch_product_asset_bot(
+    product,
+    force_description,
+    force_image,
+    mode,
+    inline_mode,
+    *,
+    preview_image: bool = False,
+):
     job, created = reserve_product_asset_job(
         product,
         mode=mode,
@@ -190,12 +198,15 @@ def _dispatch_product_asset_bot(product, force_description, force_image, mode, i
     )
     if not created:
         return {"status": "pending", "job": job}
+    if preview_image:
+        inline_mode = True
     if inline_mode:
         result = run_product_asset_bot(
             product.pk,
             force_description=force_description,
             force_image=force_image,
             job_id=job.pk,
+            preview_image=preview_image,
         )
         return {"status": "inline", "result": result, "job": job}
     enqueue_product_asset_job(
@@ -2573,6 +2584,7 @@ def product_asset_bot(request):
                 force_image=True,
                 mode=ProductAssetJob.Mode.SINGLE,
                 inline_mode=inline_mode,
+                preview_image=True,
             )
             status = dispatch_info.get("status")
             if status == "pending":
@@ -2582,13 +2594,57 @@ def product_asset_bot(request):
                 )
             elif status == "inline":
                 result = dispatch_info.get("result")
-                level, message_text = _inline_result_message(result, product)
-                if level and message_text:
-                    getattr(messages, level)(request, message_text)
+                if result and result.get("image_preview"):
+                    if result.get("image_changed"):
+                        messages.success(
+                            request,
+                            f"Aperçu IA généré pour {product.sku}. Validez pour remplacer l'image.",
+                        )
+                    else:
+                        messages.info(
+                            request,
+                            f"Aucun aperçu n'a été généré pour {product.sku}.",
+                        )
+                else:
+                    level, message_text = _inline_result_message(result, product)
+                    if level and message_text:
+                        getattr(messages, level)(request, message_text)
             else:
                 messages.success(
                     request,
                     f"Le bot IA a ete lance pour l'image de {product.sku}.",
+                )
+        elif action == "validate_image":
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            if product.pending_image:
+                product.image = product.pending_image
+                product.pending_image = None
+                product.save(update_fields=["image", "pending_image"])
+                messages.success(
+                    request,
+                    f"Aperçu validé et image remplacée pour {product.sku}.",
+                )
+            else:
+                messages.info(
+                    request,
+                    f"Aucun aperçu à valider pour {product.sku}.",
+                )
+        elif action == "discard_image":
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            if product.pending_image:
+                product.pending_image.delete(save=False)
+                product.pending_image = None
+                product.save(update_fields=["pending_image"])
+                messages.info(
+                    request,
+                    f"Aperçu supprimé pour {product.sku}.",
+                )
+            else:
+                messages.info(
+                    request,
+                    f"Aucun aperçu à supprimer pour {product.sku}.",
                 )
         elif action == "update_category":
             product_id = request.POST.get("product_id")

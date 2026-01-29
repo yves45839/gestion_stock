@@ -233,6 +233,12 @@ class Product(VersionedModelMixin, TimeStampedModel):
         blank=True,
         null=True,
     )
+    pending_image = models.FileField(
+        "Aperçu image IA",
+        upload_to="products/images/pending",
+        blank=True,
+        null=True,
+    )
     is_online = models.BooleanField(
         "Visible en ligne",
         default=True,
