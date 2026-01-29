@@ -45,6 +45,68 @@
     </div>
 </section>
 
+<section class="surface reveal" data-delay="180">
+    <div class="surface-header">
+        <div>
+            <p class="eyebrow">Management IA</p>
+            <h2 class="surface-title">Liste exhaustive des produits</h2>
+        </div>
+        <span class="pill">{{ stats.total_products }} produits</span>
+    </div>
+    <div style="border:1px solid var(--border); border-radius:16px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:140px 1.4fr 200px 220px 260px; gap:0.75rem; padding:0.6rem 0.8rem; background:rgba(255,255,255,0.03); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.04em;">
+            <span>Référence</span>
+            <span>Nom</span>
+            <span>Image</span>
+            <span>Fiche technique</span>
+            <span>Catégorie</span>
+        </div>
+        <div style="max-height:560px; overflow:auto;">
+            {% for product in catalog_products %}
+                <div style="display:grid; grid-template-columns:140px 1.4fr 200px 220px 260px; gap:0.75rem; padding:0.7rem 0.8rem; border-top:1px solid var(--border); align-items:center;">
+                    <div>
+                        <strong>{{ product.sku }}</strong>
+                    </div>
+                    <div class="muted-text">{{ product.name }}</div>
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        {% if product.image %}
+                            <img src="{{ product.image.url }}" alt="{{ product.name }}" style="width:44px; height:44px; object-fit:cover; border-radius:10px; border:1px solid var(--border);">
+                        {% else %}
+                            <div style="width:44px; height:44px; border-radius:10px; border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:0.75rem;" class="muted-text">N/A</div>
+                        {% endif %}
+                        <form method="post" style="margin:0;">
+                            {% csrf_token %}
+                            <input type="hidden" name="product_id" value="{{ product.id }}">
+                            <button type="submit" name="bot_action" value="generate_image" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
+                        </form>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+                        {% if product.datasheet_pdf %}
+                            <a class="btn ghost" href="{{ product.datasheet_pdf.url }}" target="_blank" rel="noopener" download style="padding:0.35rem 0.6rem; font-size:0.85rem;">Télécharger</a>
+                        {% elif product.datasheet_url %}
+                            <a class="btn ghost" href="{{ product.datasheet_url }}" target="_blank" rel="noopener" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Source</a>
+                        {% else %}
+                            <button type="button" class="btn ghost" disabled style="padding:0.35rem 0.6rem; font-size:0.85rem;">Télécharger</button>
+                        {% endif %}
+                    </div>
+                    <form method="post" style="display:flex; gap:0.5rem; align-items:center; margin:0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="product_id" value="{{ product.id }}">
+                        <select name="category_id" class="form-control" style="min-width:150px;">
+                            {% for category in catalog_categories %}
+                                <option value="{{ category.id }}"{% if category.id == product.category_id %} selected{% endif %}>
+                                    {{ category.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" name="bot_action" value="update_category" class="btn secondary" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Mettre à jour</button>
+                    </form>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
 <section class="surface surface-muted reveal" data-delay="200">
     <div class="surface-header">
         <div>
