@@ -279,9 +279,16 @@ class ProductAssetBot:
             usage_path=usage_path,
         )
 
-    def ensure_assets(self, product, force_description=False, force_image=False) -> tuple[bool, bool]:
+    def ensure_assets(
+        self,
+        product,
+        force_description: bool = False,
+        force_image: bool = False,
+        *,
+        image_field: str = "image",
+    ) -> tuple[bool, bool]:
         description_changed = self.ensure_description(product, force_description)
-        image_changed = self.ensure_image(product, force_image)
+        image_changed = self.ensure_image(product, force_image, image_field=image_field)
         return description_changed, image_changed
 
     def ensure_description(self, product, force: bool = False) -> bool:
@@ -299,14 +306,15 @@ class ProductAssetBot:
             return True
         return False
 
-    def ensure_image(self, product, force: bool = False) -> bool:
+    def ensure_image(self, product, force: bool = False, *, image_field: str = "image") -> bool:
         self.last_image_log = None
-        if product.image and not force:
+        field = getattr(product, image_field)
+        if field and not force:
             self._set_image_log("skip", "already has image")
             return False
         local_path = self._find_local_image(product)
         if local_path:
-            applied = self._apply_local_image(product, local_path)
+            applied = self._apply_local_image(product, local_path, image_field=image_field)
             if applied:
                 self._set_image_log("ok", f"local file {local_path.name}")
             else:
@@ -347,7 +355,7 @@ class ProductAssetBot:
             source_name=self._image_source_name(image_url),
             extension=self._image_extension(response, image_url),
         )
-        product.image.save(filename, ContentFile(response.content), save=False)
+        field.save(filename, ContentFile(response.content), save=False)
         source_label = image_source or "url"
         self._set_image_log("ok", f"downloaded from {source_label}")
         return True
@@ -552,18 +560,19 @@ class ProductAssetBot:
         cleaned = re.sub(r"[^0-9A-Za-z._-]+", "-", str(value)).strip("-_")
         return cleaned
 
-    def _apply_local_image(self, product, path: Path) -> bool:
+    def _apply_local_image(self, product, path: Path, *, image_field: str = "image") -> bool:
+        field = getattr(product, image_field)
         media_root = Path(settings.MEDIA_ROOT)
         try:
             relative = path.relative_to(media_root)
         except ValueError:
             with path.open("rb") as handle:
-                product.image.save(path.name, File(handle), save=False)
+                field.save(path.name, File(handle), save=False)
             return True
         relative_name = str(relative).replace("\\", "/")
-        if str(product.image) == relative_name:
+        if str(field) == relative_name:
             return False
-        product.image.name = relative_name
+        field.name = relative_name
         return True
 
     def _set_image_log(self, status: str, detail: str) -> None:
