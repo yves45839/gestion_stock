@@ -2301,7 +2301,12 @@ def product_asset_bot(request):
     if not request.user.is_staff:
         raise PermissionDenied
     site_context = _site_context(request)
-    manual_form = ProductAssetBotForm()
+
+    def _configure_manual_form(form):
+        form.fields["product"].queryset = Product.objects.only("id", "sku", "name").order_by("name")
+        return form
+
+    manual_form = _configure_manual_form(ProductAssetBotForm())
     bulk_form = ProductAssetBotBulkForm()
     datasheet_form = HikvisionDatasheetForm()
     category_form = CategoryAutoAssignForm()
@@ -2318,9 +2323,30 @@ def product_asset_bot(request):
         getattr(settings, "GOOGLE_CSE_API_KEY", None) and getattr(settings, "GOOGLE_CSE_CX", None)
     )
     inline_mode = settings.PRODUCT_BOT_INLINE_RUN
+    product_stats = Product.objects.aggregate(
+        total_products=Count("id"),
+        missing_description=Count(
+            "id",
+            filter=Q(description="") | Q(description__isnull=True),
+        ),
+        missing_image=Count(
+            "id",
+            filter=Q(image="") | Q(image__isnull=True),
+        ),
+        missing_both=Count(
+            "id",
+            filter=(
+                (Q(description="") | Q(description__isnull=True))
+                & (Q(image="") | Q(image__isnull=True))
+            ),
+        ),
+        datasheet_downloaded_count=Count(
+            "id",
+            filter=Q(datasheet_pdf__isnull=False) & ~Q(datasheet_pdf=""),
+        ),
+    )
     missing_description_qs = Product.objects.filter(Q(description="") | Q(description__isnull=True))
     missing_image_qs = Product.objects.filter(Q(image="") | Q(image__isnull=True))
-    missing_both_qs = missing_description_qs.filter(Q(image="") | Q(image__isnull=True))
     datasheet_qs = Product.objects.filter(
         Q(datasheet_pdf__isnull=False) & ~Q(datasheet_pdf="")
     )
@@ -2375,7 +2401,7 @@ def product_asset_bot(request):
             selection_payload, "force_image", False
         )
 
-    selection_queryset = Product.objects.order_by("name")
+    selection_queryset = Product.objects.only("id", "sku", "name", "description", "image").order_by("name")
     selection_conditions = Q()
     has_condition = False
     if selection_filters["filter_missing_description"]:
@@ -2504,7 +2530,7 @@ def product_asset_bot(request):
                         request,
                         f"Le bot IA a ete mis en file d'attente pour {product.sku} ({product.name}).",
                     )
-                manual_form = ProductAssetBotForm()
+                manual_form = _configure_manual_form(ProductAssetBotForm())
         elif action == "batch":
             bulk_form = ProductAssetBotBulkForm(request.POST)
             if bulk_form.is_valid():
@@ -2772,10 +2798,10 @@ def product_asset_bot(request):
             )
 
     stats = {
-        "total_products": Product.objects.count(),
-        "missing_description": missing_description_qs.count(),
-        "missing_image": missing_image_qs.count(),
-        "missing_both": missing_both_qs.count(),
+        "total_products": product_stats["total_products"],
+        "missing_description": product_stats["missing_description"],
+        "missing_image": product_stats["missing_image"],
+        "missing_both": product_stats["missing_both"],
     }
     recent_jobs = list(
         ProductAssetJob.objects.select_related("product")
@@ -2805,16 +2831,35 @@ def product_asset_bot(request):
         "selection_displayed": selection_displayed,
         "selection_products": selection_products,
         "catalog_products": list(
-            Product.objects.select_related("category").order_by("name")
+            Product.objects.only(
+                "id",
+                "sku",
+                "name",
+                "image",
+                "pending_image",
+                "datasheet_pdf",
+                "datasheet_url",
+                "category_id",
+            ).order_by("name")
         ),
-        "catalog_categories": list(Category.objects.order_by("name")),
+        "catalog_categories": list(Category.objects.only("id", "name").order_by("name")),
         "stats": stats,
-        "missing_description_products": list(missing_description_qs.order_by("name")[:5]),
-        "missing_image_products": list(missing_image_qs.order_by("name")[:5]),
-        "datasheet_products": list(
-            datasheet_qs.order_by("-datasheet_fetched_at", "name")[:5]
+        "missing_description_products": list(
+            missing_description_qs.only("id", "sku", "name").order_by("name")[:5]
         ),
-        "datasheet_downloaded_count": datasheet_qs.count(),
+        "missing_image_products": list(
+            missing_image_qs.only("id", "sku", "name").order_by("name")[:5]
+        ),
+        "datasheet_products": list(
+            datasheet_qs.only(
+                "id",
+                "sku",
+                "name",
+                "datasheet_pdf",
+                "datasheet_url",
+            ).order_by("-datasheet_fetched_at", "name")[:5]
+        ),
+        "datasheet_downloaded_count": product_stats["datasheet_downloaded_count"],
         "recent_jobs": recent_jobs,
         "queue_pending": queue_pending,
     }
