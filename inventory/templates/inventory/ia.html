@@ -68,17 +68,35 @@
                         <strong>{{ product.sku }}</strong>
                     </div>
                     <div class="muted-text">{{ product.name }}</div>
-                    <div style="display:flex; align-items:center; gap:0.5rem;">
-                        {% if product.image %}
-                            <img src="{{ product.image.url }}" alt="{{ product.name }}" style="width:44px; height:44px; object-fit:cover; border-radius:10px; border:1px solid var(--border);">
-                        {% else %}
-                            <div style="width:44px; height:44px; border-radius:10px; border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:0.75rem;" class="muted-text">N/A</div>
+                    <div style="display:flex; flex-direction:column; align-items:flex-start; gap:0.45rem;">
+                        <div style="display:flex; align-items:center; gap:0.5rem;">
+                            {% if product.image %}
+                                <img src="{{ product.image.url }}" alt="{{ product.name }}" style="width:44px; height:44px; object-fit:cover; border-radius:10px; border:1px solid var(--border);">
+                            {% else %}
+                                <div style="width:44px; height:44px; border-radius:10px; border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:0.75rem;" class="muted-text">N/A</div>
+                            {% endif %}
+                            <form method="post" style="margin:0;">
+                                {% csrf_token %}
+                                <input type="hidden" name="product_id" value="{{ product.id }}">
+                                <button type="submit" name="bot_action" value="generate_image" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
+                            </form>
+                        </div>
+                        {% if product.pending_image %}
+                            <div style="display:flex; align-items:center; gap:0.5rem;">
+                                <img src="{{ product.pending_image.url }}" alt="Aperçu IA {{ product.name }}" style="width:44px; height:44px; object-fit:cover; border-radius:10px; border:1px solid var(--border); box-shadow:0 0 0 2px rgba(255,255,255,0.08);">
+                                <span class="pill">aperçu</span>
+                                <form method="post" style="margin:0;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                                    <button type="submit" name="bot_action" value="validate_image" class="btn secondary" style="padding:0.3rem 0.55rem; font-size:0.8rem;">Valider</button>
+                                </form>
+                                <form method="post" style="margin:0;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                                    <button type="submit" name="bot_action" value="discard_image" class="btn ghost" style="padding:0.3rem 0.55rem; font-size:0.8rem;">Refuser</button>
+                                </form>
+                            </div>
                         {% endif %}
-                        <form method="post" style="margin:0;">
-                            {% csrf_token %}
-                            <input type="hidden" name="product_id" value="{{ product.id }}">
-                            <button type="submit" name="bot_action" value="generate_image" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
-                        </form>
                     </div>
                     <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
                         {% if product.datasheet_pdf %}

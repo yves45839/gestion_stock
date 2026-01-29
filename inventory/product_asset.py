@@ -115,6 +115,7 @@ def run_product_asset_bot(
     force_image: bool = False,
     *,
     job_id: int | None = None,
+    preview_image: bool = False,
 ) -> dict[str, bool | int | str]:
     job = (
         ProductAssetJob.objects.filter(pk=job_id).first() if job_id is not None else None
@@ -142,8 +143,12 @@ def run_product_asset_bot(
         _start_job(job)
 
     bot = ProductAssetBot()
+    image_field = "pending_image" if preview_image else "image"
     description_changed, image_changed = bot.ensure_assets(
-        product, force_description=force_description, force_image=force_image
+        product,
+        force_description=force_description,
+        force_image=force_image,
+        image_field=image_field,
     )
     image_log = getattr(bot, "last_image_log", None)
     if image_log:
@@ -156,7 +161,7 @@ def run_product_asset_bot(
         if description_changed:
             update_fields.append("description")
         if image_changed:
-            update_fields.append("image")
+            update_fields.append(image_field)
         product.save(update_fields=update_fields)
         logger.info(
             "Product asset bot updated %s (desc=%s image=%s)",
@@ -190,4 +195,5 @@ def run_product_asset_bot(
         "description_changed": description_changed,
         "image_changed": image_changed,
         "job_id": job.pk if job else None,
+        "image_preview": preview_image,
     }
