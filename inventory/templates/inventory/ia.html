@@ -75,8 +75,19 @@
                 {% endfor %}
             </select>
         </div>
+        <div class="field" style="gap:0.45rem;">
+            <span class="muted-text" style="font-weight:600;">Filtres rapides</span>
+            <label style="display:flex; align-items:center; gap:0.5rem;">
+                <input type="checkbox" name="catalog_missing_description" value="1"{% if catalog_missing_description %} checked{% endif %}>
+                Sans description
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5rem;">
+                <input type="checkbox" name="catalog_missing_image" value="1"{% if catalog_missing_image %} checked{% endif %}>
+                Sans image
+            </label>
+        </div>
         <button type="submit" class="btn secondary">Filtrer</button>
-        {% if catalog_query %}
+        {% if catalog_query or catalog_missing_description or catalog_missing_image %}
             <a class="btn ghost" href="{% url 'inventory:product_bot' %}">Réinitialiser</a>
         {% endif %}
     </form>
@@ -84,6 +95,12 @@
         <span class="muted-text">Filtres actifs :</span>
         {% if catalog_query %}
             <span class="pill">Recherche: "{{ catalog_query }}"</span>
+        {% endif %}
+        {% if catalog_missing_description %}
+            <span class="pill">Sans description</span>
+        {% endif %}
+        {% if catalog_missing_image %}
+            <span class="pill">Sans image</span>
         {% endif %}
         <span class="pill">{{ catalog_page_size }} / page</span>
     </div>
@@ -99,7 +116,7 @@
         </div>
         <div class="ia-table-scroll">
             {% for product in catalog_products %}
-                <div class="ia-table-row">
+                <div class="ia-table-row" id="product-{{ product.id }}" data-product-row="{{ product.id }}">
                     <div class="ia-table-cell" data-label="Référence">
                         <strong>{{ product.sku }}</strong>
                     </div>
@@ -126,12 +143,12 @@
                                 <div class="ia-image-review">
                                     <img src="{{ product.pending_image.url }}" alt="Aperçu IA {{ product.name }}" class="ia-thumb pending" loading="lazy" decoding="async">
                                     <span class="pill">aperçu</span>
-                                    <form method="post" style="margin:0;">
+                                    <form method="post" style="margin:0;" data-focus-form>
                                         {% csrf_token %}
                                         <input type="hidden" name="product_id" value="{{ product.id }}">
                                         <button type="submit" name="bot_action" value="validate_image" class="btn secondary" style="padding:0.3rem 0.55rem; font-size:0.8rem;">Valider</button>
                                     </form>
-                                    <form method="post" style="margin:0;">
+                                    <form method="post" style="margin:0;" data-focus-form>
                                         {% csrf_token %}
                                         <input type="hidden" name="product_id" value="{{ product.id }}">
                                         <button type="submit" name="bot_action" value="discard_image" class="btn ghost" style="padding:0.3rem 0.55rem; font-size:0.8rem;">Refuser</button>
@@ -144,12 +161,12 @@
                         <div class="ia-action-group">
                             <span class="ia-action-label">Description</span>
                             <div class="ia-action-row">
-                                <form method="post" style="margin:0;">
+                                <form method="post" style="margin:0;" data-focus-form>
                                     {% csrf_token %}
                                     <input type="hidden" name="product_id" value="{{ product.id }}">
                                     <button type="submit" name="bot_action" value="generate_description" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
                                 </form>
-                                <form method="post" style="margin:0;">
+                                <form method="post" style="margin:0;" data-focus-form>
                                     {% csrf_token %}
                                     <input type="hidden" name="product_id" value="{{ product.id }}">
                                     <button type="submit" name="bot_action" value="force_description" class="btn secondary" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Remplacer</button>
@@ -159,7 +176,7 @@
                         <div class="ia-action-group">
                             <span class="ia-action-label">Image</span>
                             <div class="ia-action-row">
-                                <form method="post" style="margin:0;">
+                                <form method="post" style="margin:0;" data-focus-form>
                                     {% csrf_token %}
                                     <input type="hidden" name="product_id" value="{{ product.id }}">
                                     <button type="submit" name="bot_action" value="generate_image" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
@@ -176,7 +193,7 @@
                             <button type="button" class="btn ghost" disabled style="padding:0.35rem 0.6rem; font-size:0.85rem;">Télécharger</button>
                         {% endif %}
                     </div>
-                    <form method="post" class="ia-table-cell" data-label="Catégorie" style="gap:0.5rem; margin:0;">
+                    <form method="post" class="ia-table-cell" data-label="Catégorie" style="gap:0.5rem; margin:0;" data-focus-form>
                         {% csrf_token %}
                         <input type="hidden" name="product_id" value="{{ product.id }}">
                         <select name="category_id" class="form-control" style="min-width:150px;">
@@ -213,6 +230,30 @@
             {% endif %}
         </div>
     {% endif %}
+    <script>
+        (() => {
+            const key = "iaFocusProduct";
+            document.querySelectorAll("[data-focus-form]").forEach((form) => {
+                form.addEventListener("submit", () => {
+                    const input = form.querySelector('input[name="product_id"]');
+                    if (input && input.value) {
+                        sessionStorage.setItem(key, input.value);
+                    }
+                });
+            });
+            const focusId = sessionStorage.getItem(key);
+            if (!focusId) return;
+            const target = document.getElementById(`product-${focusId}`);
+            if (target) {
+                target.classList.add("ia-row-focus");
+                target.scrollIntoView({ block: "center", behavior: "smooth" });
+                window.setTimeout(() => {
+                    target.classList.remove("ia-row-focus");
+                }, 2200);
+            }
+            sessionStorage.removeItem(key);
+        })();
+    </script>
 </section>
 
 <section class="surface reveal" data-delay="220">
@@ -290,168 +331,6 @@
             <button type="submit" name="bot_action" value="batch" class="btn secondary">Envoyer le lot</button>
         </form>
     </div>
-</section>
-
-<section class="surface reveal" data-delay="280">
-    <div class="surface-header">
-        <div>
-            <p class="eyebrow">Selection ciblee</p>
-            <h2 class="surface-title">Filtrer et selectionner</h2>
-        </div>
-        <span class="pill">IA</span>
-    </div>
-    <p class="muted-text" style="margin:0 0 0.75rem;">
-        Filtre les produits sans image ou sans description, selectionne-les,
-        puis lance la generation.
-    </p>
-    <form method="post" class="form-grid" novalidate>
-        {% csrf_token %}
-        <div class="field">
-            {{ selection_form.query.label_tag }}
-            {{ selection_form.query }}
-            {% for error in selection_form.query.errors %}
-                <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
-            {% endfor %}
-        </div>
-        <div class="field">
-            {{ selection_form.limit.label_tag }}
-            {{ selection_form.limit }}
-            {% for error in selection_form.limit.errors %}
-                <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
-            {% endfor %}
-        </div>
-        <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
-            <label style="display:flex; align-items:center; gap:0.5rem;">
-                {{ selection_form.filter_missing_description }}
-                {{ selection_form.filter_missing_description.label }}
-            </label>
-            <label style="display:flex; align-items:center; gap:0.5rem;">
-                {{ selection_form.filter_missing_image }}
-                {{ selection_form.filter_missing_image.label }}
-            </label>
-        </div>
-        <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
-            <label style="display:flex; align-items:center; gap:0.5rem;">
-                {{ selection_form.force_description }}
-                {{ selection_form.force_description.label }}
-            </label>
-            <label style="display:flex; align-items:center; gap:0.5rem;">
-                {{ selection_form.force_image }}
-                {{ selection_form.force_image.label }}
-            </label>
-        </div>
-        <div class="field" style="grid-column:1/-1; display:flex; gap:0.6rem; flex-wrap:wrap;">
-            <button type="submit" name="bot_action" value="filter" class="btn secondary">Filtrer la liste</button>
-            <button type="submit" name="bot_action" value="select" class="btn">Lancer la selection</button>
-            <button type="submit" name="bot_action" value="select_filtered" class="btn ghost">Lancer sur filtres</button>
-        </div>
-        {% if selection_form.non_field_errors %}
-            {% for error in selection_form.non_field_errors %}
-                <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
-            {% endfor %}
-        {% endif %}
-    </form>
-    <div data-selection-grid style="margin-top:0.75rem;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.35rem;">
-            <p class="muted-text" style="margin:0;">
-                {{ selection_total }} produits trouves{% if selection_displayed != selection_total %} (affichage {{ selection_displayed }}){% endif %}
-            </p>
-            <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
-                <span class="pill" data-selected-count>0 selectionnes</span>
-                <button type="button" class="btn ghost" data-select-all style="padding:0.35rem 0.7rem; font-size:0.9rem;">Tout cocher</button>
-                <button type="button" class="btn ghost" data-select-none style="padding:0.35rem 0.7rem; font-size:0.9rem;">Tout decocher</button>
-                <button type="button" class="btn ghost" data-select-missing-image style="padding:0.35rem 0.7rem; font-size:0.9rem;">Cocher sans image</button>
-                <button type="button" class="btn ghost" data-select-missing-description style="padding:0.35rem 0.7rem; font-size:0.9rem;">Cocher sans desc</button>
-            </div>
-        </div>
-        {% if selection_displayed %}
-            {% with selected_ids=selection_form.products.value %}
-            <div style="border:1px solid var(--border); border-radius:14px; padding:0.6rem; max-height:360px; overflow:auto;">
-                <div style="display:grid; gap:0.5rem;">
-                    {% for item in selection_products %}
-                        <label style="display:grid; grid-template-columns:auto 1fr auto; gap:0.75rem; align-items:center; padding:0.55rem 0.65rem; border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,0.02);">
-                            <input type="checkbox" name="products" value="{{ item.id }}"
-                                   data-missing-image="{% if not item.has_image %}1{% else %}0{% endif %}"
-                                   data-missing-description="{% if not item.has_description %}1{% else %}0{% endif %}"
-                                   {% if selected_ids and item.id|stringformat:"s" in selected_ids %} checked{% endif %}>
-                            <div>
-                                <strong>{{ item.sku }}</strong>
-                                <div class="muted-text" style="margin-top:0.15rem;">{{ item.name }}</div>
-                            </div>
-                            <div style="display:flex; gap:0.35rem; flex-wrap:wrap; justify-content:flex-end;">
-                                {% if not item.has_description %}
-                                    <span class="pill">sans desc</span>
-                                {% endif %}
-                                {% if not item.has_image %}
-                                    <span class="pill">sans image</span>
-                                {% endif %}
-                                {% if item.has_description and item.has_image %}
-                                    <span class="pill">ok</span>
-                                {% endif %}
-                            </div>
-                        </label>
-                    {% endfor %}
-                </div>
-                {% for error in selection_form.products.errors %}
-                    <p class="muted-text" style="color: var(--danger); margin:0.35rem 0 0;">{{ error }}</p>
-                {% endfor %}
-            </div>
-            {% endwith %}
-        {% else %}
-            <p class="muted-text" style="margin:0;">Aucun produit ne correspond aux filtres.</p>
-        {% endif %}
-    </div>
-    <script>
-        (() => {
-            const root = document.querySelector("[data-selection-grid]");
-            if (!root) return;
-            const getBoxes = () => Array.from(root.querySelectorAll('input[name="products"]'));
-            const selectAll = root.querySelector("[data-select-all]");
-            const selectNone = root.querySelector("[data-select-none]");
-            const selectMissingImage = root.querySelector("[data-select-missing-image]");
-            const selectMissingDescription = root.querySelector("[data-select-missing-description]");
-            const countEl = root.querySelector("[data-selected-count]");
-            const updateCount = () => {
-                if (!countEl) return;
-                const count = getBoxes().filter((box) => box.checked).length;
-                countEl.textContent = `${count} selectionnes`;
-            };
-            updateCount();
-            if (selectAll) {
-                selectAll.addEventListener("click", () => {
-                    getBoxes().forEach((box) => { box.checked = true; });
-                    updateCount();
-                });
-            }
-            if (selectNone) {
-                selectNone.addEventListener("click", () => {
-                    getBoxes().forEach((box) => { box.checked = false; });
-                    updateCount();
-                });
-            }
-            if (selectMissingImage) {
-                selectMissingImage.addEventListener("click", () => {
-                    getBoxes().forEach((box) => {
-                        box.checked = box.dataset.missingImage === "1";
-                    });
-                    updateCount();
-                });
-            }
-            if (selectMissingDescription) {
-                selectMissingDescription.addEventListener("click", () => {
-                    getBoxes().forEach((box) => {
-                        box.checked = box.dataset.missingDescription === "1";
-                    });
-                    updateCount();
-                });
-            }
-            root.addEventListener("change", (event) => {
-                if (event.target && event.target.matches('input[name="products"]')) {
-                    updateCount();
-                }
-            });
-        })();
-    </script>
 </section>
 
 <section class="surface reveal" data-delay="300">
