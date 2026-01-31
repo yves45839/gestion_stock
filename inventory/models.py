@@ -215,6 +215,20 @@ class Product(VersionedModelMixin, TimeStampedModel):
     )
     name = models.CharField("Nom", max_length=255)
     description = models.TextField(blank=True)
+    short_description = models.TextField("Description courte", blank=True)
+    long_description = models.TextField("Description longue", blank=True)
+    tech_specs_json = models.JSONField(
+        "Fiche technique (JSON)",
+        blank=True,
+        null=True,
+        encoder=DjangoJSONEncoder,
+    )
+    video_links = models.JSONField(
+        "Liens vidéo",
+        blank=True,
+        default=list,
+        encoder=DjangoJSONEncoder,
+    )
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name="products")
     category = models.ForeignKey(
         Category, on_delete=models.PROTECT, related_name="products"
@@ -321,10 +335,16 @@ class ProductAssetJob(TimeStampedModel):
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.QUEUED)
     total_products = models.PositiveIntegerField("Total produits", default=0)
     processed_products = models.PositiveIntegerField("Produits traités", default=0)
+    assets = models.JSONField("Assets demandés", blank=True, default=list, encoder=DjangoJSONEncoder)
     force_description = models.BooleanField("Forcer description", default=False)
     force_image = models.BooleanField("Forcer image", default=False)
+    force_techsheet = models.BooleanField("Forcer fiche technique", default=False)
+    force_pdf = models.BooleanField("Forcer brochures PDF", default=False)
+    force_videos = models.BooleanField("Forcer vidéos", default=False)
+    force_blog = models.BooleanField("Forcer blog", default=False)
     description_changed = models.BooleanField("Description modifiée", default=False)
     image_changed = models.BooleanField("Image modifiée", default=False)
+    asset_changes = models.JSONField("Modifications IA", blank=True, default=dict, encoder=DjangoJSONEncoder)
     started_at = models.DateTimeField("Début", null=True, blank=True)
     finished_at = models.DateTimeField("Fin", null=True, blank=True)
     last_message = models.TextField("Dernier message", blank=True)
@@ -362,6 +382,69 @@ class ProductAssetJobLog(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.get_level_display()} - {self.message[:60]}"
+
+
+class ProductBrochure(TimeStampedModel):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="brochures",
+    )
+    title = models.CharField("Titre", max_length=255, blank=True)
+    source_url = models.URLField("Source", blank=True)
+    file = models.FileField(
+        "Brochure (PDF)",
+        upload_to="products/brochures",
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "brochure PDF"
+        verbose_name_plural = "brochures PDF"
+
+    def __str__(self) -> str:
+        return self.title or f"Brochure {self.product}"
+
+
+class ProductAsset(TimeStampedModel):
+    class AssetType(models.TextChoices):
+        IMAGE = "image", "Image"
+        DESCRIPTION = "description", "Description"
+        SPECS = "specs", "Fiche technique"
+        PDF = "pdf", "Brochure PDF"
+        VIDEO = "video", "Vidéo"
+        BLOG = "blog", "Blog"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Brouillon"
+        APPROVED = "approved", "Validé"
+        REJECTED = "rejected", "Refusé"
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="assets",
+    )
+    asset_type = models.CharField(max_length=20, choices=AssetType.choices)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+    source_url = models.URLField(blank=True)
+    file = models.FileField(
+        upload_to="products/assets",
+        blank=True,
+        null=True,
+    )
+    text_content = models.TextField(blank=True)
+    metadata = models.JSONField(blank=True, default=dict, encoder=DjangoJSONEncoder)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "asset IA"
+        verbose_name_plural = "assets IA"
+
+    def __str__(self) -> str:
+        return f"{self.get_asset_type_display()} - {self.product}"
 
 
 class CustomerQuerySet(models.QuerySet):

@@ -183,8 +183,13 @@ def _get_return_url(request, default_name):
 
 def _dispatch_product_asset_bot(
     product,
+    assets,
     force_description,
     force_image,
+    force_techsheet,
+    force_pdf,
+    force_videos,
+    force_blog,
     mode,
     inline_mode,
     *,
@@ -193,8 +198,13 @@ def _dispatch_product_asset_bot(
     job, created = reserve_product_asset_job(
         product,
         mode=mode,
+        assets=assets,
         force_description=force_description,
         force_image=force_image,
+        force_techsheet=force_techsheet,
+        force_pdf=force_pdf,
+        force_videos=force_videos,
+        force_blog=force_blog,
     )
     if not created:
         return {"status": "pending", "job": job}
@@ -203,8 +213,13 @@ def _dispatch_product_asset_bot(
     if inline_mode:
         result = run_product_asset_bot(
             product.pk,
+            assets=assets,
             force_description=force_description,
             force_image=force_image,
+            force_techsheet=force_techsheet,
+            force_pdf=force_pdf,
+            force_videos=force_videos,
+            force_blog=force_blog,
             job_id=job.pk,
             preview_image=preview_image,
         )
@@ -212,8 +227,13 @@ def _dispatch_product_asset_bot(
     enqueue_product_asset_job(
         job.pk,
         [product.pk],
+        assets=assets,
         force_description=force_description,
         force_image=force_image,
+        force_techsheet=force_techsheet,
+        force_pdf=force_pdf,
+        force_videos=force_videos,
+        force_blog=force_blog,
     )
     return {"status": "queued", "job": job}
 
@@ -231,6 +251,14 @@ def _inline_result_message(result, product):
         changes.append("description")
     if result.get("image_changed"):
         changes.append("image")
+    if result.get("tech_specs_changed"):
+        changes.append("fiche technique")
+    if result.get("pdf_changed"):
+        changes.append("brochure PDF")
+    if result.get("videos_changed"):
+        changes.append("vidéo")
+    if result.get("blog_changed"):
+        changes.append("blog")
     if changes:
         return (
             "success",
@@ -2306,8 +2334,10 @@ def product_asset_bot(request):
         form.fields["product"].queryset = Product.objects.only("id", "sku", "name").order_by("name")
         return form
 
-    manual_form = _configure_manual_form(ProductAssetBotForm())
-    bulk_form = ProductAssetBotBulkForm()
+    manual_form = _configure_manual_form(
+        ProductAssetBotForm(initial={"assets": ["description", "images"]})
+    )
+    bulk_form = ProductAssetBotBulkForm(initial={"assets": ["description", "images"]})
     datasheet_form = HikvisionDatasheetForm()
     category_form = CategoryAutoAssignForm()
     category_result = None
@@ -2362,8 +2392,13 @@ def product_asset_bot(request):
         "filter_missing_image": True,
         "query": "",
         "limit": None,
+        "assets": ["description", "images"],
         "force_description": False,
         "force_image": False,
+        "force_techsheet": False,
+        "force_pdf": False,
+        "force_videos": False,
+        "force_blog": False,
     }
 
     def _parse_bool(payload, key, default=False):
@@ -2388,6 +2423,15 @@ def product_asset_bot(request):
             return ""
         return (payload.get("query") or "").strip()
 
+    def _normalize_assets_payload(payload):
+        if not payload:
+            return ["description", "images"]
+        assets = payload.getlist("assets") if hasattr(payload, "getlist") else payload.get("assets")
+        if isinstance(assets, str):
+            assets = [assets]
+        normalized = [item.strip().lower() for item in (assets or []) if item and item.strip()]
+        return normalized or ["description", "images"]
+
     selection_payload = request.POST if action in ("filter", "select") else None
     selection_filters = selection_defaults.copy()
     if selection_payload is not None:
@@ -2399,12 +2443,19 @@ def product_asset_bot(request):
         )
         selection_filters["query"] = _parse_query(selection_payload)
         selection_filters["limit"] = _parse_limit(selection_payload)
+        selection_filters["assets"] = _normalize_assets_payload(selection_payload)
         selection_filters["force_description"] = _parse_bool(
             selection_payload, "force_description", False
         )
         selection_filters["force_image"] = _parse_bool(
             selection_payload, "force_image", False
         )
+        selection_filters["force_techsheet"] = _parse_bool(
+            selection_payload, "force_techsheet", False
+        )
+        selection_filters["force_pdf"] = _parse_bool(selection_payload, "force_pdf", False)
+        selection_filters["force_videos"] = _parse_bool(selection_payload, "force_videos", False)
+        selection_filters["force_blog"] = _parse_bool(selection_payload, "force_blog", False)
 
     selection_queryset = Product.objects.only("id", "sku", "name", "description", "image").order_by("name")
     selection_conditions = Q()
@@ -2449,7 +2500,7 @@ def product_asset_bot(request):
         for row in selection_queryset.values("id", "sku", "name", "description", "image")
     ]
 
-    def _run_selection(products, force_description, force_image, empty_message):
+    def _run_selection(products, assets, force_description, force_image, force_techsheet, force_pdf, force_videos, force_blog, empty_message):
         if not products:
             messages.warning(request, empty_message)
             return
@@ -2459,8 +2510,13 @@ def product_asset_bot(request):
         for product in products:
             dispatch_info = _dispatch_product_asset_bot(
                 product,
+                assets=assets,
                 force_description=force_description,
                 force_image=force_image,
+                force_techsheet=force_techsheet,
+                force_pdf=force_pdf,
+                force_videos=force_videos,
+                force_blog=force_blog,
                 mode=ProductAssetJob.Mode.BATCH,
                 inline_mode=inline_mode,
             )
@@ -2478,6 +2534,10 @@ def product_asset_bot(request):
                 if result and (
                     result.get("description_changed")
                     or result.get("image_changed")
+                    or result.get("tech_specs_changed")
+                    or result.get("pdf_changed")
+                    or result.get("videos_changed")
+                    or result.get("blog_changed")
                 )
             )
             messages.success(
@@ -2514,8 +2574,13 @@ def product_asset_bot(request):
                 product = manual_form.cleaned_data["product"]
                 dispatch_info = _dispatch_product_asset_bot(
                     product,
+                    assets=manual_form.cleaned_data["assets"] or ["description", "images"],
                     force_description=manual_form.cleaned_data["force_description"],
                     force_image=manual_form.cleaned_data["force_image"],
+                    force_techsheet=manual_form.cleaned_data["force_techsheet"],
+                    force_pdf=manual_form.cleaned_data["force_pdf"],
+                    force_videos=manual_form.cleaned_data["force_videos"],
+                    force_blog=manual_form.cleaned_data["force_blog"],
                     mode=ProductAssetJob.Mode.SINGLE,
                     inline_mode=inline_mode,
                 )
@@ -2535,14 +2600,17 @@ def product_asset_bot(request):
                         request,
                         f"Le bot IA a ete mis en file d'attente pour {product.sku} ({product.name}).",
                     )
-                manual_form = _configure_manual_form(ProductAssetBotForm())
+                manual_form = _configure_manual_form(
+                    ProductAssetBotForm(initial={"assets": ["description", "images"]})
+                )
         elif action == "batch":
             bulk_form = ProductAssetBotBulkForm(request.POST)
             if bulk_form.is_valid():
                 queryset = Product.objects.order_by("name")
-                if not bulk_form.cleaned_data["force_description"]:
+                assets = bulk_form.cleaned_data["assets"] or ["description", "images"]
+                if "description" in assets and not bulk_form.cleaned_data["force_description"]:
                     queryset = queryset.filter(Q(description="") | Q(description__isnull=True))
-                if not bulk_form.cleaned_data["force_image"]:
+                if "images" in assets and not bulk_form.cleaned_data["force_image"]:
                     queryset = queryset.filter(Q(image="") | Q(image__isnull=True))
                 limit = bulk_form.cleaned_data["limit"]
                 products = list(queryset[:limit]) if limit else list(queryset)
@@ -2558,8 +2626,13 @@ def product_asset_bot(request):
                     for product in products:
                         dispatch_info = _dispatch_product_asset_bot(
                             product,
+                            assets=assets,
                             force_description=bulk_form.cleaned_data["force_description"],
                             force_image=bulk_form.cleaned_data["force_image"],
+                            force_techsheet=bulk_form.cleaned_data["force_techsheet"],
+                            force_pdf=bulk_form.cleaned_data["force_pdf"],
+                            force_videos=bulk_form.cleaned_data["force_videos"],
+                            force_blog=bulk_form.cleaned_data["force_blog"],
                             mode=ProductAssetJob.Mode.BATCH,
                             inline_mode=inline_mode,
                         )
@@ -2577,6 +2650,10 @@ def product_asset_bot(request):
                             if result and (
                                 result.get("description_changed")
                                 or result.get("image_changed")
+                                or result.get("tech_specs_changed")
+                                or result.get("pdf_changed")
+                                or result.get("videos_changed")
+                                or result.get("blog_changed")
                             )
                         )
                         messages.success(
@@ -2605,14 +2682,19 @@ def product_asset_bot(request):
                                 request,
                                 f"{pending} produits etaient deja en file d'attente.",
                             )
-                bulk_form = ProductAssetBotBulkForm()
+                bulk_form = ProductAssetBotBulkForm(initial={"assets": ["description", "images"]})
         elif action == "generate_image":
             product_id = request.POST.get("product_id")
             product = get_object_or_404(Product, pk=product_id)
             dispatch_info = _dispatch_product_asset_bot(
                 product,
+                assets=["images"],
                 force_description=False,
                 force_image=True,
+                force_techsheet=False,
+                force_pdf=False,
+                force_videos=False,
+                force_blog=False,
                 mode=ProductAssetJob.Mode.SINGLE,
                 inline_mode=inline_mode,
                 preview_image=True,
@@ -2650,8 +2732,13 @@ def product_asset_bot(request):
             product = get_object_or_404(Product, pk=product_id)
             dispatch_info = _dispatch_product_asset_bot(
                 product,
+                assets=["description"],
                 force_description=action == "force_description",
                 force_image=False,
+                force_techsheet=False,
+                force_pdf=False,
+                force_videos=False,
+                force_blog=False,
                 mode=ProductAssetJob.Mode.SINGLE,
                 inline_mode=inline_mode,
             )
@@ -2826,16 +2913,26 @@ def product_asset_bot(request):
                 products = list(selection_form.cleaned_data["products"])
                 _run_selection(
                     products,
+                    assets=selection_form.cleaned_data["assets"] or ["description", "images"],
                     force_description=selection_form.cleaned_data["force_description"],
                     force_image=selection_form.cleaned_data["force_image"],
+                    force_techsheet=selection_form.cleaned_data["force_techsheet"],
+                    force_pdf=selection_form.cleaned_data["force_pdf"],
+                    force_videos=selection_form.cleaned_data["force_videos"],
+                    force_blog=selection_form.cleaned_data["force_blog"],
                     empty_message="Aucun produit selectionne.",
                 )
         elif action == "select_filtered":
             products = list(selection_queryset)
             _run_selection(
                 products,
+                assets=selection_filters["assets"],
                 force_description=selection_filters["force_description"],
                 force_image=selection_filters["force_image"],
+                force_techsheet=selection_filters["force_techsheet"],
+                force_pdf=selection_filters["force_pdf"],
+                force_videos=selection_filters["force_videos"],
+                force_blog=selection_filters["force_blog"],
                 empty_message="Aucun produit ne correspond aux filtres.",
             )
 

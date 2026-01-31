@@ -18,8 +18,13 @@ logger = logging.getLogger(__name__)
 class _ProductAssetJobEntry:
     job_id: int
     product_ids: list[int]
+    assets: list[str]
     force_description: bool
     force_image: bool
+    force_techsheet: bool
+    force_pdf: bool
+    force_videos: bool
+    force_blog: bool
 
 
 class ProductAssetJobWorker(threading.Thread):
@@ -48,8 +53,13 @@ class ProductAssetJobWorker(threading.Thread):
         for product_id in entry.product_ids:
             run_product_asset_bot(
                 product_id,
+                assets=entry.assets,
                 force_description=entry.force_description,
                 force_image=entry.force_image,
+                force_techsheet=entry.force_techsheet,
+                force_pdf=entry.force_pdf,
+                force_videos=entry.force_videos,
+                force_blog=entry.force_blog,
                 job_id=entry.job_id,
             )
 
@@ -79,15 +89,25 @@ def get_product_asset_worker() -> ProductAssetJobWorker:
 def enqueue_product_asset_job(
     job_id: int,
     product_ids: Iterable[int],
+    assets: list[str],
     force_description: bool = False,
     force_image: bool = False,
+    force_techsheet: bool = False,
+    force_pdf: bool = False,
+    force_videos: bool = False,
+    force_blog: bool = False,
 ) -> None:
     if not job_id or not product_ids:
         return
     entry = _ProductAssetJobEntry(
         job_id=job_id,
         product_ids=list(product_ids),
+        assets=assets,
         force_description=force_description,
         force_image=force_image,
+        force_techsheet=force_techsheet,
+        force_pdf=force_pdf,
+        force_videos=force_videos,
+        force_blog=force_blog,
     )
     get_product_asset_worker().enqueue(entry)

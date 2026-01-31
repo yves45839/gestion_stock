@@ -309,10 +309,24 @@ class CSVImportForm(forms.Form):
 
 
 class ProductAssetBotForm(forms.Form):
+    ASSET_CHOICES = (
+        ("description", "Descriptions"),
+        ("images", "Images"),
+        ("techsheet", "Fiche technique"),
+        ("pdf", "Brochures PDF"),
+        ("videos", "Vidéos"),
+        ("blog", "Blog"),
+    )
     product = forms.ModelChoiceField(
         queryset=Product.objects.order_by("name"),
         label="Produit ciblé",
         widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    assets = forms.MultipleChoiceField(
+        required=False,
+        choices=ASSET_CHOICES,
+        label="Assets à générer",
+        widget=forms.CheckboxSelectMultiple,
     )
     force_description = forms.BooleanField(
         required=False,
@@ -322,9 +336,26 @@ class ProductAssetBotForm(forms.Form):
         required=False,
         label="Télécharger un nouvel visuel même si un fichier est présent",
     )
+    force_techsheet = forms.BooleanField(
+        required=False,
+        label="Forcer la génération de la fiche technique",
+    )
+    force_pdf = forms.BooleanField(
+        required=False,
+        label="Forcer la génération des brochures PDF",
+    )
+    force_videos = forms.BooleanField(
+        required=False,
+        label="Forcer la génération des vidéos",
+    )
+    force_blog = forms.BooleanField(
+        required=False,
+        label="Forcer la génération du blog",
+    )
 
 
 class ProductAssetBotBulkForm(forms.Form):
+    ASSET_CHOICES = ProductAssetBotForm.ASSET_CHOICES
     limit = forms.IntegerField(
         required=False,
         min_value=1,
@@ -341,9 +372,32 @@ class ProductAssetBotBulkForm(forms.Form):
         required=False,
         label="Forcer le téléchargement des visuels",
     )
+    assets = forms.MultipleChoiceField(
+        required=False,
+        choices=ASSET_CHOICES,
+        label="Assets à générer",
+        widget=forms.CheckboxSelectMultiple,
+    )
+    force_techsheet = forms.BooleanField(
+        required=False,
+        label="Forcer la génération des fiches techniques",
+    )
+    force_pdf = forms.BooleanField(
+        required=False,
+        label="Forcer la génération des brochures PDF",
+    )
+    force_videos = forms.BooleanField(
+        required=False,
+        label="Forcer la génération des vidéos",
+    )
+    force_blog = forms.BooleanField(
+        required=False,
+        label="Forcer la génération des blogs",
+    )
 
 
 class ProductAssetBotSelectionForm(forms.Form):
+    ASSET_CHOICES = ProductAssetBotForm.ASSET_CHOICES
     query = forms.CharField(
         required=False,
         label="Recherche",
@@ -372,6 +426,28 @@ class ProductAssetBotSelectionForm(forms.Form):
     force_image = forms.BooleanField(
         required=False,
         label="Forcer le telechargement des visuels",
+    )
+    assets = forms.MultipleChoiceField(
+        required=False,
+        choices=ASSET_CHOICES,
+        label="Assets à générer",
+        widget=forms.CheckboxSelectMultiple,
+    )
+    force_techsheet = forms.BooleanField(
+        required=False,
+        label="Forcer la generation des fiches techniques",
+    )
+    force_pdf = forms.BooleanField(
+        required=False,
+        label="Forcer la generation des brochures PDF",
+    )
+    force_videos = forms.BooleanField(
+        required=False,
+        label="Forcer la generation des videos",
+    )
+    force_blog = forms.BooleanField(
+        required=False,
+        label="Forcer la generation des blogs",
     )
     products = forms.ModelMultipleChoiceField(
         queryset=Product.objects.none(),

@@ -20,6 +20,8 @@ try:
 except Exception:  # noqa: BLE001
     PdfReader = None
 
+from .models import ProductAsset, ProductBrochure
+
 logger = logging.getLogger(__name__)
 
 
@@ -282,29 +284,82 @@ class ProductAssetBot:
     def ensure_assets(
         self,
         product,
+        *,
+        assets: Optional[Iterable[str]] = None,
         force_description: bool = False,
         force_image: bool = False,
-        *,
+        force_techsheet: bool = False,
+        force_pdf: bool = False,
+        force_videos: bool = False,
+        force_blog: bool = False,
         image_field: str = "image",
-    ) -> tuple[bool, bool]:
-        description_changed = self.ensure_description(product, force_description)
-        image_changed = self.ensure_image(product, force_image, image_field=image_field)
-        return description_changed, image_changed
+    ) -> dict[str, bool]:
+        asset_set = self._normalize_assets(assets)
+        changes: dict[str, bool] = {}
+        if "description" in asset_set:
+            changes.update(self.ensure_descriptions(product, force=force_description))
+        if "images" in asset_set:
+            changes["image_changed"] = self.ensure_image(product, force_image, image_field=image_field)
+        if "techsheet" in asset_set:
+            changes["tech_specs_changed"] = self.ensure_tech_specs(product, force=force_techsheet)
+        if "pdf" in asset_set:
+            changes["pdf_changed"] = self.ensure_pdf_brochures(product, force=force_pdf)
+        if "videos" in asset_set:
+            changes["videos_changed"] = self.ensure_video_links(product, force=force_videos)
+        if "blog" in asset_set:
+            changes["blog_changed"] = self.ensure_blog_post(product, force=force_blog)
+        return changes
 
-    def ensure_description(self, product, force: bool = False) -> bool:
-        if not self.text_generator or (product.description and not force):
-            return False
-        prompt = self._build_description_prompt(product)
-        if not prompt:
-            return False
-        description = self.text_generator.generate_text(prompt)
-        if not description:
-            return False
-        sanitized = description.strip()
-        if sanitized and sanitized != (product.description or "").strip():
-            product.description = sanitized
-            return True
-        return False
+    def _normalize_assets(self, assets: Optional[Iterable[str]]) -> set[str]:
+        if not assets:
+            return {"description", "images"}
+        normalized = {item.strip().lower() for item in assets if item}
+        return normalized or {"description", "images"}
+
+    def ensure_descriptions(self, product, force: bool = False) -> dict[str, bool]:
+        changes = {
+            "short_description_changed": False,
+            "long_description_changed": False,
+            "description_changed": False,
+        }
+        if not self.text_generator:
+            return changes
+        if not product.short_description or force:
+            short_prompt = self._build_short_description_prompt(product)
+            short_desc = self.text_generator.generate_text(short_prompt, max_tokens=200)
+            if short_desc:
+                cleaned = short_desc.strip()
+                if cleaned and cleaned != (product.short_description or "").strip():
+                    product.short_description = cleaned
+                    changes["short_description_changed"] = True
+        if not product.long_description or force:
+            long_prompt = self._build_long_description_prompt(product)
+            long_desc = self.text_generator.generate_text(long_prompt, max_tokens=650)
+            if long_desc:
+                cleaned = long_desc.strip()
+                if cleaned and cleaned != (product.long_description or "").strip():
+                    product.long_description = cleaned
+                    changes["long_description_changed"] = True
+                if cleaned and cleaned != (product.description or "").strip():
+                    product.description = cleaned
+                    changes["description_changed"] = True
+        if any(changes.values()):
+            ProductAsset.objects.update_or_create(
+                product=product,
+                asset_type=ProductAsset.AssetType.DESCRIPTION,
+                defaults={
+                    "text_content": json.dumps(
+                        {
+                            "short_description": product.short_description,
+                            "long_description": product.long_description,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "metadata": {"source": "mistral"},
+                    "status": ProductAsset.Status.DRAFT,
+                },
+            )
+        return changes
 
     def ensure_image(self, product, force: bool = False, *, image_field: str = "image") -> bool:
         self.last_image_log = None
@@ -321,6 +376,15 @@ class ProductAssetBot:
             if applied:
                 setattr(product, placeholder_field, False)
                 self._set_image_log("ok", f"local file {local_path.name}")
+                ProductAsset.objects.update_or_create(
+                    product=product,
+                    asset_type=ProductAsset.AssetType.IMAGE,
+                    defaults={
+                        "source_url": "",
+                        "metadata": {"source": "local", "filename": local_path.name},
+                        "status": ProductAsset.Status.DRAFT,
+                    },
+                )
             else:
                 self._set_image_log("skip", f"local file already set ({local_path.name})")
             return applied
@@ -364,9 +428,18 @@ class ProductAssetBot:
         setattr(product, placeholder_field, is_placeholder)
         source_label = image_source or "url"
         self._set_image_log("ok", f"downloaded from {source_label}")
+        ProductAsset.objects.update_or_create(
+            product=product,
+            asset_type=ProductAsset.AssetType.IMAGE,
+            defaults={
+                "source_url": image_url or "",
+                "metadata": {"source": image_source or "url"},
+                "status": ProductAsset.Status.DRAFT,
+            },
+        )
         return True
 
-    def _build_description_prompt(self, product) -> str:
+    def _build_common_details(self, product) -> list[str]:
         details = [
             f"Produit: {product.name}",
             f"SKU: {product.sku}",
@@ -386,11 +459,26 @@ class ProductAssetBot:
             details.append(f"Extraits fiche technique: {datasheet_excerpt}")
         elif product.datasheet_url:
             details.append(f"Fiche technique: {product.datasheet_url}")
+        return details
+
+    def _build_short_description_prompt(self, product) -> str:
+        details = self._build_common_details(product)
         return (
-            "Tu es un assistant produisant des descriptions produits concises et informatives en francais.\n"
+            "Tu es un assistant marketing en francais. "
+            "Redige une description courte en 2-3 bullets maximum avec les avantages clefs.\n"
+            "N'invente pas de caracteristiques absentes.\n"
+            "Donnees produit:\n"
+            + "\n".join(details)
+        )
+
+    def _build_long_description_prompt(self, product) -> str:
+        details = self._build_common_details(product)
+        return (
+            "Tu es un assistant marketing en francais. "
+            "Redige une description longue avec 2 paragraphes puis une mini FAQ (2 questions) en fin.\n"
             "Si des extraits de fiche technique sont fournis, base-toi dessus pour les caracteristiques.\n"
             "N'invente pas de caracteristiques absentes et garde les prix en FCFA.\n"
-            "Utilise les informations suivantes pour rediger un texte commercial de deux phrases maximum.\n"
+            "Donnees produit:\n"
             + "\n".join(details)
         )
 
@@ -423,6 +511,163 @@ class ProductAssetBot:
             trimmed = cleaned[:max_chars].rsplit(" ", 1)[0].strip()
             return trimmed or cleaned[:max_chars]
         return cleaned
+
+    def ensure_tech_specs(self, product, force: bool = False) -> bool:
+        if not self.text_generator:
+            return False
+        if product.tech_specs_json and not force:
+            return False
+        datasheet_excerpt = self._datasheet_excerpt(product)
+        if not datasheet_excerpt:
+            return False
+        prompt = (
+            "Tu es un assistant qui convertit des fiches techniques en JSON strict.\n"
+            "Retourne uniquement un JSON valide sans commentaire.\n"
+            "Format attendu: {\"specs\": [{\"label\": \"\", \"value\": \"\"}]}.\n"
+            f"Extraits fiche technique:\n{datasheet_excerpt}"
+        )
+        response = self.text_generator.generate_text(prompt, max_tokens=400)
+        if not response:
+            return False
+        parsed = self._extract_json(response)
+        if not parsed:
+            return False
+        product.tech_specs_json = parsed
+        ProductAsset.objects.update_or_create(
+            product=product,
+            asset_type=ProductAsset.AssetType.SPECS,
+            defaults={
+                "text_content": json.dumps(parsed, ensure_ascii=False),
+                "metadata": {"source": "datasheet"},
+                "status": ProductAsset.Status.DRAFT,
+            },
+        )
+        return True
+
+    def ensure_pdf_brochures(self, product, force: bool = False) -> bool:
+        if not product.datasheet_pdf and not product.datasheet_url:
+            return False
+        existing = ProductBrochure.objects.filter(product=product)
+        if existing.exists() and not force:
+            return False
+        brochure = ProductBrochure.objects.create(
+            product=product,
+            title=f"Brochure {product.name}",
+            source_url=product.datasheet_url or "",
+        )
+        if product.datasheet_pdf:
+            brochure.file.name = product.datasheet_pdf.name
+            brochure.save(update_fields=["file", "updated_at"])
+        summary = ""
+        if self.text_generator and product.datasheet_pdf:
+            excerpt = self._datasheet_excerpt(product)
+            if excerpt:
+                prompt = (
+                    "Tu es un assistant qui resume des brochures PDF en francais.\n"
+                    "Fournis un resume structure en 3-5 points cles.\n"
+                    f"Texte:\n{excerpt}"
+                )
+                summary = self.text_generator.generate_text(prompt, max_tokens=220) or ""
+        ProductAsset.objects.create(
+            product=product,
+            asset_type=ProductAsset.AssetType.PDF,
+            source_url=product.datasheet_url or "",
+            file=brochure.file if brochure.file else None,
+            text_content=summary.strip(),
+            metadata={"source": "datasheet_pdf"},
+            status=ProductAsset.Status.DRAFT,
+        )
+        return True
+
+    def ensure_video_links(self, product, force: bool = False) -> bool:
+        if product.video_links and not force:
+            return False
+        links = self._build_video_links(product)
+        if not links:
+            return False
+        product.video_links = links
+        ProductAsset.objects.update_or_create(
+            product=product,
+            asset_type=ProductAsset.AssetType.VIDEO,
+            defaults={
+                "text_content": json.dumps(links, ensure_ascii=False),
+                "metadata": {"source": "search"},
+                "status": ProductAsset.Status.DRAFT,
+            },
+        )
+        return True
+
+    def ensure_blog_post(self, product, force: bool = False) -> bool:
+        if not self.text_generator:
+            return False
+        existing = ProductAsset.objects.filter(
+            product=product,
+            asset_type=ProductAsset.AssetType.BLOG,
+        ).first()
+        if existing and not force:
+            return False
+        prompt = self._build_blog_prompt(product)
+        content = self.text_generator.generate_text(prompt, max_tokens=900)
+        if not content:
+            return False
+        ProductAsset.objects.update_or_create(
+            product=product,
+            asset_type=ProductAsset.AssetType.BLOG,
+            defaults={
+                "text_content": content.strip(),
+                "metadata": {"source": "mistral"},
+                "status": ProductAsset.Status.DRAFT,
+            },
+        )
+        return True
+
+    def _build_blog_prompt(self, product) -> str:
+        details = self._build_common_details(product)
+        return (
+            "Tu es un redacteur SEO en francais.\n"
+            "Redige un article blog structure avec:\n"
+            "- un plan (titres H2/H3)\n"
+            "- des paragraphes courts\n"
+            "- une FAQ SEO (3 questions)\n"
+            "- une meta description (160 caracteres max) en fin.\n"
+            "Donnees produit:\n"
+            + "\n".join(details)
+        )
+
+    def _build_video_links(self, product) -> list[dict[str, str]]:
+        query = self._build_google_query(product)
+        if not query:
+            return []
+        encoded = quote_plus(query)
+        return [
+            {
+                "platform": "youtube",
+                "type": "search",
+                "url": f"https://www.youtube.com/results?search_query={encoded}",
+            },
+            {
+                "platform": "vimeo",
+                "type": "search",
+                "url": f"https://vimeo.com/search?q={encoded}",
+            },
+        ]
+
+    @staticmethod
+    def _extract_json(payload: str) -> Optional[dict]:
+        cleaned = payload.strip()
+        if not cleaned:
+            return None
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
 
     def _find_google_image(self, product) -> Optional[str]:
         self.last_google_status = None

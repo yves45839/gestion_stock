@@ -15,6 +15,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
+            "--assets",
+            type=str,
+            help="Comma-separated list of assets to generate (description,images,techsheet,pdf,videos,blog).",
+        )
+        parser.add_argument(
             "--limit",
             type=int,
             help="Maximum number of products to enqueue (applied after filtering).",
@@ -30,6 +35,26 @@ class Command(BaseCommand):
             help="Replace existing images with AI placeholders.",
         )
         parser.add_argument(
+            "--force-techsheet",
+            action="store_true",
+            help="Regenerate technical specs even if they exist.",
+        )
+        parser.add_argument(
+            "--force-pdf",
+            action="store_true",
+            help="Regenerate PDF brochure summaries even if they exist.",
+        )
+        parser.add_argument(
+            "--force-videos",
+            action="store_true",
+            help="Regenerate video links even if they exist.",
+        )
+        parser.add_argument(
+            "--force-blog",
+            action="store_true",
+            help="Regenerate blog content even if it exists.",
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Show which products would be queued without enqueueing.",
@@ -41,10 +66,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        assets = _normalize_assets(options.get("assets"))
         queryset = Product.objects.all().order_by("name")
-        if not options["force_description"]:
+        if "description" in assets and not options["force_description"]:
             queryset = queryset.filter(Q(description="") | Q(description__isnull=True))
-        if not options["force_image"]:
+        if "images" in assets and not options["force_image"]:
             queryset = queryset.filter(Q(image="") | Q(image__isnull=True))
 
         products = list(queryset)
@@ -65,8 +91,13 @@ class Command(BaseCommand):
             job, created = reserve_product_asset_job(
                 product,
                 mode=ProductAssetJob.Mode.BATCH,
+                assets=assets,
                 force_description=options["force_description"],
                 force_image=options["force_image"],
+                force_techsheet=options["force_techsheet"],
+                force_pdf=options["force_pdf"],
+                force_videos=options["force_videos"],
+                force_blog=options["force_blog"],
             )
             if not created:
                 self.stdout.write(f"{product.sku} est déjà en file d'attente.")
@@ -74,8 +105,13 @@ class Command(BaseCommand):
             if inline_mode:
                 run_product_asset_bot(
                     product.pk,
+                    assets=assets,
                     force_description=options["force_description"],
                     force_image=options["force_image"],
+                    force_techsheet=options["force_techsheet"],
+                    force_pdf=options["force_pdf"],
+                    force_videos=options["force_videos"],
+                    force_blog=options["force_blog"],
                     job_id=job.pk,
                 )
                 self.stdout.write(f"Processed bot inline for {product.sku} ({product.name})")
@@ -83,7 +119,19 @@ class Command(BaseCommand):
                 enqueue_product_asset_job(
                     job.pk,
                     [product.pk],
+                    assets=assets,
                     force_description=options["force_description"],
                     force_image=options["force_image"],
+                    force_techsheet=options["force_techsheet"],
+                    force_pdf=options["force_pdf"],
+                    force_videos=options["force_videos"],
+                    force_blog=options["force_blog"],
                 )
                 self.stdout.write(f"Queued bot for {product.sku} ({product.name})")
+
+
+def _normalize_assets(raw: str | None) -> list[str]:
+    if not raw:
+        return ["description", "images"]
+    assets = [item.strip().lower() for item in raw.split(",") if item.strip()]
+    return assets or ["description", "images"]

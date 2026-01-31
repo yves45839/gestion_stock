@@ -302,6 +302,10 @@
                 {% endfor %}
             </div>
             <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
+                <p class="muted-text" style="margin:0;">Assets à générer</p>
+                {{ manual_form.assets }}
+            </div>
+            <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
                 <label style="display:flex; align-items:center; gap:0.5rem;">
                     {{ manual_form.force_description }}
                     {{ manual_form.force_description.label }}
@@ -309,6 +313,22 @@
                 <label style="display:flex; align-items:center; gap:0.5rem;">
                     {{ manual_form.force_image }}
                     {{ manual_form.force_image.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ manual_form.force_techsheet }}
+                    {{ manual_form.force_techsheet.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ manual_form.force_pdf }}
+                    {{ manual_form.force_pdf.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ manual_form.force_videos }}
+                    {{ manual_form.force_videos.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ manual_form.force_blog }}
+                    {{ manual_form.force_blog.label }}
                 </label>
                 {% if manual_form.force_description.errors %}
                     <p class="muted-text" style="color: var(--danger);">
@@ -335,6 +355,10 @@
                 {% endfor %}
             </div>
             <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
+                <p class="muted-text" style="margin:0;">Assets à générer</p>
+                {{ bulk_form.assets }}
+            </div>
+            <div class="field" style="display:flex; flex-direction:column; gap:0.35rem;">
                 <label style="display:flex; align-items:center; gap:0.5rem;">
                     {{ bulk_form.force_description }}
                     {{ bulk_form.force_description.label }}
@@ -342,6 +366,22 @@
                 <label style="display:flex; align-items:center; gap:0.5rem;">
                     {{ bulk_form.force_image }}
                     {{ bulk_form.force_image.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ bulk_form.force_techsheet }}
+                    {{ bulk_form.force_techsheet.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ bulk_form.force_pdf }}
+                    {{ bulk_form.force_pdf.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ bulk_form.force_videos }}
+                    {{ bulk_form.force_videos.label }}
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem;">
+                    {{ bulk_form.force_blog }}
+                    {{ bulk_form.force_blog.label }}
                 </label>
             </div>
             <button type="submit" name="bot_action" value="batch" class="btn secondary">Envoyer le lot</button>

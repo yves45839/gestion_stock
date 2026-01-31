@@ -44,8 +44,8 @@
    ```
    python manage.py product_asset_bot
    ```
-   Utilise `--limit`, `--force-description` ou `--force-image` pour adapter la sélection.
-5. Le bot utilise Mistral pour générer la description (modèle ou agent selon ce qui est fourni) et récupère l'image via `PRODUCT_BOT_IMAGE_URL_TEMPLATE` (utilise de préférence `{reference}` pour viser la vraie image du produit). Les placeholders sont désactivés par défaut (active `PRODUCT_BOT_ALLOW_PLACEHOLDERS=true` si besoin).
+   Utilise `--limit`, `--assets=description,images,techsheet,pdf,videos,blog` ou `--force-*` pour adapter la sélection.
+5. Le bot utilise Mistral pour générer les descriptions (courte + longue), la fiche technique JSON et les brouillons de blog, récupère les images via `PRODUCT_BOT_IMAGE_URL_TEMPLATE` (utilise de préférence `{reference}` pour viser la vraie image du produit), et prépare des liens vidéo (YouTube/Vimeo) sous forme de recherches. Les placeholders sont désactivés par défaut (active `PRODUCT_BOT_ALLOW_PLACEHOLDERS=true` si besoin).
 6. (Optionnel) Pour chercher des images via Google Custom Search: configure `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ENGINE_ID`, puis active `PRODUCT_BOT_GOOGLE_IMAGE_SEARCH_ENABLED=true` et fixe `PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT` pour rester sous le quota journalier.
 
 **Mode local instantané**  
