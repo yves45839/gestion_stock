@@ -51,8 +51,35 @@
             <p class="eyebrow">Management IA</p>
             <h2 class="surface-title">Liste exhaustive des produits</h2>
         </div>
-        <span class="pill">{{ stats.total_products }} produits</span>
+        <span class="pill">{{ catalog_total }} produits</span>
     </div>
+    <form method="get" class="form-grid" style="margin:0 0 1rem; align-items:end;">
+        <div class="field">
+            <label for="catalog_query">Recherche rapide</label>
+            <input
+                id="catalog_query"
+                type="search"
+                name="catalog_query"
+                class="form-control"
+                placeholder="Nom, SKU, reference, code-barres"
+                value="{{ catalog_query }}"
+            >
+        </div>
+        <div class="field">
+            <label for="catalog_page_size">Produits par page</label>
+            <select id="catalog_page_size" name="catalog_page_size" class="form-control">
+                {% for size in catalog_page_sizes %}
+                    <option value="{{ size }}"{% if size == catalog_page_size %} selected{% endif %}>
+                        {{ size }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn secondary">Filtrer</button>
+        {% if catalog_query %}
+            <a class="btn ghost" href="{% url 'inventory:product_bot' %}">Réinitialiser</a>
+        {% endif %}
+    </form>
     <div class="ia-table">
         <div class="ia-table-header">
             <span>Référence</span>
@@ -142,6 +169,27 @@
             {% endfor %}
         </div>
     </div>
+    {% if catalog_page_obj.paginator.num_pages > 1 %}
+        <div class="pagination" style="margin-top:1rem;">
+            {% if catalog_page_obj.has_previous %}
+                <a class="btn ghost" href="?catalog_page=1&{{ catalog_pagination_query }}">&laquo; Début</a>
+                <a class="btn ghost" href="?catalog_page={{ catalog_page_obj.previous_page_number }}&{{ catalog_pagination_query }}">Précédent</a>
+            {% else %}
+                <span class="btn ghost" aria-disabled="true">Début</span>
+                <span class="btn ghost" aria-disabled="true">Précédent</span>
+            {% endif %}
+            <span class="muted-text" style="align-self:center;">
+                Page {{ catalog_page_obj.number }} / {{ catalog_page_obj.paginator.num_pages }}
+            </span>
+            {% if catalog_page_obj.has_next %}
+                <a class="btn ghost" href="?catalog_page={{ catalog_page_obj.next_page_number }}&{{ catalog_pagination_query }}">Suivant</a>
+                <a class="btn ghost" href="?catalog_page={{ catalog_page_obj.paginator.num_pages }}&{{ catalog_pagination_query }}">Fin &raquo;</a>
+            {% else %}
+                <span class="btn ghost" aria-disabled="true">Suivant</span>
+                <span class="btn ghost" aria-disabled="true">Fin</span>
+            {% endif %}
+        </div>
+    {% endif %}
 </section>
 
 <section class="surface surface-muted reveal" data-delay="200">
