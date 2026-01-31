@@ -204,6 +204,19 @@
         .message.error { border-color: var(--danger); }
         .message.info { border-color: var(--accent); }
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; }
+        .filter-panel {
+            padding: 0.6rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: rgba(255,255,255,0.6);
+        }
+        .filter-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.85rem;
+        }
         .field { display: flex; flex-direction: column; gap: 0.3rem; }
         label { font-size: 0.88rem; color: var(--muted); font-weight: 600; }
         input, select, textarea {
@@ -228,7 +241,7 @@
         .ia-table-header,
         .ia-table-row {
             display: grid;
-            grid-template-columns: 140px 1.3fr 200px 220px 220px 200px;
+            grid-template-columns: 120px 1.2fr 220px 180px 220px 220px 200px;
             gap: 0.75rem;
             padding: 0.7rem 0.8rem;
             align-items: center;
@@ -258,6 +271,21 @@
             border-style: dashed;
         }
         .ia-actions { display: flex; flex-direction: column; gap: 0.45rem; align-items: flex-start; }
+        .ia-image-review {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .ia-table-actions { align-items: flex-start; }
+        .ia-action-group { display: flex; flex-direction: column; gap: 0.35rem; }
+        .ia-action-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .ia-action-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+        }
         .reveal { opacity: 1; transform: none; }
         .float-soft,
         .pulse-border { animation: none; }
