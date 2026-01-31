@@ -2839,6 +2839,8 @@ def product_asset_bot(request):
         status__in=(ProductAssetJob.Status.QUEUED, ProductAssetJob.Status.RUNNING)
     ).count()
     catalog_query = (request.GET.get("catalog_query") or "").strip()
+    catalog_missing_description = request.GET.get("catalog_missing_description") == "1"
+    catalog_missing_image = request.GET.get("catalog_missing_image") == "1"
     catalog_page_size_param = request.GET.get("catalog_page_size")
     catalog_page_sizes = [25, 50, 100]
     try:
@@ -2869,6 +2871,14 @@ def product_asset_bot(request):
             | Q(name__icontains=catalog_query)
             | Q(manufacturer_reference__icontains=catalog_query)
             | Q(barcode__icontains=catalog_query)
+        )
+    if catalog_missing_description:
+        catalog_queryset = catalog_queryset.filter(
+            Q(description="") | Q(description__isnull=True)
+        )
+    if catalog_missing_image:
+        catalog_queryset = catalog_queryset.filter(
+            Q(image="") | Q(image__isnull=True)
         )
     catalog_paginator = Paginator(catalog_queryset, catalog_page_size)
     catalog_page_obj = catalog_paginator.get_page(request.GET.get("catalog_page"))
@@ -2902,6 +2912,8 @@ def product_asset_bot(request):
         "catalog_page_size": catalog_page_size,
         "catalog_page_sizes": catalog_page_sizes,
         "catalog_pagination_query": catalog_pagination_query,
+        "catalog_missing_description": catalog_missing_description,
+        "catalog_missing_image": catalog_missing_image,
         "catalog_categories": list(Category.objects.only("id", "name").order_by("name")),
         "stats": stats,
         "missing_description_products": list(
