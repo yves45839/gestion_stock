@@ -703,16 +703,32 @@ class ProductAssetBot:
         return " ".join(part.strip() for part in parts if part).strip()
 
     def _build_google_queries(self, product) -> list[str]:
-        reference = product.manufacturer_reference or product.sku or product.barcode or ""
+        manufacturer_reference = (product.manufacturer_reference or "").strip()
+        sku = (product.sku or "").strip()
+        barcode = (product.barcode or "").strip()
+        reference = manufacturer_reference or sku or barcode
         brand = str(getattr(product, "brand", "") or "").strip()
         name = (product.name or "").strip()
+        category = str(getattr(product, "category", "") or "").strip()
         queries = []
-        if brand and reference:
-            queries.append(f"{brand} \"{reference}\"")
-        if reference:
-            queries.append(f"\"{reference}\"")
+        if brand and manufacturer_reference:
+            queries.append(f"{brand} \"{manufacturer_reference}\"")
+        if brand and sku and sku != manufacturer_reference:
+            queries.append(f"{brand} \"{sku}\"")
+        if brand and barcode and barcode not in (manufacturer_reference, sku):
+            queries.append(f"{brand} \"{barcode}\"")
+        if manufacturer_reference:
+            queries.append(f"\"{manufacturer_reference}\"")
+        if sku and sku != manufacturer_reference:
+            queries.append(f"\"{sku}\"")
+        if barcode and barcode not in (manufacturer_reference, sku):
+            queries.append(f"\"{barcode}\"")
+        if brand and reference and name:
+            queries.append(f"{brand} \"{reference}\" {name}")
         if brand and name:
             queries.append(f"{brand} {name}")
+        if name and category:
+            queries.append(f"{name} {category}")
         if name:
             queries.append(name)
         seen = set()
