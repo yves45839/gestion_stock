@@ -57,6 +57,7 @@
         <div class="ia-table-header">
             <span>Référence</span>
             <span>Nom</span>
+            <span>Description</span>
             <span>Image</span>
             <span>Fiche technique</span>
             <span>Catégorie</span>
@@ -68,6 +69,23 @@
                         <strong>{{ product.sku }}</strong>
                     </div>
                     <div class="ia-table-cell muted-text" data-label="Nom">{{ product.name }}</div>
+                    <div class="ia-table-cell" data-label="Description">
+                        <div class="ia-actions" style="gap:0.35rem;">
+                            <div class="muted-text" style="max-width:260px;">
+                                {% if product.description %}
+                                    {{ product.description|truncatechars:90 }}
+                                {% else %}
+                                    <span class="pill">Aucune description</span>
+                                {% endif %}
+                            </div>
+                            <form method="post" style="margin:0; display:flex; gap:0.35rem; flex-wrap:wrap;">
+                                {% csrf_token %}
+                                <input type="hidden" name="product_id" value="{{ product.id }}">
+                                <button type="submit" name="bot_action" value="generate_description" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
+                                <button type="submit" name="bot_action" value="force_description" class="btn secondary" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Remplacer</button>
+                            </form>
+                        </div>
+                    </div>
                     <div class="ia-table-cell" data-label="Image">
                         <div class="ia-actions">
                             <div style="display:flex; align-items:center; gap:0.5rem;">
