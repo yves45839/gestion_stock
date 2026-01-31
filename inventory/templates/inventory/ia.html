@@ -53,7 +53,7 @@
         </div>
         <span class="pill">{{ catalog_total }} produits</span>
     </div>
-    <form method="get" class="form-grid" style="margin:0 0 1rem; align-items:end;">
+    <form method="get" class="form-grid filter-panel" style="margin:0 0 0.75rem; align-items:end;">
         <div class="field">
             <label for="catalog_query">Recherche rapide</label>
             <input
@@ -80,12 +80,20 @@
             <a class="btn ghost" href="{% url 'inventory:product_bot' %}">Réinitialiser</a>
         {% endif %}
     </form>
+    <div class="filter-summary">
+        <span class="muted-text">Filtres actifs :</span>
+        {% if catalog_query %}
+            <span class="pill">Recherche: "{{ catalog_query }}"</span>
+        {% endif %}
+        <span class="pill">{{ catalog_page_size }} / page</span>
+    </div>
     <div class="ia-table">
         <div class="ia-table-header">
             <span>Référence</span>
             <span>Nom</span>
             <span>Description</span>
             <span>Image</span>
+            <span>Actions IA</span>
             <span>Fiche technique</span>
             <span>Catégorie</span>
         </div>
@@ -97,20 +105,12 @@
                     </div>
                     <div class="ia-table-cell muted-text" data-label="Nom">{{ product.name }}</div>
                     <div class="ia-table-cell" data-label="Description">
-                        <div class="ia-actions" style="gap:0.35rem;">
-                            <div class="muted-text" style="max-width:260px;">
-                                {% if product.description %}
-                                    {{ product.description|truncatechars:90 }}
-                                {% else %}
-                                    <span class="pill">Aucune description</span>
-                                {% endif %}
-                            </div>
-                            <form method="post" style="margin:0; display:flex; gap:0.35rem; flex-wrap:wrap;">
-                                {% csrf_token %}
-                                <input type="hidden" name="product_id" value="{{ product.id }}">
-                                <button type="submit" name="bot_action" value="generate_description" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
-                                <button type="submit" name="bot_action" value="force_description" class="btn secondary" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Remplacer</button>
-                            </form>
+                        <div class="muted-text" style="max-width:260px;">
+                            {% if product.description %}
+                                {{ product.description|truncatechars:90 }}
+                            {% else %}
+                                <span class="pill">Aucune description</span>
+                            {% endif %}
                         </div>
                     </div>
                     <div class="ia-table-cell" data-label="Image">
@@ -121,14 +121,9 @@
                             {% else %}
                                 <div class="ia-thumb placeholder">N/A</div>
                             {% endif %}
-                            <form method="post" style="margin:0;">
-                                {% csrf_token %}
-                                <input type="hidden" name="product_id" value="{{ product.id }}">
-                                <button type="submit" name="bot_action" value="generate_image" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
-                            </form>
                             </div>
                             {% if product.pending_image %}
-                                <div style="display:flex; align-items:center; gap:0.5rem;">
+                                <div class="ia-image-review">
                                     <img src="{{ product.pending_image.url }}" alt="Aperçu IA {{ product.name }}" class="ia-thumb pending" loading="lazy" decoding="async">
                                     <span class="pill">aperçu</span>
                                     <form method="post" style="margin:0;">
@@ -143,6 +138,34 @@
                                     </form>
                                 </div>
                             {% endif %}
+                        </div>
+                    </div>
+                    <div class="ia-table-cell ia-table-actions" data-label="Actions IA">
+                        <div class="ia-action-group">
+                            <span class="ia-action-label">Description</span>
+                            <div class="ia-action-row">
+                                <form method="post" style="margin:0;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                                    <button type="submit" name="bot_action" value="generate_description" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
+                                </form>
+                                <form method="post" style="margin:0;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                                    <button type="submit" name="bot_action" value="force_description" class="btn secondary" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Remplacer</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="ia-action-group">
+                            <span class="ia-action-label">Image</span>
+                            <div class="ia-action-row">
+                                <form method="post" style="margin:0;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                                    <button type="submit" name="bot_action" value="generate_image" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Générer</button>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                     <div class="ia-table-cell" data-label="Fiche technique">
                         {% if product.datasheet_pdf %}
@@ -190,27 +213,6 @@
             {% endif %}
         </div>
     {% endif %}
-</section>
-
-<section class="surface surface-muted reveal" data-delay="200">
-    <div class="surface-header">
-        <div>
-            <p class="eyebrow">Fonctionnement</p>
-            <h2 class="surface-title">Mistral + images produits</h2>
-        </div>
-        <span class="pill">IA</span>
-    </div>
-    <p class="lead" style="margin:0 0 0.75rem;">
-        Le bot utilise Mistral pour générer un texte en deux phrases max
-        et récupère un visuel via la variable
-        <code>PRODUCT_BOT_IMAGE_URL_TEMPLATE</code> (utilise de préférence
-        <code>{reference}</code>). Choisis un produit, force le regroupement
-        désiré ou lance un lot.
-    </p>
-    <p class="muted-text" style="margin:0;">
-        Chaque action est mise en file via Celery (assure-toi d'avoir un worker
-        actif) et peut être filtrée par description et image existantes.
-    </p>
 </section>
 
 <section class="surface reveal" data-delay="220">
@@ -638,6 +640,27 @@
             </div>
         {% endif %}
     </div>
+</section>
+
+<section class="surface surface-muted reveal" data-delay="350">
+    <div class="surface-header">
+        <div>
+            <p class="eyebrow">Fonctionnement</p>
+            <h2 class="surface-title">Mistral + images produits</h2>
+        </div>
+        <span class="pill">IA</span>
+    </div>
+    <p class="lead" style="margin:0 0 0.75rem;">
+        Le bot utilise Mistral pour générer un texte en deux phrases max
+        et récupère un visuel via la variable
+        <code>PRODUCT_BOT_IMAGE_URL_TEMPLATE</code> (utilise de préférence
+        <code>{reference}</code>). Choisis un produit, force le regroupement
+        désiré ou lance un lot.
+    </p>
+    <p class="muted-text" style="margin:0;">
+        Chaque action est mise en file via Celery (assure-toi d'avoir un worker
+        actif) et peut être filtrée par description et image existantes.
+    </p>
 </section>
 
 <section class="surface surface-muted reveal" data-delay="360">
