@@ -233,11 +233,19 @@ class Product(VersionedModelMixin, TimeStampedModel):
         blank=True,
         null=True,
     )
+    image_is_placeholder = models.BooleanField(
+        "Image de substitution",
+        default=False,
+    )
     pending_image = models.FileField(
         "Aperçu image IA",
         upload_to="products/images/pending",
         blank=True,
         null=True,
+    )
+    pending_image_is_placeholder = models.BooleanField(
+        "Aperçu image de substitution",
+        default=False,
     )
     is_online = models.BooleanField(
         "Visible en ligne",
@@ -255,7 +263,7 @@ class Product(VersionedModelMixin, TimeStampedModel):
         null=True,
     )
     datasheet_fetched_at = models.DateTimeField(
-        "Fiche technique rÃ©cupÃ©rÃ©e",
+        "Fiche technique récupérée",
         blank=True,
         null=True,
     )
