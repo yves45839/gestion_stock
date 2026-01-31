@@ -37,6 +37,12 @@
         <p class="value">{{ stats.missing_image }}</p>
         <p class="muted-text">Image récupérée depuis la source configurée.</p>
     </div>
+    <div class="surface reveal" data-delay="140">
+        <p class="eyebrow">Visuels</p>
+        <p class="surface-title">Images de substitution</p>
+        <p class="value">{{ stats.placeholder_image }}</p>
+        <p class="muted-text">Visuels issus des sources de remplacement.</p>
+    </div>
     <div class="surface reveal" data-delay="160">
         <p class="eyebrow">Fiches techniques</p>
         <p class="surface-title">PDF téléchargés</p>
@@ -85,9 +91,13 @@
                 <input type="checkbox" name="catalog_missing_image" value="1"{% if catalog_missing_image %} checked{% endif %}>
                 Sans image
             </label>
+            <label style="display:flex; align-items:center; gap:0.5rem;">
+                <input type="checkbox" name="catalog_placeholder_image" value="1"{% if catalog_placeholder_image %} checked{% endif %}>
+                Image de substitution
+            </label>
         </div>
         <button type="submit" class="btn secondary">Filtrer</button>
-        {% if catalog_query or catalog_missing_description or catalog_missing_image %}
+        {% if catalog_query or catalog_missing_description or catalog_missing_image or catalog_placeholder_image %}
             <a class="btn ghost" href="{% url 'inventory:product_bot' %}">Réinitialiser</a>
         {% endif %}
     </form>
@@ -101,6 +111,9 @@
         {% endif %}
         {% if catalog_missing_image %}
             <span class="pill">Sans image</span>
+        {% endif %}
+        {% if catalog_placeholder_image %}
+            <span class="pill">Image de substitution</span>
         {% endif %}
         <span class="pill">{{ catalog_page_size }} / page</span>
     </div>
@@ -135,6 +148,9 @@
                             <div style="display:flex; align-items:center; gap:0.5rem;">
                             {% if product.image %}
                                 <img src="{{ product.image.url }}" alt="{{ product.name }}" class="ia-thumb" loading="lazy" decoding="async">
+                                {% if product.image_is_placeholder %}
+                                    <span class="pill">substitution</span>
+                                {% endif %}
                             {% else %}
                                 <div class="ia-thumb placeholder">N/A</div>
                             {% endif %}
@@ -620,6 +636,26 @@
             </ul>
         {% else %}
             <p class="muted-text">Tous les produits ont un visuel.</p>
+        {% endif %}
+    </div>
+    <div class="surface surface-muted reveal" data-delay="410">
+        <div class="surface-header">
+            <div>
+                <p class="eyebrow">Substitution</p>
+                <h2 class="surface-title">Visuels a revoir</h2>
+            </div>
+        </div>
+        {% if placeholder_image_products %}
+            <ul class="stack" style="list-style:none; margin:0; padding:0;">
+                {% for product in placeholder_image_products %}
+                    <li style="display:flex; justify-content:space-between; padding:0.35rem 0; border-bottom:1px solid var(--border);">
+                        <span>{{ product.sku }}</span>
+                        <span class="muted-text">{{ product.name }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted-text">Aucun visuel de substitution.</p>
         {% endif %}
     </div>
     <div class="surface surface-muted reveal" data-delay="420">

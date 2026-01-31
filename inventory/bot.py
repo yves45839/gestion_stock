@@ -309,6 +309,9 @@ class ProductAssetBot:
     def ensure_image(self, product, force: bool = False, *, image_field: str = "image") -> bool:
         self.last_image_log = None
         field = getattr(product, image_field)
+        placeholder_field = (
+            "pending_image_is_placeholder" if image_field == "pending_image" else "image_is_placeholder"
+        )
         if field and not force:
             self._set_image_log("skip", "already has image")
             return False
@@ -316,6 +319,7 @@ class ProductAssetBot:
         if local_path:
             applied = self._apply_local_image(product, local_path, image_field=image_field)
             if applied:
+                setattr(product, placeholder_field, False)
                 self._set_image_log("ok", f"local file {local_path.name}")
             else:
                 self._set_image_log("skip", f"local file already set ({local_path.name})")
@@ -329,7 +333,8 @@ class ProductAssetBot:
             reason = self._format_google_status() or "no_image_source"
             self._set_image_log("skip", reason)
             return False
-        if self._is_placeholder_url(image_url) and not self.allow_placeholders:
+        is_placeholder = self._is_placeholder_url(image_url)
+        if is_placeholder and not self.allow_placeholders:
             detail = "placeholder blocked"
             google_status = self._format_google_status()
             if google_status and self.last_google_status != "ok":
@@ -356,6 +361,7 @@ class ProductAssetBot:
             extension=self._image_extension(response, image_url),
         )
         field.save(filename, ContentFile(response.content), save=False)
+        setattr(product, placeholder_field, is_placeholder)
         source_label = image_source or "url"
         self._set_image_log("ok", f"downloaded from {source_label}")
         return True

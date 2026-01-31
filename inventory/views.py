@@ -2333,6 +2333,10 @@ def product_asset_bot(request):
             "id",
             filter=Q(image="") | Q(image__isnull=True),
         ),
+        placeholder_image=Count(
+            "id",
+            filter=Q(image_is_placeholder=True),
+        ),
         missing_both=Count(
             "id",
             filter=(
@@ -2347,6 +2351,7 @@ def product_asset_bot(request):
     )
     missing_description_qs = Product.objects.filter(Q(description="") | Q(description__isnull=True))
     missing_image_qs = Product.objects.filter(Q(image="") | Q(image__isnull=True))
+    placeholder_image_qs = Product.objects.filter(image_is_placeholder=True)
     datasheet_qs = Product.objects.filter(
         Q(datasheet_pdf__isnull=False) & ~Q(datasheet_pdf="")
     )
@@ -2673,7 +2678,16 @@ def product_asset_bot(request):
             if product.pending_image:
                 product.image = product.pending_image
                 product.pending_image = None
-                product.save(update_fields=["image", "pending_image"])
+                product.image_is_placeholder = product.pending_image_is_placeholder
+                product.pending_image_is_placeholder = False
+                product.save(
+                    update_fields=[
+                        "image",
+                        "pending_image",
+                        "image_is_placeholder",
+                        "pending_image_is_placeholder",
+                    ]
+                )
                 messages.success(
                     request,
                     f"Aperçu validé et image remplacée pour {product.sku}.",
@@ -2689,7 +2703,8 @@ def product_asset_bot(request):
             if product.pending_image:
                 product.pending_image.delete(save=False)
                 product.pending_image = None
-                product.save(update_fields=["pending_image"])
+                product.pending_image_is_placeholder = False
+                product.save(update_fields=["pending_image", "pending_image_is_placeholder"])
                 messages.info(
                     request,
                     f"Aperçu supprimé pour {product.sku}.",
@@ -2828,6 +2843,7 @@ def product_asset_bot(request):
         "total_products": product_stats["total_products"],
         "missing_description": product_stats["missing_description"],
         "missing_image": product_stats["missing_image"],
+        "placeholder_image": product_stats["placeholder_image"],
         "missing_both": product_stats["missing_both"],
     }
     recent_jobs = list(
@@ -2841,6 +2857,7 @@ def product_asset_bot(request):
     catalog_query = (request.GET.get("catalog_query") or "").strip()
     catalog_missing_description = request.GET.get("catalog_missing_description") == "1"
     catalog_missing_image = request.GET.get("catalog_missing_image") == "1"
+    catalog_placeholder_image = request.GET.get("catalog_placeholder_image") == "1"
     catalog_page_size_param = request.GET.get("catalog_page_size")
     catalog_page_sizes = [25, 50, 100]
     try:
@@ -2860,7 +2877,9 @@ def product_asset_bot(request):
         "name",
         "description",
         "image",
+        "image_is_placeholder",
         "pending_image",
+        "pending_image_is_placeholder",
         "datasheet_pdf",
         "datasheet_url",
         "category_id",
@@ -2880,6 +2899,8 @@ def product_asset_bot(request):
         catalog_queryset = catalog_queryset.filter(
             Q(image="") | Q(image__isnull=True)
         )
+    if catalog_placeholder_image:
+        catalog_queryset = catalog_queryset.filter(image_is_placeholder=True)
     catalog_paginator = Paginator(catalog_queryset, catalog_page_size)
     catalog_page_obj = catalog_paginator.get_page(request.GET.get("catalog_page"))
     catalog_query_params = request.GET.copy()
@@ -2914,6 +2935,7 @@ def product_asset_bot(request):
         "catalog_pagination_query": catalog_pagination_query,
         "catalog_missing_description": catalog_missing_description,
         "catalog_missing_image": catalog_missing_image,
+        "catalog_placeholder_image": catalog_placeholder_image,
         "catalog_categories": list(Category.objects.only("id", "name").order_by("name")),
         "stats": stats,
         "missing_description_products": list(
@@ -2921,6 +2943,9 @@ def product_asset_bot(request):
         ),
         "missing_image_products": list(
             missing_image_qs.only("id", "sku", "name").order_by("name")[:5]
+        ),
+        "placeholder_image_products": list(
+            placeholder_image_qs.only("id", "sku", "name").order_by("name")[:5]
         ),
         "datasheet_products": list(
             datasheet_qs.only(

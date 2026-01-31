@@ -162,6 +162,10 @@ def run_product_asset_bot(
             update_fields.append("description")
         if image_changed:
             update_fields.append(image_field)
+            placeholder_field = (
+                "pending_image_is_placeholder" if image_field == "pending_image" else "image_is_placeholder"
+            )
+            update_fields.append(placeholder_field)
         product.save(update_fields=update_fields)
         logger.info(
             "Product asset bot updated %s (desc=%s image=%s)",
