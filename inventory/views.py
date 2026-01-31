@@ -2640,6 +2640,33 @@ def product_asset_bot(request):
                     request,
                     f"Le bot IA a ete lance pour l'image de {product.sku}.",
                 )
+        elif action in ("generate_description", "force_description"):
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            dispatch_info = _dispatch_product_asset_bot(
+                product,
+                force_description=action == "force_description",
+                force_image=False,
+                mode=ProductAssetJob.Mode.SINGLE,
+                inline_mode=inline_mode,
+            )
+            status = dispatch_info.get("status")
+            if status == "pending":
+                messages.info(
+                    request,
+                    f"{product.sku} est deja en file d'attente.",
+                )
+            elif status == "inline":
+                result = dispatch_info.get("result")
+                level, message_text = _inline_result_message(result, product)
+                if level and message_text:
+                    getattr(messages, level)(request, message_text)
+            else:
+                suffix = " (remplacement force)" if action == "force_description" else ""
+                messages.success(
+                    request,
+                    f"Le bot IA a ete lance pour la description de {product.sku}{suffix}.",
+                )
         elif action == "validate_image":
             product_id = request.POST.get("product_id")
             product = get_object_or_404(Product, pk=product_id)
@@ -2835,6 +2862,7 @@ def product_asset_bot(request):
                 "id",
                 "sku",
                 "name",
+                "description",
                 "image",
                 "pending_image",
                 "datasheet_pdf",
