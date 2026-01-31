@@ -2838,6 +2838,44 @@ def product_asset_bot(request):
     queue_pending = ProductAssetJob.objects.filter(
         status__in=(ProductAssetJob.Status.QUEUED, ProductAssetJob.Status.RUNNING)
     ).count()
+    catalog_query = (request.GET.get("catalog_query") or "").strip()
+    catalog_page_size_param = request.GET.get("catalog_page_size")
+    catalog_page_sizes = [25, 50, 100]
+    try:
+        catalog_page_size = (
+            int(catalog_page_size_param)
+            if catalog_page_size_param
+            else catalog_page_sizes[1]
+        )
+    except ValueError:
+        catalog_page_size = catalog_page_sizes[1]
+    if catalog_page_size not in catalog_page_sizes:
+        catalog_page_size = catalog_page_sizes[1]
+
+    catalog_queryset = Product.objects.only(
+        "id",
+        "sku",
+        "name",
+        "description",
+        "image",
+        "pending_image",
+        "datasheet_pdf",
+        "datasheet_url",
+        "category_id",
+    ).order_by("name")
+    if catalog_query:
+        catalog_queryset = catalog_queryset.filter(
+            Q(sku__icontains=catalog_query)
+            | Q(name__icontains=catalog_query)
+            | Q(manufacturer_reference__icontains=catalog_query)
+            | Q(barcode__icontains=catalog_query)
+        )
+    catalog_paginator = Paginator(catalog_queryset, catalog_page_size)
+    catalog_page_obj = catalog_paginator.get_page(request.GET.get("catalog_page"))
+    catalog_query_params = request.GET.copy()
+    if "catalog_page" in catalog_query_params:
+        catalog_query_params.pop("catalog_page")
+    catalog_pagination_query = catalog_query_params.urlencode()
     context = {
         "manual_form": manual_form,
         "bulk_form": bulk_form,
@@ -2857,19 +2895,13 @@ def product_asset_bot(request):
         "selection_total": selection_total,
         "selection_displayed": selection_displayed,
         "selection_products": selection_products,
-        "catalog_products": list(
-            Product.objects.only(
-                "id",
-                "sku",
-                "name",
-                "description",
-                "image",
-                "pending_image",
-                "datasheet_pdf",
-                "datasheet_url",
-                "category_id",
-            ).order_by("name")
-        ),
+        "catalog_products": catalog_page_obj.object_list,
+        "catalog_page_obj": catalog_page_obj,
+        "catalog_total": catalog_paginator.count,
+        "catalog_query": catalog_query,
+        "catalog_page_size": catalog_page_size,
+        "catalog_page_sizes": catalog_page_sizes,
+        "catalog_pagination_query": catalog_pagination_query,
         "catalog_categories": list(Category.objects.only("id", "name").order_by("name")),
         "stats": stats,
         "missing_description_products": list(
