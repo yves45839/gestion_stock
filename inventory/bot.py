@@ -486,9 +486,6 @@ class ProductAssetBot:
             return applied
         image_url, image_source = self._find_search_image(product)
         if not image_url:
-            image_url = self._build_image_url(product)
-            image_source = "template" if image_url else None
-        if not image_url:
             reason = self._format_search_status() or "no_image_source"
             self._set_image_log("skip", reason)
             return False
