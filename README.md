@@ -46,7 +46,7 @@
    ```
    Utilise `--limit`, `--assets=description,images,techsheet,pdf,videos,blog` ou `--force-*` pour adapter la sélection.
 5. Le bot utilise Mistral pour générer les descriptions (courte + longue), la fiche technique JSON et les brouillons de blog, récupère les images via `PRODUCT_BOT_IMAGE_URL_TEMPLATE` (utilise de préférence `{reference}` pour viser la vraie image du produit), et prépare des liens vidéo (YouTube/Vimeo) sous forme de recherches. Les placeholders sont désactivés par défaut (active `PRODUCT_BOT_ALLOW_PLACEHOLDERS=true` si besoin).
-6. (Optionnel) Pour chercher des images via Google Custom Search: configure `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ENGINE_ID`, puis active `PRODUCT_BOT_GOOGLE_IMAGE_SEARCH_ENABLED=true` et fixe `PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT` pour rester sous le quota journalier.
+6. (Optionnel) Pour chercher des images via Google Custom Search: configure `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ENGINE_ID`, puis active `PRODUCT_BOT_GOOGLE_IMAGE_SEARCH_ENABLED=true` et fixe `PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT` pour rester sous le quota journalier. Si Google ne repond pas, tu peux activer le fallback Serper avec `SERPER_API_KEY`, `PRODUCT_BOT_SERPER_IMAGE_SEARCH_ENABLED=true` et `PRODUCT_BOT_SERPER_IMAGE_DAILY_LIMIT`.
 
 **Mode local instantané**  
 Si tu veux que le bot s'exécute immédiatement dans la même requête sans passer par la file (par exemple pour des tests rapides), active `PRODUCT_BOT_INLINE_RUN=true` dans `.env` ou lance `python manage.py product_asset_bot --inline`. Le formulaire IA réagit de la même façon : les descriptions/images sont générées sur-le-champ et les messages remontent directement dans l'interface.
