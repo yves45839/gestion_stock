@@ -367,7 +367,8 @@ class ProductAssetBot:
         placeholder_field = (
             "pending_image_is_placeholder" if image_field == "pending_image" else "image_is_placeholder"
         )
-        if field and not force:
+        is_placeholder = bool(getattr(product, placeholder_field, False))
+        if field and not force and not is_placeholder:
             self._set_image_log("skip", "already has image")
             return False
         local_path = self._find_local_image(product)
