@@ -2361,7 +2361,7 @@ def product_asset_bot(request):
         ),
         missing_image=Count(
             "id",
-            filter=Q(image="") | Q(image__isnull=True),
+            filter=Q(image="") | Q(image__isnull=True) | Q(image_is_placeholder=True),
         ),
         placeholder_image=Count(
             "id",
@@ -2371,7 +2371,7 @@ def product_asset_bot(request):
             "id",
             filter=(
                 (Q(description="") | Q(description__isnull=True))
-                & (Q(image="") | Q(image__isnull=True))
+                & (Q(image="") | Q(image__isnull=True) | Q(image_is_placeholder=True))
             ),
         ),
         datasheet_downloaded_count=Count(
@@ -2380,7 +2380,9 @@ def product_asset_bot(request):
         ),
     )
     missing_description_qs = Product.objects.filter(Q(description="") | Q(description__isnull=True))
-    missing_image_qs = Product.objects.filter(Q(image="") | Q(image__isnull=True))
+    missing_image_qs = Product.objects.filter(
+        Q(image="") | Q(image__isnull=True) | Q(image_is_placeholder=True)
+    )
     placeholder_image_qs = Product.objects.filter(image_is_placeholder=True)
     datasheet_qs = Product.objects.filter(
         Q(datasheet_pdf__isnull=False) & ~Q(datasheet_pdf="")
@@ -2457,14 +2459,21 @@ def product_asset_bot(request):
         selection_filters["force_videos"] = _parse_bool(selection_payload, "force_videos", False)
         selection_filters["force_blog"] = _parse_bool(selection_payload, "force_blog", False)
 
-    selection_queryset = Product.objects.only("id", "sku", "name", "description", "image").order_by("name")
+    selection_queryset = Product.objects.only(
+        "id",
+        "sku",
+        "name",
+        "description",
+        "image",
+        "image_is_placeholder",
+    ).order_by("name")
     selection_conditions = Q()
     has_condition = False
     if selection_filters["filter_missing_description"]:
         selection_conditions |= Q(description="") | Q(description__isnull=True)
         has_condition = True
     if selection_filters["filter_missing_image"]:
-        selection_conditions |= Q(image="") | Q(image__isnull=True)
+        selection_conditions |= Q(image="") | Q(image__isnull=True) | Q(image_is_placeholder=True)
         has_condition = True
     if has_condition:
         selection_queryset = selection_queryset.filter(selection_conditions)
@@ -2494,10 +2503,12 @@ def product_asset_bot(request):
             "id": row["id"],
             "sku": row["sku"],
             "name": row["name"],
-            "has_image": bool(row["image"]),
+            "has_image": bool(row["image"]) and not row["image_is_placeholder"],
             "has_description": bool((row["description"] or "").strip()),
         }
-        for row in selection_queryset.values("id", "sku", "name", "description", "image")
+        for row in selection_queryset.values(
+            "id", "sku", "name", "description", "image", "image_is_placeholder"
+        )
     ]
 
     def _run_selection(products, assets, force_description, force_image, force_techsheet, force_pdf, force_videos, force_blog, empty_message):
@@ -2611,7 +2622,9 @@ def product_asset_bot(request):
                 if "description" in assets and not bulk_form.cleaned_data["force_description"]:
                     queryset = queryset.filter(Q(description="") | Q(description__isnull=True))
                 if "images" in assets and not bulk_form.cleaned_data["force_image"]:
-                    queryset = queryset.filter(Q(image="") | Q(image__isnull=True))
+                    queryset = queryset.filter(
+                        Q(image="") | Q(image__isnull=True) | Q(image_is_placeholder=True)
+                    )
                 limit = bulk_form.cleaned_data["limit"]
                 products = list(queryset[:limit]) if limit else list(queryset)
                 if not products:
@@ -2994,7 +3007,7 @@ def product_asset_bot(request):
         )
     if catalog_missing_image:
         catalog_queryset = catalog_queryset.filter(
-            Q(image="") | Q(image__isnull=True)
+            Q(image="") | Q(image__isnull=True) | Q(image_is_placeholder=True)
         )
     if catalog_placeholder_image:
         catalog_queryset = catalog_queryset.filter(image_is_placeholder=True)
