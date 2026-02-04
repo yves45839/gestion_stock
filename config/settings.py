@@ -91,24 +91,29 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-database_name = os.getenv('DATABASE_NAME')
+database_name = os.getenv("DATABASE_NAME")
+
+# If DATABASE_NAME is empty -> use BASE_DIR/db.sqlite3
+# If DATABASE_NAME is a relative path like "db.sqlite3" -> make it absolute with BASE_DIR
 if not database_name:
-    database_name = BASE_DIR / 'db.sqlite3'
+    database_name = BASE_DIR / "db.sqlite3"
+else:
+    p = Path(database_name)
+    if not p.is_absolute():
+        database_name = BASE_DIR / database_name
 
 DATABASES = {
-    'default': {
-        'ENGINE': os.getenv('DATABASE_ENGINE', 'django.db.backends.sqlite3'),
-        'NAME': database_name,
-        'USER': os.getenv('DATABASE_USER', ''),
-        'PASSWORD': os.getenv('DATABASE_PASSWORD', ''),
-        'HOST': os.getenv('DATABASE_HOST', ''),
-        'PORT': os.getenv('DATABASE_PORT', ''),
-        'OPTIONS': {
-            # Give SQLite a few seconds to wait for competing writers before failing.
-            'timeout': 20,
-        },
+    "default": {
+        "ENGINE": os.getenv("DATABASE_ENGINE", "django.db.backends.sqlite3"),
+        "NAME": database_name,
+        "USER": os.getenv("DATABASE_USER", ""),
+        "PASSWORD": os.getenv("DATABASE_PASSWORD", ""),
+        "HOST": os.getenv("DATABASE_HOST", ""),
+        "PORT": os.getenv("DATABASE_PORT", ""),
+        "OPTIONS": {"timeout": 20},
     }
 }
+
 
 
 # Password validation
