@@ -211,6 +211,74 @@ class GoogleImageSearchClient:
         return items[0].get("link")
 
 
+class SerperImageSearchClient:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        endpoint: str,
+        daily_limit: int,
+        session: requests.Session,
+        timeout: int,
+        usage_path: Path,
+    ):
+        self.api_key = api_key
+        self.endpoint = endpoint
+        self.daily_limit = daily_limit
+        self.session = session
+        self.timeout = timeout
+        self.quota = _DailyQuota(usage_path, daily_limit)
+        self.last_status = None
+        self.last_error = None
+        self.last_query = None
+
+    def search_image(self, query: str) -> Optional[str]:
+        self.last_status = None
+        self.last_error = None
+        self.last_query = query
+        if not query:
+            self.last_status = "empty_query"
+            return None
+        if not self.api_key:
+            self.last_status = "missing_config"
+            return None
+        if not self.quota.reserve():
+            self.last_status = "quota"
+            logger.info("Serper image search quota reached (%s/day).", self.daily_limit)
+            return None
+        payload = {"q": query, "num": 1}
+        try:
+            response = self.session.post(
+                self.endpoint,
+                json=payload,
+                headers={"X-API-KEY": self.api_key, "Content-Type": "application/json"},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            self.last_status = "request_error"
+            self.last_error = str(exc)
+            logger.warning("Serper image search failed: %s", exc)
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            self.last_status = "bad_json"
+            return None
+        items = data.get("images") or data.get("image_results") or []
+        if not items:
+            self.last_status = "no_results"
+            return None
+        image = items[0] or {}
+        for key in ("imageUrl", "link", "thumbnailUrl", "sourceUrl", "url"):
+            url = image.get(key)
+            if url:
+                self.last_status = "ok"
+                return url
+        self.last_status = "no_results"
+        return None
+
+
 class ProductAssetBot:
     def __init__(
         self,
@@ -246,6 +314,10 @@ class ProductAssetBot:
         self.last_google_query = None
         self.google_search_status = "disabled"
         self.google_search = self._build_google_search()
+        self.last_serper_status = None
+        self.last_serper_query = None
+        self.serper_search_status = "disabled"
+        self.serper_search = self._build_serper_search()
 
     def _build_text_generator(self, api_key: Optional[str]) -> Optional[MistralTextGenerator]:
         if not api_key:
@@ -275,6 +347,29 @@ class ProductAssetBot:
             api_key=api_key,
             engine_id=engine_id,
             safe=safe,
+            daily_limit=daily_limit,
+            session=self.image_session,
+            timeout=self.image_timeout,
+            usage_path=usage_path,
+        )
+
+    def _build_serper_search(self) -> Optional[SerperImageSearchClient]:
+        enabled = getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_SEARCH_ENABLED", False)
+        if not enabled:
+            self.serper_search_status = "disabled"
+            return None
+        api_key = getattr(settings, "SERPER_API_KEY", None)
+        if not api_key:
+            self.serper_search_status = "missing_config"
+            logger.warning("Serper image search enabled but missing API key.")
+            return None
+        self.serper_search_status = "enabled"
+        daily_limit = getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_DAILY_LIMIT", 0)
+        endpoint = getattr(settings, "SERPER_IMAGE_ENDPOINT", "https://google.serper.dev/images")
+        usage_path = Path(settings.BASE_DIR) / "var" / "serper_usage.json"
+        return SerperImageSearchClient(
+            api_key=api_key,
+            endpoint=endpoint,
             daily_limit=daily_limit,
             session=self.image_session,
             timeout=self.image_timeout,
@@ -389,21 +484,20 @@ class ProductAssetBot:
             else:
                 self._set_image_log("skip", f"local file already set ({local_path.name})")
             return applied
-        image_url = self._find_google_image(product)
-        image_source = "google" if image_url else None
+        image_url, image_source = self._find_search_image(product)
         if not image_url:
             image_url = self._build_image_url(product)
             image_source = "template" if image_url else None
         if not image_url:
-            reason = self._format_google_status() or "no_image_source"
+            reason = self._format_search_status() or "no_image_source"
             self._set_image_log("skip", reason)
             return False
         is_placeholder = self._is_placeholder_url(image_url)
         if is_placeholder and not self.allow_placeholders:
             detail = "placeholder blocked"
-            google_status = self._format_google_status()
-            if google_status and self.last_google_status != "ok":
-                detail = f"{detail} ({google_status})"
+            search_status = self._format_search_status()
+            if search_status and self.last_google_status != "ok" and self.last_serper_status != "ok":
+                detail = f"{detail} ({search_status})"
             self._set_image_log("skip", detail)
             logger.info("Skipping placeholder image url for %s", product)
             return False
@@ -670,25 +764,34 @@ class ProductAssetBot:
         except json.JSONDecodeError:
             return None
 
-    def _find_google_image(self, product) -> Optional[str]:
+    def _find_search_image(self, product) -> tuple[Optional[str], Optional[str]]:
         self.last_google_status = None
         self.last_google_query = None
+        self.last_serper_status = None
+        self.last_serper_query = None
         if not self.google_search:
             self.last_google_status = self.google_search_status
-            return None
         queries = self._build_google_queries(product)
         if not queries:
             self.last_google_status = "empty_query"
-            return None
+            self.last_serper_status = "empty_query"
+            return None, None
         max_tries = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_MAX_TRIES", 1)
         tries = max(max_tries or 1, 1)
         for query in queries[:tries]:
-            url = self.google_search.search_image(query)
-            self.last_google_query = query
-            self.last_google_status = self.google_search.last_status or "no_results"
-            if url:
-                return url
-        return None
+            if self.google_search:
+                url = self.google_search.search_image(query)
+                self.last_google_query = query
+                self.last_google_status = self.google_search.last_status or "no_results"
+                if url:
+                    return url, "google"
+            if self.serper_search:
+                url = self.serper_search.search_image(query)
+                self.last_serper_query = query
+                self.last_serper_status = self.serper_search.last_status or "no_results"
+                if url:
+                    return url, "serper"
+        return None, None
 
     def _build_google_query(self, product) -> str:
         reference = product.manufacturer_reference or product.sku or product.barcode or ""
@@ -741,15 +844,25 @@ class ProductAssetBot:
                 unique.append(cleaned)
         return unique
 
-    def _format_google_status(self) -> str:
-        if not self.last_google_status:
-            return ""
-        if self.last_google_query:
-            query = self.last_google_query
-            if len(query) > 60:
-                query = f"{query[:57]}..."
-            return f"google: {self.last_google_status}, q: {query}"
-        return f"google: {self.last_google_status}"
+    def _format_search_status(self) -> str:
+        parts = []
+        if self.last_google_status:
+            if self.last_google_query:
+                query = self.last_google_query
+                if len(query) > 60:
+                    query = f"{query[:57]}..."
+                parts.append(f"google: {self.last_google_status}, q: {query}")
+            else:
+                parts.append(f"google: {self.last_google_status}")
+        if self.last_serper_status:
+            if self.last_serper_query:
+                query = self.last_serper_query
+                if len(query) > 60:
+                    query = f"{query[:57]}..."
+                parts.append(f"serper: {self.last_serper_status}, q: {query}")
+            else:
+                parts.append(f"serper: {self.last_serper_status}")
+        return " | ".join(parts)
 
     def _build_image_url(self, product) -> Optional[str]:
         if not self.image_url_template:
