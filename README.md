@@ -51,6 +51,24 @@
 **Mode local instantané**  
 Si tu veux que le bot s'exécute immédiatement dans la même requête sans passer par la file (par exemple pour des tests rapides), active `PRODUCT_BOT_INLINE_RUN=true` dans `.env` ou lance `python manage.py product_asset_bot --inline`. Le formulaire IA réagit de la même façon : les descriptions/images sont générées sur-le-champ et les messages remontent directement dans l'interface.
 
+
+## Agent IA de contrôle qualité produits
+
+Pour obtenir des fiches produits plus riches (dans l'esprit e-commerce avancé), lance l'agent qualité :
+```
+python manage.py run_product_quality_agent --threshold 75 --limit 100
+```
+
+Ce que fait l'agent :
+- calcule un score qualité (/100) par produit (titres, descriptions courte/longue, specs techniques, image, contenus annexes) ;
+- détecte les fiches faibles (score < seuil) ;
+- déclenche automatiquement l'enrichissement IA (Mistral) sur descriptions/specs/vidéos puis recalcule le score.
+
+Options utiles :
+- `--product-id 123` : traiter un seul produit ;
+- `--threshold 80` : exiger une qualité plus élevée ;
+- `--limit 20` : limiter le volume par lot.
+
 ## Attribution automatique des categories
 
 Utilise la commande suivante pour attribuer des categories selon des mots-cles trouves dans le SKU/nom :

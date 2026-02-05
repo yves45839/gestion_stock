@@ -688,3 +688,58 @@ class CustomerViewTests(TestCase):
             CustomerAccountEntry.objects.filter(customer=self.customer).count(),
             1,
         )
+
+
+class ProductQualityAgentTests(TestCase):
+    def setUp(self):
+        self.brand = Brand.objects.create(name="Mikrotik")
+        self.category = Category.objects.create(name="Routeur")
+
+    def test_evaluate_returns_low_score_for_sparse_product(self):
+        from .quality_agent import ProductQualityAgent
+
+        product = Product.objects.create(
+            sku="Q-LOW-1",
+            name="Routeur",
+            brand=self.brand,
+            category=self.category,
+        )
+
+        report = ProductQualityAgent(threshold=70, bot=object()).evaluate(product)
+
+        self.assertLess(report.score, 70)
+        self.assertIn("Description principale absente.", report.issues)
+
+    def test_improve_if_needed_updates_product_when_bot_returns_changes(self):
+        from .quality_agent import ProductQualityAgent
+
+        class FakeBot:
+            def ensure_assets(self, product, **kwargs):
+                product.short_description = "Performance élevée et installation rapide."
+                product.long_description = "x" * 500
+                product.description = "x" * 500
+                product.tech_specs_json = {"ports": "8", "poe": "oui", "uplink": "2", "débit": "1Gbps"}
+                product.video_links = ["https://example.com/video"]
+                return {
+                    "short_description_changed": True,
+                    "long_description_changed": True,
+                    "description_changed": True,
+                    "tech_specs_changed": True,
+                    "videos_changed": True,
+                }
+
+        product = Product.objects.create(
+            sku="Q-LOW-2",
+            name="Switch manageable",
+            brand=self.brand,
+            category=self.category,
+        )
+
+        result = ProductQualityAgent(threshold=80, bot=FakeBot()).improve_if_needed(product)
+        product.refresh_from_db()
+
+        self.assertTrue(result["changed"])
+        self.assertIn("score_after", result)
+        self.assertGreater(result["score_after"], result["score"])
+        self.assertTrue(product.short_description)
+        self.assertTrue(product.long_description)
