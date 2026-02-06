@@ -2,6 +2,7 @@ import json
 import logging
 import mimetypes
 import re
+from io import BytesIO
 from datetime import date
 from pathlib import Path
 from threading import Lock
@@ -11,9 +12,15 @@ from urllib.parse import quote_plus, urlparse
 import requests
 from mistralai import Mistral
 from mistralai.models import UserMessage
+from PIL import Image, ImageStat
 from django.conf import settings
 from django.core.files import File
 from django.core.files.base import ContentFile
+
+try:
+    import pytesseract
+except Exception:  # noqa: BLE001
+    pytesseract = None
 
 try:
     from pypdf import PdfReader
@@ -309,6 +316,11 @@ class ProductAssetBot:
                 ("dummyimage.com", "via.placeholder.com", "placehold.co"),
             )
         }
+        self.min_image_width = int(getattr(settings, "PRODUCT_BOT_IMAGE_MIN_WIDTH", 320))
+        self.min_image_height = int(getattr(settings, "PRODUCT_BOT_IMAGE_MIN_HEIGHT", 320))
+        self.min_image_bytes = int(getattr(settings, "PRODUCT_BOT_IMAGE_MIN_BYTES", 8 * 1024))
+        self.min_ocr_chars = int(getattr(settings, "PRODUCT_BOT_IMAGE_OCR_MIN_CHARS", 3))
+        self.enable_ocr = bool(getattr(settings, "PRODUCT_BOT_IMAGE_OCR_ENABLED", True))
         self.last_image_log = None
         self.last_google_status = None
         self.last_google_query = None
@@ -510,6 +522,12 @@ class ProductAssetBot:
             source_label = image_source or "url"
             self._set_image_log("fail", f"not image from {source_label}")
             logger.warning("Downloaded payload is not an image for %s", product)
+            return False
+        quality_report = self._evaluate_downloaded_image(product, response.content)
+        if not quality_report["valid"]:
+            source_label = image_source or "url"
+            self._set_image_log("fail", f"quality check failed from {source_label}: {quality_report['reason']}")
+            logger.info("Rejected image for %s (%s)", product, quality_report["reason"])
             return False
         filename = self._build_image_filename(
             product,
@@ -957,6 +975,70 @@ class ProductAssetBot:
         status_label = status.strip().lower()
         detail_text = detail.strip()
         self.last_image_log = f"image {status_label}: {detail_text}" if detail_text else f"image {status_label}"
+
+    def _evaluate_downloaded_image(self, product, payload: bytes) -> dict[str, Any]:
+        if not payload:
+            return {"valid": False, "reason": "fichier vide"}
+        if len(payload) < self.min_image_bytes:
+            return {"valid": False, "reason": f"taille image insuffisante ({len(payload)} octets)"}
+        try:
+            image = Image.open(BytesIO(payload))
+            image.load()
+        except Exception:
+            return {"valid": False, "reason": "fichier image invalide"}
+        width, height = image.size
+        if width < self.min_image_width or height < self.min_image_height:
+            return {"valid": False, "reason": f"resolution insuffisante ({width}x{height})"}
+        variance = self._pixel_variance(image)
+        if variance < 120:
+            return {"valid": False, "reason": "image trop uniforme"}
+        if self.enable_ocr and pytesseract is not None:
+            if not self._is_ocr_relevant(product, image):
+                return {"valid": False, "reason": "ocr non pertinent"}
+        return {"valid": True, "reason": "ok"}
+
+    @staticmethod
+    def _pixel_variance(image: Image.Image) -> float:
+        grayscale = image.convert("L")
+        stats = ImageStat.Stat(grayscale)
+        return float(stats.var[0]) if stats.var else 0.0
+
+    def _is_ocr_relevant(self, product, image: Image.Image) -> bool:
+        try:
+            text = pytesseract.image_to_string(image, lang="eng+fra")
+        except Exception:
+            return True
+        cleaned = re.sub(r"\s+", " ", text or "").strip().lower()
+        if len(cleaned) < self.min_ocr_chars:
+            return False
+        tokens = self._expected_ocr_tokens(product)
+        return any(token in cleaned for token in tokens)
+
+    @staticmethod
+    def _expected_ocr_tokens(product) -> list[str]:
+        raw_tokens = [
+            product.name,
+            product.sku,
+            product.manufacturer_reference,
+            getattr(product.brand, "name", ""),
+            getattr(product.category, "name", ""),
+            product.barcode,
+        ]
+        tokens = []
+        for raw in raw_tokens:
+            if not raw:
+                continue
+            value = re.sub(r"[^0-9a-zA-Z]+", " ", str(raw)).strip().lower()
+            if len(value) >= 3:
+                tokens.append(value)
+                tokens.extend([part for part in value.split() if len(part) >= 3])
+        deduped = []
+        seen = set()
+        for token in tokens:
+            if token not in seen:
+                seen.add(token)
+                deduped.append(token)
+        return deduped
 
     def _is_placeholder_url(self, image_url: str) -> bool:
         parsed = urlparse(image_url)

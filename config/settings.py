@@ -214,6 +214,15 @@ PRODUCT_BOT_SERPER_IMAGE_SEARCH_ENABLED = os.getenv(
     'false',
 ).lower() in ('1', 'true', 'yes')
 PRODUCT_BOT_SERPER_IMAGE_DAILY_LIMIT = int(os.getenv('PRODUCT_BOT_SERPER_IMAGE_DAILY_LIMIT', '10'))
+PRODUCT_BOT_IMAGE_MIN_WIDTH = int(os.getenv('PRODUCT_BOT_IMAGE_MIN_WIDTH', '320'))
+PRODUCT_BOT_IMAGE_MIN_HEIGHT = int(os.getenv('PRODUCT_BOT_IMAGE_MIN_HEIGHT', '320'))
+PRODUCT_BOT_IMAGE_MIN_BYTES = int(os.getenv('PRODUCT_BOT_IMAGE_MIN_BYTES', str(8 * 1024)))
+PRODUCT_BOT_IMAGE_OCR_ENABLED = os.getenv('PRODUCT_BOT_IMAGE_OCR_ENABLED', 'true').lower() in (
+    '1',
+    'true',
+    'yes',
+)
+PRODUCT_BOT_IMAGE_OCR_MIN_CHARS = int(os.getenv('PRODUCT_BOT_IMAGE_OCR_MIN_CHARS', '3'))
 PRODUCT_BOT_INLINE_RUN = os.getenv('PRODUCT_BOT_INLINE_RUN', 'false').lower() in (
     '1',
     'true',

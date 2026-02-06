@@ -5,7 +5,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
+from .bot import ProductAssetBot
 from .models import (
     Brand,
     Category,
@@ -743,3 +745,53 @@ class ProductQualityAgentTests(TestCase):
         self.assertGreater(result["score_after"], result["score"])
         self.assertTrue(product.short_description)
         self.assertTrue(product.long_description)
+
+
+class ProductImageQualityTests(TestCase):
+    def setUp(self):
+        self.brand = Brand.objects.create(name="Reolink")
+        self.category = Category.objects.create(name="Caméra")
+        self.product = Product.objects.create(
+            sku="IMG-001",
+            manufacturer_reference="RLK-100",
+            name="Caméra extérieure RLK",
+            brand=self.brand,
+            category=self.category,
+        )
+        self.bot = ProductAssetBot()
+        self.bot.enable_ocr = False
+        self.bot.min_image_bytes = 100
+
+    @staticmethod
+    def _build_image_bytes(size=(800, 600), color=(120, 120, 120)) -> bytes:
+        image = Image.new("RGB", size, color=color)
+        from io import BytesIO
+
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def test_rejects_too_small_images(self):
+        payload = self._build_image_bytes(size=(120, 120))
+        report = self.bot._evaluate_downloaded_image(self.product, payload)
+
+        self.assertFalse(report["valid"])
+        self.assertIn("resolution insuffisante", report["reason"])
+
+    def test_rejects_uniform_images(self):
+        payload = self._build_image_bytes(size=(900, 900), color=(128, 128, 128))
+        report = self.bot._evaluate_downloaded_image(self.product, payload)
+
+        self.assertFalse(report["valid"])
+        self.assertIn("uniforme", report["reason"])
+
+    def test_accepts_detailed_images(self):
+        image = Image.effect_noise((900, 900), 90).convert("RGB")
+        from io import BytesIO
+
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        report = self.bot._evaluate_downloaded_image(self.product, buffer.getvalue())
+
+        self.assertTrue(report["valid"])
+        self.assertEqual(report["reason"], "ok")
