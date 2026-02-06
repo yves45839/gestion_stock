@@ -121,6 +121,7 @@
         <div class="ia-table-header">
             <span>Référence</span>
             <span>Nom</span>
+            <span>Score IA</span>
             <span>Description</span>
             <span>Image</span>
             <span>Actions IA</span>
@@ -134,6 +135,13 @@
                         <strong>{{ product.sku }}</strong>
                     </div>
                     <div class="ia-table-cell muted-text" data-label="Nom">{{ product.name }}</div>
+                    <div class="ia-table-cell" data-label="Score IA">
+                        {% if product.quality_report %}
+                            <span class="pill">{{ product.quality_report.score }}/{{ product.quality_report.max_score }}</span>
+                        {% else %}
+                            <span class="pill">N/A</span>
+                        {% endif %}
+                    </div>
                     <div class="ia-table-cell" data-label="Description">
                         <div class="muted-text" style="max-width:260px;">
                             {% if product.description %}
