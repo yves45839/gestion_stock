@@ -75,6 +75,7 @@ from .product_asset import (
 )
 from .category_auto import run_auto_assign_categories
 from .datasheets import fetch_hikvision_datasheets
+from .quality_agent import ProductQualityAgent
 
 try:
     from weasyprint import HTML
@@ -3013,6 +3014,10 @@ def product_asset_bot(request):
         catalog_queryset = catalog_queryset.filter(image_is_placeholder=True)
     catalog_paginator = Paginator(catalog_queryset, catalog_page_size)
     catalog_page_obj = catalog_paginator.get_page(request.GET.get("catalog_page"))
+    catalog_products = list(catalog_page_obj.object_list)
+    quality_agent = ProductQualityAgent(bot=object())
+    for product in catalog_products:
+        product.quality_report = quality_agent.evaluate(product)
     catalog_query_params = request.GET.copy()
     if "catalog_page" in catalog_query_params:
         catalog_query_params.pop("catalog_page")
@@ -3036,7 +3041,7 @@ def product_asset_bot(request):
         "selection_total": selection_total,
         "selection_displayed": selection_displayed,
         "selection_products": selection_products,
-        "catalog_products": catalog_page_obj.object_list,
+        "catalog_products": catalog_products,
         "catalog_page_obj": catalog_page_obj,
         "catalog_total": catalog_paginator.count,
         "catalog_query": catalog_query,

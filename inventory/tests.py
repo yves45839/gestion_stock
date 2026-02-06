@@ -692,6 +692,38 @@ class CustomerViewTests(TestCase):
         )
 
 
+class ProductBotViewTests(TestCase):
+    def setUp(self):
+        self.brand = Brand.objects.create(name="TP-Link")
+        self.category = Category.objects.create(name="Switch")
+        self.product = Product.objects.create(
+            sku="IA-001",
+            name="Switch manageable PoE",
+            description="Switch rackable avec fonctionnalités de base.",
+            brand=self.brand,
+            category=self.category,
+        )
+        self.user = get_user_model().objects.create_user(
+            username="ia-user",
+            password="password123",
+            email="ia@example.com",
+            is_staff=True,
+        )
+        self.site = Site.objects.create(name="IA Site")
+        SiteAssignment.objects.create(user=self.user, site=self.site)
+        self.client.force_login(self.user)
+
+    def test_product_bot_view_exposes_quality_score_on_catalog_rows(self):
+        response = self.client.get(reverse("inventory:product_bot"))
+
+        self.assertEqual(response.status_code, 200)
+        products = list(response.context["catalog_products"])
+        self.assertEqual(len(products), 1)
+        self.assertTrue(hasattr(products[0], "quality_report"))
+        self.assertGreaterEqual(products[0].quality_report.score, 0)
+        self.assertContains(response, "Score IA")
+
+
 class ProductQualityAgentTests(TestCase):
     def setUp(self):
         self.brand = Brand.objects.create(name="Mikrotik")
