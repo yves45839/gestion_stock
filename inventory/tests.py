@@ -997,3 +997,31 @@ class ProductImageQualityTests(TestCase):
 
         self.assertTrue(report["valid"])
         self.assertEqual(report["reason"], "ok")
+
+
+class ProductDescriptionPromptStyleTests(TestCase):
+    def setUp(self):
+        self.brand = Brand.objects.create(name="Ubiquiti")
+        self.category = Category.objects.create(name="Réseau")
+        self.product = Product.objects.create(
+            sku="DESC-001",
+            manufacturer_reference="UBT-001",
+            name="Routeur Wi-Fi Pro",
+            brand=self.brand,
+            category=self.category,
+        )
+        self.bot = ProductAssetBot()
+
+    def test_short_description_prompt_mentions_premium_ecommerce_style(self):
+        prompt = self.bot._build_short_description_prompt(self.product)
+
+        self.assertIn("style e-commerce premium", prompt)
+        self.assertIn("3 bullets maximum", prompt)
+        self.assertIn("Ne cite pas de concurrents", prompt)
+
+    def test_long_description_prompt_enforces_structured_sections(self):
+        prompt = self.bot._build_long_description_prompt(self.product)
+
+        self.assertIn("Une accroche", prompt)
+        self.assertIn("Points forts", prompt)
+        self.assertIn("mini FAQ", prompt)
