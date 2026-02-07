@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from PIL import Image, ImageStat
+
 from .bot import ProductAssetBot
 from .models import Product
 
@@ -80,11 +82,12 @@ class ProductQualityAgent:
             issues.append("Fiche technique absente.")
 
         has_image = bool(product.image)
-        if has_image and not product.image_is_placeholder:
+        image_status = self._evaluate_product_image(product)
+        if image_status == "real":
             details["image"] = 10
-        elif has_image:
-            details["image"] = 5
-            issues.append("Image de substitution détectée.")
+        elif image_status == "fake":
+            details["image"] = 2
+            issues.append("Image non exploitable détectée (placeholder/icône).")
         else:
             details["image"] = 0
             issues.append("Image produit absente.")
@@ -163,3 +166,40 @@ class ProductQualityAgent:
         if isinstance(specs, list):
             return len([item for item in specs if item])
         return 0
+
+    @staticmethod
+    def _evaluate_product_image(product: Product) -> str:
+        if not product.image:
+            return "missing"
+        if product.image_is_placeholder:
+            return "fake"
+
+        image_name = str(product.image).lower()
+        placeholder_markers = (
+            "placeholder",
+            "no-image",
+            "no_image",
+            "dummy",
+            "default",
+            "fallback",
+            "blank",
+        )
+        if any(marker in image_name for marker in placeholder_markers):
+            return "fake"
+
+        try:
+            with product.image.open("rb") as handle:
+                image = Image.open(handle)
+                image.load()
+        except Exception:
+            return "fake"
+
+        width, height = image.size
+        if width < 120 or height < 120:
+            return "fake"
+
+        variance = float(ImageStat.Stat(image.convert("L")).var[0])
+        if variance < 80:
+            return "fake"
+
+        return "real"

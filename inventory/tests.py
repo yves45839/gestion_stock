@@ -779,6 +779,46 @@ class ProductQualityAgentTests(TestCase):
         self.assertTrue(product.short_description)
         self.assertTrue(product.long_description)
 
+    def test_evaluate_detects_placeholder_flag_as_fake_image(self):
+        from .quality_agent import ProductQualityAgent
+
+        product = Product.objects.create(
+            sku="Q-IMG-1",
+            name="Caméra dôme",
+            brand=self.brand,
+            category=self.category,
+            image=SimpleUploadedFile("camera.png", b"fake", content_type="image/png"),
+            image_is_placeholder=True,
+        )
+
+        report = ProductQualityAgent(threshold=70, bot=object()).evaluate(product)
+
+        self.assertEqual(report.details["image"], 2)
+        self.assertIn("Image non exploitable détectée (placeholder/icône).", report.issues)
+
+    def test_evaluate_detects_low_quality_image_as_fake(self):
+        from io import BytesIO
+
+        from .quality_agent import ProductQualityAgent
+
+        image = Image.new("RGB", (100, 100), color=(180, 180, 180))
+        payload = BytesIO()
+        image.save(payload, format="PNG")
+
+        product = Product.objects.create(
+            sku="Q-IMG-2",
+            name="Caméra tourelle",
+            brand=self.brand,
+            category=self.category,
+            image=SimpleUploadedFile("tiny_uniform.png", payload.getvalue(), content_type="image/png"),
+            image_is_placeholder=False,
+        )
+
+        report = ProductQualityAgent(threshold=70, bot=object()).evaluate(product)
+
+        self.assertEqual(report.details["image"], 2)
+        self.assertIn("Image non exploitable détectée (placeholder/icône).", report.issues)
+
 
 
 
