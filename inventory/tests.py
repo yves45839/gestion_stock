@@ -1,4 +1,5 @@
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from django.contrib.auth import get_user_model
@@ -860,6 +861,19 @@ class ProductImageSearchPriorityTests(TestCase):
             brand=self.brand,
             category=self.category,
         )
+
+
+    @override_settings(PRODUCT_BOT_LOCAL_IMAGE_SEARCH_ENABLED=False)
+    def test_local_image_lookup_is_disabled_by_default(self):
+        bot = ProductAssetBot()
+        bot._find_local_image = MagicMock(return_value=Path("/tmp/local-image.jpg"))
+        bot._find_search_image = MagicMock(return_value=(None, None))
+
+        changed = bot.ensure_image(self.product, image_field="pending_image")
+
+        self.assertFalse(changed)
+        bot._find_local_image.assert_not_called()
+        bot._find_search_image.assert_called_once_with(self.product)
 
     def test_serper_is_used_before_google(self):
         bot = ProductAssetBot()
