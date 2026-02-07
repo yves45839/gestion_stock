@@ -193,6 +193,10 @@ PRODUCT_BOT_IMAGE_URL_TEMPLATE = os.getenv(
     '',
 )
 PRODUCT_BOT_IMAGE_TIMEOUT = int(os.getenv('PRODUCT_BOT_IMAGE_TIMEOUT', '20'))
+PRODUCT_BOT_LOCAL_IMAGE_SEARCH_ENABLED = os.getenv(
+    'PRODUCT_BOT_LOCAL_IMAGE_SEARCH_ENABLED',
+    'false',
+).lower() in ('1', 'true', 'yes')
 PRODUCT_BOT_ALLOW_PLACEHOLDERS = os.getenv('PRODUCT_BOT_ALLOW_PLACEHOLDERS', 'false').lower() in (
     '1',
     'true',

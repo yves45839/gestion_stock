@@ -330,6 +330,9 @@ class ProductAssetBot:
         )
         self.image_url_template = image_url_template or settings.PRODUCT_BOT_IMAGE_URL_TEMPLATE
         self.image_timeout = image_timeout or settings.PRODUCT_BOT_IMAGE_TIMEOUT
+        self.local_image_search_enabled = bool(
+            getattr(settings, "PRODUCT_BOT_LOCAL_IMAGE_SEARCH_ENABLED", False)
+        )
         self.image_session = requests.Session()
         self.image_session.headers.update(
             {
@@ -512,7 +515,7 @@ class ProductAssetBot:
         if field and not force and not is_placeholder:
             self._set_image_log("skip", "already has image")
             return False
-        local_path = self._find_local_image(product)
+        local_path = self._find_local_image(product) if self.local_image_search_enabled else None
         if local_path:
             applied = self._apply_local_image(product, local_path, image_field=image_field)
             if applied:
