@@ -158,6 +158,7 @@ class GoogleImageSearchClient:
         session: requests.Session,
         timeout: int,
         usage_path: Path,
+        num_max: int,
     ):
         self.api_key = api_key
         self.engine_id = engine_id
@@ -190,7 +191,7 @@ class GoogleImageSearchClient:
             "cx": self.engine_id,
             "q": query,
             "searchType": "image",
-            "num": 1,
+            "num": self.num_max,
             "safe": self.safe,
             "fields": "items(link,mime,image/contextLink)",
         }
@@ -382,6 +383,7 @@ class ProductAssetBot:
             return None
         self.google_search_status = "enabled"
         daily_limit = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT", 0)
+        num_max = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_NUM_MAX", 1)
         safe = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_SAFE", "active")
         usage_path = Path(settings.BASE_DIR) / "var" / "google_cse_usage.json"
         return GoogleImageSearchClient(
