@@ -794,18 +794,18 @@ class ProductAssetBot:
         max_tries = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_MAX_TRIES", 1)
         tries = max(max_tries or 1, 1)
         for query in queries[:tries]:
-            if self.google_search:
-                url = self.google_search.search_image(query)
-                self.last_google_query = query
-                self.last_google_status = self.google_search.last_status or "no_results"
-                if url:
-                    return url, "google"
             if self.serper_search:
                 url = self.serper_search.search_image(query)
                 self.last_serper_query = query
                 self.last_serper_status = self.serper_search.last_status or "no_results"
                 if url:
                     return url, "serper"
+            if self.google_search:
+                url = self.google_search.search_image(query)
+                self.last_google_query = query
+                self.last_google_status = self.google_search.last_status or "no_results"
+                if url:
+                    return url, "google"
         return None, None
 
     def _build_google_query(self, product) -> str:

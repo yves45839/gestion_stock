@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -778,6 +779,50 @@ class ProductQualityAgentTests(TestCase):
         self.assertTrue(product.short_description)
         self.assertTrue(product.long_description)
 
+
+
+
+class ProductImageSearchPriorityTests(TestCase):
+    def setUp(self):
+        self.brand = Brand.objects.create(name="SerperBrand")
+        self.category = Category.objects.create(name="NVR")
+        self.product = Product.objects.create(
+            sku="SP-001",
+            manufacturer_reference="SP-REF-001",
+            name="NVR 8 canaux",
+            brand=self.brand,
+            category=self.category,
+        )
+
+    def test_serper_is_used_before_google(self):
+        bot = ProductAssetBot()
+        bot.serper_search = MagicMock()
+        bot.google_search = MagicMock()
+        bot.serper_search.search_image.return_value = "https://serper.dev/image.jpg"
+        bot.serper_search.last_status = "ok"
+
+        image_url, source = bot._find_search_image(self.product)
+
+        self.assertEqual(source, "serper")
+        self.assertEqual(image_url, "https://serper.dev/image.jpg")
+        bot.serper_search.search_image.assert_called_once()
+        bot.google_search.search_image.assert_not_called()
+
+    def test_google_is_fallback_when_serper_has_no_result(self):
+        bot = ProductAssetBot()
+        bot.serper_search = MagicMock()
+        bot.google_search = MagicMock()
+        bot.serper_search.search_image.return_value = None
+        bot.serper_search.last_status = "no_results"
+        bot.google_search.search_image.return_value = "https://google.com/image.jpg"
+        bot.google_search.last_status = "ok"
+
+        image_url, source = bot._find_search_image(self.product)
+
+        self.assertEqual(source, "google")
+        self.assertEqual(image_url, "https://google.com/image.jpg")
+        bot.serper_search.search_image.assert_called_once()
+        bot.google_search.search_image.assert_called_once()
 
 class ProductImageQualityTests(TestCase):
     def setUp(self):
