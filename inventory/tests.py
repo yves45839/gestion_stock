@@ -890,6 +890,29 @@ class ProductImageSearchPriorityTests(TestCase):
         self.assertEqual(bot.serper_search.search_image.call_count, 3)
         bot.google_search.search_image.assert_not_called()
 
+
+
+class GoogleImageSearchClientTests(TestCase):
+    @override_settings(
+        PRODUCT_BOT_GOOGLE_IMAGE_SEARCH_ENABLED=True,
+        GOOGLE_CUSTOM_SEARCH_API_KEY="dummy-key",
+        GOOGLE_CUSTOM_SEARCH_ENGINE_ID="dummy-engine",
+        PRODUCT_BOT_GOOGLE_IMAGE_DAILY_LIMIT=10,
+        PRODUCT_BOT_GOOGLE_IMAGE_NUM_MAX=10,
+    )
+    def test_google_num_is_capped_at_four(self):
+        bot = ProductAssetBot()
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"items": [{"link": "https://img.local/google.jpg"}]}
+        bot.google_search.session.get = MagicMock(return_value=mock_response)
+
+        result = bot.google_search.search_image("cam test")
+
+        self.assertEqual(result, "https://img.local/google.jpg")
+        _, kwargs = bot.google_search.session.get.call_args
+        self.assertEqual(kwargs["params"]["num"], 4)
+
 class SerperImageSearchClientTests(TestCase):
     @override_settings(
         PRODUCT_BOT_SERPER_IMAGE_SEARCH_ENABLED=True,
