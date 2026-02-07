@@ -165,6 +165,7 @@ class GoogleImageSearchClient:
         self.daily_limit = daily_limit
         self.session = session
         self.timeout = timeout
+        self.num_max = max(1, min(int(num_max or 1), 4))
         self.quota = _DailyQuota(usage_path, daily_limit)
         self.last_status = None
         self.last_error = None
@@ -228,12 +229,14 @@ class SerperImageSearchClient:
         session: requests.Session,
         timeout: int,
         usage_path: Path,
+        num_max: int,
     ):
         self.api_key = api_key
         self.endpoint = endpoint
         self.daily_limit = daily_limit
         self.session = session
         self.timeout = timeout
+        self.num_max = max(1, min(int(num_max or 1), 4))
         self.quota = _DailyQuota(usage_path, daily_limit)
         self.last_status = None
         self.last_error = None
@@ -253,7 +256,7 @@ class SerperImageSearchClient:
             self.last_status = "quota"
             logger.info("Serper image search quota reached (%s/day).", self.daily_limit)
             return None
-        payload = {"q": query, "num": 8}
+        payload = {"q": query, "num": self.num_max}
         try:
             response = self.session.post(
                 self.endpoint,
@@ -389,6 +392,7 @@ class ProductAssetBot:
             session=self.image_session,
             timeout=self.image_timeout,
             usage_path=usage_path,
+            num_max=num_max,
         )
 
     def _build_serper_search(self) -> Optional[SerperImageSearchClient]:
@@ -404,6 +408,7 @@ class ProductAssetBot:
         self.serper_search_status = "enabled"
         daily_limit = getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_DAILY_LIMIT", 0)
         endpoint = getattr(settings, "SERPER_IMAGE_ENDPOINT", "https://google.serper.dev/images")
+        num_max = getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_NUM_MAX", 4)
         usage_path = Path(settings.BASE_DIR) / "var" / "serper_usage.json"
         return SerperImageSearchClient(
             api_key=api_key,
@@ -412,6 +417,7 @@ class ProductAssetBot:
             session=self.image_session,
             timeout=self.image_timeout,
             usage_path=usage_path,
+            num_max=num_max,
         )
 
     def ensure_assets(
@@ -821,8 +827,8 @@ class ProductAssetBot:
             self.last_google_status = "empty_query"
             self.last_serper_status = "empty_query"
             return None, None
-        max_tries = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_MAX_TRIES", 1)
-        tries = max(max_tries or 1, 1)
+        max_fallbacks = getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_MAX_FALLBACKS", 2)
+        tries = max((max_fallbacks or 0) + 1, 1)
         for query in queries[:tries]:
             url = self.serper_search.search_image(query)
             self.last_serper_query = query

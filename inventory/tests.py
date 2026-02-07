@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -875,7 +875,8 @@ class ProductImageSearchPriorityTests(TestCase):
         bot.serper_search.search_image.assert_called_once()
         bot.google_search.search_image.assert_not_called()
 
-    def test_no_fallback_when_serper_has_no_result(self):
+    @override_settings(PRODUCT_BOT_SERPER_IMAGE_MAX_FALLBACKS=2)
+    def test_no_result_stops_after_two_fallbacks(self):
         bot = ProductAssetBot()
         bot.serper_search = MagicMock()
         bot.google_search = MagicMock()
@@ -886,8 +887,30 @@ class ProductImageSearchPriorityTests(TestCase):
 
         self.assertIsNone(source)
         self.assertIsNone(image_url)
-        bot.serper_search.search_image.assert_called_once()
+        self.assertEqual(bot.serper_search.search_image.call_count, 3)
         bot.google_search.search_image.assert_not_called()
+
+class SerperImageSearchClientTests(TestCase):
+    @override_settings(
+        PRODUCT_BOT_SERPER_IMAGE_SEARCH_ENABLED=True,
+        SERPER_API_KEY="dummy-key",
+        PRODUCT_BOT_SERPER_IMAGE_DAILY_LIMIT=10,
+        PRODUCT_BOT_SERPER_IMAGE_NUM_MAX=10,
+    )
+    def test_serper_num_is_capped_at_four(self):
+        bot = ProductAssetBot()
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"images": [{"imageUrl": "https://img.local/a.jpg"}]}
+        bot.serper_search.session.post = MagicMock(return_value=mock_response)
+
+        result = bot.serper_search.search_image("cam test")
+
+        self.assertEqual(result, "https://img.local/a.jpg")
+        _, kwargs = bot.serper_search.session.post.call_args
+        self.assertEqual(kwargs["json"]["num"], 4)
+
+
 
 class ProductImageQualityTests(TestCase):
     def setUp(self):
