@@ -253,7 +253,7 @@ class SerperImageSearchClient:
             self.last_status = "quota"
             logger.info("Serper image search quota reached (%s/day).", self.daily_limit)
             return None
-        payload = {"q": query, "num": 1}
+        payload = {"q": query, "num": 8}
         try:
             response = self.session.post(
                 self.endpoint,
@@ -276,14 +276,40 @@ class SerperImageSearchClient:
         if not items:
             self.last_status = "no_results"
             return None
-        image = items[0] or {}
-        for key in ("imageUrl", "link", "thumbnailUrl", "sourceUrl", "url"):
-            url = image.get(key)
+
+        candidates = []
+        for index, image in enumerate(items):
+            item = image or {}
+            width = self._int_or_zero(item.get("imageWidth") or item.get("width"))
+            height = self._int_or_zero(item.get("imageHeight") or item.get("height"))
+            area = width * height
+            for key in ("imageUrl", "link", "sourceUrl", "url"):
+                url = item.get(key)
+                if url:
+                    candidates.append((area, index, url))
+                    break
+        if candidates:
+            # Prefer larger images first while keeping deterministic ordering.
+            candidates.sort(key=lambda entry: (-entry[0], entry[1]))
+            self.last_status = "ok"
+            return candidates[0][2]
+
+        # Last-resort fallback to thumbnails only if no regular URL was exposed.
+        for image in items:
+            url = (image or {}).get("thumbnailUrl")
             if url:
                 self.last_status = "ok"
                 return url
+
         self.last_status = "no_results"
         return None
+
+    @staticmethod
+    def _int_or_zero(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
 
 
 class ProductAssetBot:
@@ -784,8 +810,12 @@ class ProductAssetBot:
         self.last_google_query = None
         self.last_serper_status = None
         self.last_serper_query = None
-        if not self.google_search:
-            self.last_google_status = self.google_search_status
+        self.last_google_status = "disabled"
+
+        if not self.serper_search:
+            self.last_serper_status = self.serper_search_status
+            return None, None
+
         queries = self._build_google_queries(product)
         if not queries:
             self.last_google_status = "empty_query"
@@ -794,18 +824,11 @@ class ProductAssetBot:
         max_tries = getattr(settings, "PRODUCT_BOT_GOOGLE_IMAGE_MAX_TRIES", 1)
         tries = max(max_tries or 1, 1)
         for query in queries[:tries]:
-            if self.serper_search:
-                url = self.serper_search.search_image(query)
-                self.last_serper_query = query
-                self.last_serper_status = self.serper_search.last_status or "no_results"
-                if url:
-                    return url, "serper"
-            if self.google_search:
-                url = self.google_search.search_image(query)
-                self.last_google_query = query
-                self.last_google_status = self.google_search.last_status or "no_results"
-                if url:
-                    return url, "google"
+            url = self.serper_search.search_image(query)
+            self.last_serper_query = query
+            self.last_serper_status = self.serper_search.last_status or "no_results"
+            if url:
+                return url, "serper"
         return None, None
 
     def _build_google_query(self, product) -> str:
