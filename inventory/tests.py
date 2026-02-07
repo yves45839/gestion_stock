@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -875,21 +875,35 @@ class ProductImageSearchPriorityTests(TestCase):
         bot.serper_search.search_image.assert_called_once()
         bot.google_search.search_image.assert_not_called()
 
-    def test_google_is_fallback_when_serper_has_no_result(self):
+    def test_no_fallback_when_serper_has_no_result(self):
         bot = ProductAssetBot()
         bot.serper_search = MagicMock()
         bot.google_search = MagicMock()
         bot.serper_search.search_image.return_value = None
         bot.serper_search.last_status = "no_results"
-        bot.google_search.search_image.return_value = "https://google.com/image.jpg"
-        bot.google_search.last_status = "ok"
 
         image_url, source = bot._find_search_image(self.product)
 
-        self.assertEqual(source, "google")
-        self.assertEqual(image_url, "https://google.com/image.jpg")
-        bot.serper_search.search_image.assert_called_once()
-        bot.google_search.search_image.assert_called_once()
+        self.assertIsNone(source)
+        self.assertIsNone(image_url)
+        self.assertGreaterEqual(bot.serper_search.search_image.call_count, 1)
+        self.assertLessEqual(bot.serper_search.search_image.call_count, 2)
+        bot.google_search.search_image.assert_not_called()
+
+    @override_settings(PRODUCT_BOT_SERPER_IMAGE_MAX_TRIES=10)
+    def test_serper_requests_are_capped_to_four(self):
+        bot = ProductAssetBot()
+        bot.serper_search = MagicMock()
+        bot.google_search = MagicMock()
+        bot.serper_search.search_image.return_value = None
+        bot.serper_search.last_status = "no_results"
+
+        image_url, source = bot._find_search_image(self.product)
+
+        self.assertIsNone(source)
+        self.assertIsNone(image_url)
+        self.assertEqual(bot.serper_search.search_image.call_count, 4)
+        bot.google_search.search_image.assert_not_called()
 
 class ProductImageQualityTests(TestCase):
     def setUp(self):
