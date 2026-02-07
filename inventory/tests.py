@@ -793,8 +793,8 @@ class ProductQualityAgentTests(TestCase):
 
         report = ProductQualityAgent(threshold=70, bot=object()).evaluate(product)
 
-        self.assertEqual(report.details["image"], 2)
-        self.assertIn("Image non exploitable détectée (placeholder/icône).", report.issues)
+        self.assertEqual(report.details["image"], 1)
+        self.assertTrue(any("Image non exploitable détectée" in issue for issue in report.issues))
 
     def test_evaluate_detects_low_quality_image_as_fake(self):
         from io import BytesIO
@@ -816,10 +816,37 @@ class ProductQualityAgentTests(TestCase):
 
         report = ProductQualityAgent(threshold=70, bot=object()).evaluate(product)
 
-        self.assertEqual(report.details["image"], 2)
-        self.assertIn("Image non exploitable détectée (placeholder/icône).", report.issues)
+        self.assertEqual(report.details["image"], 1)
+        self.assertTrue(any("Image non exploitable détectée" in issue for issue in report.issues))
 
 
+    def test_evaluate_marks_mid_quality_image_as_suspect(self):
+        from io import BytesIO
+
+        from .quality_agent import ProductQualityAgent
+
+        image = Image.new("RGB", (350, 350))
+        palette = [int(i * (255 / 19)) for i in range(20)]
+        for x in range(350):
+            shade = palette[x % len(palette)]
+            for y in range(350):
+                image.putpixel((x, y), (shade, shade, shade))
+        payload = BytesIO()
+        image.save(payload, format="PNG")
+
+        product = Product.objects.create(
+            sku="Q-IMG-3",
+            name="Caméra intermédiaire",
+            brand=self.brand,
+            category=self.category,
+            image=SimpleUploadedFile("mid_quality.png", payload.getvalue(), content_type="image/png"),
+            image_is_placeholder=False,
+        )
+
+        report = ProductQualityAgent(threshold=70, bot=object()).evaluate(product)
+
+        self.assertEqual(report.details["image"], 6)
+        self.assertTrue(any("potentiellement peu exploitable" in issue for issue in report.issues))
 
 
 class ProductImageSearchPriorityTests(TestCase):

@@ -81,16 +81,19 @@ class ProductQualityAgent:
             details["tech_specs"] = 0
             issues.append("Fiche technique absente.")
 
-        has_image = bool(product.image)
-        image_status = self._evaluate_product_image(product)
-        if image_status == "real":
-            details["image"] = 10
-        elif image_status == "fake":
-            details["image"] = 2
-            issues.append("Image non exploitable détectée (placeholder/icône).")
-        else:
-            details["image"] = 0
+        image_analysis = self._analyze_product_image(product)
+        details["image"] = image_analysis["score"]
+        if image_analysis["status"] == "missing":
             issues.append("Image produit absente.")
+        elif image_analysis["status"] == "fake":
+            issues.append(
+                "Image non exploitable détectée (placeholder/icône). "
+                "Ajoutez une vraie photo produit."
+            )
+        elif image_analysis["status"] == "suspect":
+            issues.append(
+                "Image potentiellement peu exploitable (qualité faible ou visuel trop générique)."
+            )
 
         content_bonus = 0
         if product.datasheet_url or product.datasheet_pdf:
@@ -168,11 +171,11 @@ class ProductQualityAgent:
         return 0
 
     @staticmethod
-    def _evaluate_product_image(product: Product) -> str:
+    def _analyze_product_image(product: Product) -> dict[str, Any]:
         if not product.image:
-            return "missing"
+            return {"status": "missing", "score": 0, "confidence": 0.0}
         if product.image_is_placeholder:
-            return "fake"
+            return {"status": "fake", "score": 1, "confidence": 1.0}
 
         image_name = str(product.image).lower()
         placeholder_markers = (
@@ -185,21 +188,42 @@ class ProductQualityAgent:
             "blank",
         )
         if any(marker in image_name for marker in placeholder_markers):
-            return "fake"
+            return {"status": "fake", "score": 1, "confidence": 0.95}
 
         try:
             with product.image.open("rb") as handle:
                 image = Image.open(handle)
                 image.load()
         except Exception:
-            return "fake"
+            return {"status": "fake", "score": 0, "confidence": 1.0}
+
+        image = image.convert("RGB")
 
         width, height = image.size
-        if width < 120 or height < 120:
-            return "fake"
+        smallest_side = min(width, height)
+        ratio = (max(width, height) / smallest_side) if smallest_side else 999
+        if smallest_side < 120:
+            return {"status": "fake", "score": 1, "confidence": 0.9}
+        if ratio > 4.0:
+            return {"status": "fake", "score": 1, "confidence": 0.9}
 
-        variance = float(ImageStat.Stat(image.convert("L")).var[0])
-        if variance < 80:
-            return "fake"
+        gray = image.convert("L")
+        stat = ImageStat.Stat(gray)
+        variance = float(stat.var[0])
+        dynamic_range = float(stat.extrema[0][1] - stat.extrema[0][0])
 
-        return "real"
+        # Détection des visuels trop plats (fonds unis / placeholders simples)
+        if variance < 40 or dynamic_range < 55:
+            return {"status": "fake", "score": 2, "confidence": 0.85}
+
+        # Palette trop pauvre = souvent logo/icône plutôt qu'une photo réelle produit.
+        unique_colors = image.getcolors(maxcolors=256)
+        unique_count = len(unique_colors) if unique_colors else 256
+        if unique_count < 12:
+            return {"status": "fake", "score": 2, "confidence": 0.8}
+
+        # Images jugées exploitables mais avec une qualité visuelle moyenne.
+        if variance < 95 or dynamic_range < 85 or unique_count < 32:
+            return {"status": "suspect", "score": 6, "confidence": 0.6}
+
+        return {"status": "real", "score": 10, "confidence": 0.8}
