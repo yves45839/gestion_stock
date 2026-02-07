@@ -612,8 +612,13 @@ class ProductAssetBot:
         details = self._build_common_details(product)
         return (
             "Tu es un assistant marketing en francais. "
-            "Redige une description courte en 2-3 bullets maximum avec les avantages clefs.\n"
+            "Adopte un style e-commerce premium (clair, convaincant, professionnel), "
+            "proche des fiches produits high-tech leaders du marche.\n"
+            "Redige une description courte en 3 bullets maximum.\n"
+            "Chaque bullet doit commencer par un benefice client concret, puis mentionner une preuve produit.\n"
+            "Ton direct, sans jargon inutile, sans emojis.\n"
             "N'invente pas de caracteristiques absentes.\n"
+            "Ne cite pas de concurrents ni de marques externes.\n"
             "Donnees produit:\n"
             + "\n".join(details)
         )
@@ -622,9 +627,16 @@ class ProductAssetBot:
         details = self._build_common_details(product)
         return (
             "Tu es un assistant marketing en francais. "
-            "Redige une description longue avec 2 paragraphes puis une mini FAQ (2 questions) en fin.\n"
+            "Adopte un style e-commerce premium (clair, vendeur, rassurant), "
+            "proche des fiches produits high-tech leaders du marche.\n"
+            "Redige une description longue structuree ainsi:\n"
+            "1) Une accroche de 1 phrase orientee valeur.\n"
+            "2) Deux paragraphes de 2-3 phrases expliquant usages et avantages.\n"
+            "3) Une liste 'Points forts' de 4 puces maximum.\n"
+            "4) Une mini FAQ de 2 questions/reponses courtes.\n"
             "Si des extraits de fiche technique sont fournis, base-toi dessus pour les caracteristiques.\n"
             "N'invente pas de caracteristiques absentes et garde les prix en FCFA.\n"
+            "Ne cite pas de concurrents ni de marques externes.\n"
             "Donnees produit:\n"
             + "\n".join(details)
         )
