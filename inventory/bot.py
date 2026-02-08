@@ -226,19 +226,15 @@ class SerperImageSearchClient:
         *,
         api_key: str,
         endpoint: str,
-        daily_limit: int,
         session: requests.Session,
         timeout: int,
-        usage_path: Path,
         num_max: int,
     ):
         self.api_key = api_key
         self.endpoint = endpoint
-        self.daily_limit = daily_limit
         self.session = session
         self.timeout = timeout
         self.num_max = max(1, min(int(num_max or 1), 4))
-        self.quota = _DailyQuota(usage_path, daily_limit)
         self.last_status = None
         self.last_error = None
         self.last_query = None
@@ -254,10 +250,6 @@ class SerperImageSearchClient:
             return None
         if not self.api_key:
             self.last_status = "missing_config"
-            return None
-        if not self.quota.reserve():
-            self.last_status = "quota"
-            logger.info("Serper image search quota reached (%s/day).", self.daily_limit)
             return None
         payload = {"q": query, "num": self.num_max}
         try:
@@ -424,17 +416,13 @@ class ProductAssetBot:
             logger.warning("Serper image search enabled but missing API key.")
             return None
         self.serper_search_status = "enabled"
-        daily_limit = getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_DAILY_LIMIT", 0)
         endpoint = getattr(settings, "SERPER_IMAGE_ENDPOINT", "https://google.serper.dev/images")
         num_max = getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_NUM_MAX", 4)
-        usage_path = Path(settings.BASE_DIR) / "var" / "serper_usage.json"
         return SerperImageSearchClient(
             api_key=api_key,
             endpoint=endpoint,
-            daily_limit=daily_limit,
             session=self.image_session,
             timeout=self.image_timeout,
-            usage_path=usage_path,
             num_max=num_max,
         )
 
