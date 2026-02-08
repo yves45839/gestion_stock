@@ -478,7 +478,7 @@ class ProductAssetBot:
                     changes["short_description_changed"] = True
         if not product.long_description or force:
             long_prompt = self._build_long_description_prompt(product)
-            long_desc = self.text_generator.generate_text(long_prompt, max_tokens=650)
+            long_desc = self.text_generator.generate_text(long_prompt, max_tokens=1100)
             if long_desc:
                 cleaned = long_desc.strip()
                 if cleaned and cleaned != (product.long_description or "").strip():
@@ -629,14 +629,18 @@ class ProductAssetBot:
             "Tu es un assistant marketing en francais. "
             "Adopte un style e-commerce premium (clair, vendeur, rassurant), "
             "proche des fiches produits high-tech leaders du marche.\n"
-            "Redige une description longue structuree ainsi:\n"
+            "Redige une description longue exhaustive, structuree ainsi:\n"
             "1) Une accroche de 1 phrase orientee valeur.\n"
-            "2) Deux paragraphes de 2-3 phrases expliquant usages et avantages.\n"
-            "3) Une liste 'Points forts' de 4 puces maximum.\n"
-            "4) Une mini FAQ de 2 questions/reponses courtes.\n"
+            "2) Un bloc 'Presentation' de 4-6 phrases qui contextualise le produit et ses usages.\n"
+            "3) Un bloc 'Usages recommandes' avec 3 cas d'usage concrets.\n"
+            "4) Une liste 'Points forts' de 6 puces maximum.\n"
+            "5) Un bloc 'Caracteristiques techniques detaillees' avec les specs connues (performance, connectivite, alimentation, protection, dimensions).\n"
+            "6) Un bloc 'Contenu du pack' (ou 'Non precise' si inconnu).\n"
+            "7) Une mini FAQ de 3 questions/reponses courtes.\n"
             "Si des extraits de fiche technique sont fournis, base-toi dessus pour les caracteristiques.\n"
             "N'invente pas de caracteristiques absentes et garde les prix en FCFA.\n"
             "Ne cite pas de concurrents ni de marques externes.\n"
+            "Mets des titres explicites pour chaque section.\n"
             "Donnees produit:\n"
             + "\n".join(details)
         )

@@ -1023,5 +1023,9 @@ class ProductDescriptionPromptStyleTests(TestCase):
         prompt = self.bot._build_long_description_prompt(self.product)
 
         self.assertIn("Une accroche", prompt)
+        self.assertIn("Presentation", prompt)
+        self.assertIn("Usages recommandes", prompt)
         self.assertIn("Points forts", prompt)
+        self.assertIn("Caracteristiques techniques detaillees", prompt)
+        self.assertIn("Contenu du pack", prompt)
         self.assertIn("mini FAQ", prompt)
