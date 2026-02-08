@@ -1,3 +1,4 @@
+import os
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -1026,6 +1027,19 @@ class SerperImageSearchClientTests(TestCase):
         self.assertEqual(result, "https://img.local/a.jpg")
         _, kwargs = bot.serper_search.session.post.call_args
         self.assertEqual(kwargs["json"]["num"], 4)
+
+    @override_settings(
+        PRODUCT_BOT_SERPER_IMAGE_SEARCH_ENABLED=True,
+        SERPER_API_KEY=None,
+    )
+    def test_serpev_api_key_alias_is_supported(self):
+        self.addCleanup(os.environ.pop, "SERPEV_API_KEY", None)
+        os.environ["SERPEV_API_KEY"] = "alias-key"
+
+        bot = ProductAssetBot()
+
+        self.assertIsNotNone(bot.serper_search)
+        self.assertEqual(bot.serper_search.api_key, "alias-key")
 
 
 

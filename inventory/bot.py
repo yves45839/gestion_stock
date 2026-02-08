@@ -1,6 +1,7 @@
 import json
 import logging
 import mimetypes
+import os
 import re
 from io import BytesIO
 from datetime import date
@@ -408,7 +409,7 @@ class ProductAssetBot:
         if not enabled:
             self.serper_search_status = "disabled"
             return None
-        api_key = getattr(settings, "SERPER_API_KEY", None)
+        api_key = getattr(settings, "SERPER_API_KEY", None) or os.getenv("SERPEV_API_KEY")
         if not api_key:
             self.serper_search_status = "missing_config"
             logger.warning("Serper image search enabled but missing API key.")

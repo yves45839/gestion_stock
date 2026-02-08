@@ -183,8 +183,11 @@ GOOGLE_CSE_ENDPOINT = os.getenv(
     "GOOGLE_CSE_ENDPOINT",
     "https://www.googleapis.com/customsearch/v1",
 )
-SERPER_API_KEY = os.getenv("SERPER_API_KEY")
-SERPER_IMAGE_ENDPOINT = os.getenv("SERPER_IMAGE_ENDPOINT", "https://google.serper.dev/images")
+SERPER_API_KEY = os.getenv("SERPER_API_KEY") or os.getenv("SERPEV_API_KEY")
+SERPER_IMAGE_ENDPOINT = os.getenv(
+    "SERPER_IMAGE_ENDPOINT",
+    os.getenv("SERPEV_IMAGE_ENDPOINT", "https://google.serper.dev/images"),
+)
 HIKVISION_DATASHEET_MAX_MB = int(os.getenv("HIKVISION_DATASHEET_MAX_MB", "20"))
 HIKVISION_DATASHEET_SLEEP = float(os.getenv("HIKVISION_DATASHEET_SLEEP", "1.0"))
 HIKVISION_DATASHEET_HTML_LIMIT_KB = int(os.getenv("HIKVISION_DATASHEET_HTML_LIMIT_KB", "512"))
