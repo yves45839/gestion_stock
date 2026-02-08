@@ -202,6 +202,10 @@ PRODUCT_BOT_ALLOW_PLACEHOLDERS = os.getenv('PRODUCT_BOT_ALLOW_PLACEHOLDERS', 'fa
     'true',
     'yes',
 )
+PRODUCT_BOT_GENERATE_FALLBACK_IMAGE = os.getenv(
+    'PRODUCT_BOT_GENERATE_FALLBACK_IMAGE',
+    'true',
+).lower() in ('1', 'true', 'yes')
 PRODUCT_BOT_PLACEHOLDER_DOMAINS = _env_list(
     'PRODUCT_BOT_PLACEHOLDER_DOMAINS',
     'dummyimage.com,via.placeholder.com,placehold.co',
