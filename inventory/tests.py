@@ -904,6 +904,41 @@ class ProductImageSearchPriorityTests(TestCase):
         self.assertEqual(bot.serper_search.search_image.call_count, 3)
         bot.google_search.search_image.assert_not_called()
 
+    @override_settings(
+        PRODUCT_BOT_LOCAL_IMAGE_SEARCH_ENABLED=False,
+        PRODUCT_BOT_IMAGE_OCR_ENABLED=False,
+        PRODUCT_BOT_IMAGE_URL_TEMPLATE="https://cdn.example.com/{reference}.jpg",
+    )
+    def test_template_url_is_used_when_serper_has_no_result(self):
+        from io import BytesIO
+
+        image = Image.new("RGB", (640, 640))
+        for x in range(640):
+            for y in range(640):
+                image.putpixel((x, y), ((x * 7) % 256, (y * 5) % 256, ((x + y) * 3) % 256))
+        payload = BytesIO()
+        image.save(payload, format="PNG")
+
+        bot = ProductAssetBot()
+        bot.serper_search = MagicMock()
+        bot.serper_search.search_image.return_value = None
+        bot.serper_search.last_status = "no_results"
+
+        response = MagicMock()
+        response.content = payload.getvalue()
+        response.headers = {"content-type": "image/png"}
+        response.raise_for_status.return_value = None
+        bot.image_session.get = MagicMock(return_value=response)
+        bot._evaluate_downloaded_image = MagicMock(return_value={"valid": True, "reason": "ok"})
+
+        changed = bot.ensure_image(self.product, image_field="pending_image")
+
+        self.assertTrue(changed)
+        bot.image_session.get.assert_called_once_with(
+            "https://cdn.example.com/SP-REF-001.jpg",
+            timeout=bot.image_timeout,
+        )
+        self.assertTrue(self.product.pending_image.name.split("/")[-1].startswith("SP-001_SP-REF-001"))
 
 
 class GoogleImageSearchClientTests(TestCase):
