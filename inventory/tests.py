@@ -892,8 +892,8 @@ class ProductImageSearchPriorityTests(TestCase):
         bot.serper_search.search_image.assert_called_once()
         bot.google_search.search_image.assert_not_called()
 
-    @override_settings(PRODUCT_BOT_SERPER_IMAGE_MAX_FALLBACKS=2)
-    def test_no_result_stops_after_two_fallbacks(self):
+    @override_settings(PRODUCT_BOT_SERPER_IMAGE_MAX_CREDITS=4)
+    def test_no_result_stops_after_four_credits(self):
         bot = ProductAssetBot()
         bot.serper_search = MagicMock()
         bot.google_search = MagicMock()
@@ -904,86 +904,56 @@ class ProductImageSearchPriorityTests(TestCase):
 
         self.assertIsNone(source)
         self.assertIsNone(image_url)
-        self.assertEqual(bot.serper_search.search_image.call_count, 3)
+        self.assertEqual(bot.serper_search.search_image.call_count, 4)
         bot.google_search.search_image.assert_not_called()
 
     @override_settings(
         PRODUCT_BOT_LOCAL_IMAGE_SEARCH_ENABLED=False,
-        PRODUCT_BOT_IMAGE_OCR_ENABLED=False,
         PRODUCT_BOT_IMAGE_URL_TEMPLATE="https://cdn.example.com/{reference}.jpg",
     )
-    def test_template_url_is_used_when_serper_has_no_result(self):
-        from io import BytesIO
-
-        image = Image.new("RGB", (640, 640))
-        for x in range(640):
-            for y in range(640):
-                image.putpixel((x, y), ((x * 7) % 256, (y * 5) % 256, ((x + y) * 3) % 256))
-        payload = BytesIO()
-        image.save(payload, format="PNG")
-
+    def test_template_url_is_not_used_when_serper_has_no_result(self):
         bot = ProductAssetBot()
         bot.serper_search = MagicMock()
         bot.serper_search.search_image.return_value = None
         bot.serper_search.last_status = "no_results"
 
-        response = MagicMock()
-        response.content = payload.getvalue()
-        response.headers = {"content-type": "image/png"}
-        response.raise_for_status.return_value = None
-        bot.image_session.get = MagicMock(return_value=response)
-        bot._evaluate_downloaded_image = MagicMock(return_value={"valid": True, "reason": "ok"})
-
         changed = bot.ensure_image(self.product, image_field="pending_image")
 
-        self.assertTrue(changed)
-        bot.image_session.get.assert_called_once_with(
-            "https://cdn.example.com/SP-REF-001.jpg",
-            timeout=bot.image_timeout,
-        )
-        self.assertTrue(self.product.pending_image.name.split("/")[-1].startswith("SP-001_SP-REF-001"))
+        self.assertFalse(changed)
 
     @override_settings(
         PRODUCT_BOT_LOCAL_IMAGE_SEARCH_ENABLED=False,
         PRODUCT_BOT_IMAGE_URL_TEMPLATE="",
         PRODUCT_BOT_GENERATE_FALLBACK_IMAGE=True,
     )
-    def test_generated_preview_is_used_when_no_image_source(self):
+    def test_no_generated_preview_when_no_image_source(self):
         bot = ProductAssetBot()
         bot.serper_search = None
         bot.serper_search_status = "disabled"
 
         changed = bot.ensure_image(self.product, image_field="pending_image")
 
-        self.assertTrue(changed)
-        self.assertTrue(self.product.pending_image.name.endswith(".png"))
-        self.assertTrue(self.product.pending_image_is_placeholder)
-        self.assertIn("generated preview", bot.last_image_log or "")
+        self.assertFalse(changed)
+        self.assertFalse(bool(self.product.pending_image))
 
     @override_settings(
         PRODUCT_BOT_LOCAL_IMAGE_SEARCH_ENABLED=False,
-        PRODUCT_BOT_IMAGE_URL_TEMPLATE="https://placehold.co/1200x1200.png",
         PRODUCT_BOT_ALLOW_PLACEHOLDERS=False,
-        PRODUCT_BOT_GENERATE_FALLBACK_IMAGE=True,
     )
-    def test_generated_preview_is_used_when_placeholder_is_blocked(self):
-        from io import BytesIO
-
-        image = Image.new("RGB", (640, 640), color=(10, 20, 30))
-        payload = BytesIO()
-        image.save(payload, format="PNG")
-
+    def test_second_serper_candidate_is_used_when_first_is_placeholder(self):
         bot = ProductAssetBot()
         bot.serper_search = MagicMock()
-        bot.serper_search.search_image.return_value = None
-        bot.serper_search.last_status = "no_results"
+        bot.serper_search.search_image.return_value = "https://placehold.co/1200x1200.png"
+        bot.serper_search.last_status = "ok"
+        bot.serper_search.last_candidates = [
+            "https://placehold.co/1200x1200.png",
+            "https://cdn.example.com/image-real.jpg",
+        ]
 
-        changed = bot.ensure_image(self.product, image_field="pending_image")
+        image_url, source = bot._find_search_image(self.product)
 
-        self.assertTrue(changed)
-        self.assertTrue(self.product.pending_image.name.endswith(".png"))
-        self.assertTrue(self.product.pending_image_is_placeholder)
-        self.assertIn("placeholder blocked", bot.last_image_log or "")
+        self.assertEqual(source, "serper")
+        self.assertEqual(image_url, "https://cdn.example.com/image-real.jpg")
 
 
 class GoogleImageSearchClientTests(TestCase):
