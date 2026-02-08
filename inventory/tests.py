@@ -981,7 +981,6 @@ class SerperImageSearchClientTests(TestCase):
     @override_settings(
         PRODUCT_BOT_SERPER_IMAGE_SEARCH_ENABLED=True,
         SERPER_API_KEY="dummy-key",
-        PRODUCT_BOT_SERPER_IMAGE_DAILY_LIMIT=10,
         PRODUCT_BOT_SERPER_IMAGE_NUM_MAX=10,
     )
     def test_serper_num_is_capped_at_four(self):
