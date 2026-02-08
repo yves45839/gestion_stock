@@ -242,11 +242,13 @@ class SerperImageSearchClient:
         self.last_status = None
         self.last_error = None
         self.last_query = None
+        self.last_candidates: list[str] = []
 
     def search_image(self, query: str) -> Optional[str]:
         self.last_status = None
         self.last_error = None
         self.last_query = query
+        self.last_candidates = []
         if not query:
             self.last_status = "empty_query"
             return None
@@ -295,13 +297,21 @@ class SerperImageSearchClient:
         if candidates:
             # Prefer larger images first while keeping deterministic ordering.
             candidates.sort(key=lambda entry: (-entry[0], entry[1]))
+            deduped_urls = []
+            seen_urls = set()
+            for _, _, candidate_url in candidates:
+                if candidate_url not in seen_urls:
+                    seen_urls.add(candidate_url)
+                    deduped_urls.append(candidate_url)
+            self.last_candidates = deduped_urls
             self.last_status = "ok"
-            return candidates[0][2]
+            return deduped_urls[0]
 
         # Last-resort fallback to thumbnails only if no regular URL was exposed.
         for image in items:
             url = (image or {}).get("thumbnailUrl")
             if url:
+                self.last_candidates = [url]
                 self.last_status = "ok"
                 return url
 
@@ -538,30 +548,18 @@ class ProductAssetBot:
             return applied
         image_url, image_source = self._find_search_image(product)
         if not image_url:
-            template_url = self._build_image_url(product)
-            if template_url:
-                image_url, image_source = template_url, "template"
-            else:
-                reason = self._format_search_status() or "no_image_source"
-                return self._set_generated_fallback_image(
-                    product,
-                    placeholder_field=placeholder_field,
-                    image_field=image_field,
-                    reason=reason,
-                )
+            reason = self._format_search_status() or "no_image_source"
+            self._set_image_log("skip", reason)
+            return False
         is_placeholder = self._is_placeholder_url(image_url)
         if is_placeholder and not self.allow_placeholders:
             detail = "placeholder blocked"
             search_status = self._format_search_status()
-            if search_status and self.last_google_status != "ok" and self.last_serper_status != "ok":
+            if search_status and self.last_serper_status != "ok":
                 detail = f"{detail} ({search_status})"
             logger.info("Skipping placeholder image url for %s", product)
-            return self._set_generated_fallback_image(
-                product,
-                placeholder_field=placeholder_field,
-                image_field=image_field,
-                reason=detail,
-            )
+            self._set_image_log("skip", detail)
+            return False
         try:
             response = self.image_session.get(image_url, timeout=self.image_timeout)
             response.raise_for_status()
@@ -910,12 +908,17 @@ class ProductAssetBot:
             self.last_google_status = "empty_query"
             self.last_serper_status = "empty_query"
             return None, None
-        max_fallbacks = getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_MAX_FALLBACKS", 2)
-        tries = max((max_fallbacks or 0) + 1, 1)
+        max_credits = int(getattr(settings, "PRODUCT_BOT_SERPER_IMAGE_MAX_CREDITS", 4) or 4)
+        tries = max(1, min(max_credits, 4))
         for query in queries[:tries]:
             url = self.serper_search.search_image(query)
             self.last_serper_query = query
             self.last_serper_status = self.serper_search.last_status or "no_results"
+            candidates = getattr(self.serper_search, "last_candidates", None) or []
+            if len(candidates) >= 2:
+                if self._is_placeholder_url(candidates[0]) and not self.allow_placeholders:
+                    return candidates[1], "serper"
+                return candidates[0], "serper"
             if url:
                 return url, "serper"
         return None, None
