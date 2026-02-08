@@ -1,6 +1,7 @@
 import json
 import logging
 import mimetypes
+import os
 import re
 from io import BytesIO
 from datetime import date
@@ -12,7 +13,7 @@ from urllib.parse import quote_plus, urlparse
 import requests
 from mistralai import Mistral
 from mistralai.models import UserMessage
-from PIL import Image, ImageStat
+from PIL import Image, ImageDraw, ImageFont, ImageStat
 from django.conf import settings
 from django.core.files import File
 from django.core.files.base import ContentFile
@@ -341,6 +342,9 @@ class ProductAssetBot:
             }
         )
         self.allow_placeholders = getattr(settings, "PRODUCT_BOT_ALLOW_PLACEHOLDERS", False)
+        self.generate_fallback_image = bool(
+            getattr(settings, "PRODUCT_BOT_GENERATE_FALLBACK_IMAGE", True)
+        )
         self.placeholder_domains = {
             domain.lower()
             for domain in getattr(
@@ -405,7 +409,7 @@ class ProductAssetBot:
         if not enabled:
             self.serper_search_status = "disabled"
             return None
-        api_key = getattr(settings, "SERPER_API_KEY", None)
+        api_key = getattr(settings, "SERPER_API_KEY", None) or os.getenv("SERPEV_API_KEY")
         if not api_key:
             self.serper_search_status = "missing_config"
             logger.warning("Serper image search enabled but missing API key.")
@@ -540,17 +544,25 @@ class ProductAssetBot:
                 image_url, image_source = template_url, "template"
             else:
                 reason = self._format_search_status() or "no_image_source"
-                self._set_image_log("skip", reason)
-                return False
+                return self._set_generated_fallback_image(
+                    product,
+                    placeholder_field=placeholder_field,
+                    image_field=image_field,
+                    reason=reason,
+                )
         is_placeholder = self._is_placeholder_url(image_url)
         if is_placeholder and not self.allow_placeholders:
             detail = "placeholder blocked"
             search_status = self._format_search_status()
             if search_status and self.last_google_status != "ok" and self.last_serper_status != "ok":
                 detail = f"{detail} ({search_status})"
-            self._set_image_log("skip", detail)
             logger.info("Skipping placeholder image url for %s", product)
-            return False
+            return self._set_generated_fallback_image(
+                product,
+                placeholder_field=placeholder_field,
+                image_field=image_field,
+                reason=detail,
+            )
         try:
             response = self.image_session.get(image_url, timeout=self.image_timeout)
             response.raise_for_status()
@@ -589,6 +601,53 @@ class ProductAssetBot:
             },
         )
         return True
+
+    def _set_generated_fallback_image(self, product, *, placeholder_field: str, image_field: str, reason: str) -> bool:
+        if not self.generate_fallback_image:
+            self._set_image_log("skip", reason)
+            return False
+        field = getattr(product, image_field)
+        fallback_content = self._build_generated_fallback_image(product)
+        if not fallback_content:
+            self._set_image_log("skip", reason)
+            return False
+        filename = self._build_image_filename(product, source_name="generated_preview", extension=".png")
+        field.save(filename, ContentFile(fallback_content), save=False)
+        setattr(product, placeholder_field, True)
+        self._set_image_log("ok", f"generated preview ({reason})")
+        ProductAsset.objects.update_or_create(
+            product=product,
+            asset_type=ProductAsset.AssetType.IMAGE,
+            defaults={
+                "source_url": "",
+                "metadata": {"source": "generated_preview", "reason": reason},
+                "status": ProductAsset.Status.DRAFT,
+            },
+        )
+        return True
+
+    def _build_generated_fallback_image(self, product) -> Optional[bytes]:
+        width, height = 1200, 1200
+        image = Image.new("RGB", (width, height), color=(242, 246, 250))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()
+        title = (product.name or "Produit").strip()[:90]
+        sku = (product.sku or product.manufacturer_reference or f"PROD-{product.pk}").strip()
+        brand = str(getattr(product, "brand", "") or "").strip()
+        lines = [title, f"SKU: {sku}"]
+        if brand:
+            lines.append(f"Marque: {brand}")
+        lines.append("Aperçu généré automatiquement")
+        y = 420
+        for line in lines:
+            text_box = draw.textbbox((0, 0), line, font=font)
+            text_width = text_box[2] - text_box[0]
+            x = max((width - text_width) // 2, 50)
+            draw.text((x, y), line, fill=(32, 38, 45), font=font)
+            y += 70
+        buffer = BytesIO()
+        image.save(buffer, format="PNG", optimize=True)
+        return buffer.getvalue()
 
     def _build_common_details(self, product) -> list[str]:
         details = [
@@ -965,7 +1024,10 @@ class ProductAssetBot:
         slug = quote_plus(base).replace("%", "_")
         if source_name:
             cleaned_source = re.sub(r"[^0-9A-Za-z._-]+", "_", source_name).strip("_")
-            filename = f"{slug[:50]}_{cleaned_source or 'image'}"
+            ext = extension or ".jpg"
+            if not ext.startswith("."):
+                ext = f".{ext}"
+            filename = f"{slug[:50]}_{cleaned_source or 'image'}{ext}"
             return filename[:200]
         ext = extension or ".jpg"
         if not ext.startswith("."):
