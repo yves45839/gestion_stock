@@ -189,21 +189,35 @@ class Rule:
     keywords: list[str] = field(default_factory=list)
     regexes: list[Pattern[str]] = field(default_factory=list)
 
-    def best_score(self, raw_text: str, normalized_text: str, tokens: set[str]) -> int:
+    def score(self, raw_text: str, normalized_text: str, tokens: set[str]) -> tuple[int, int, int]:
         score = 0
+        matched_terms = 0
+        best_term_length = 0
         for pattern in self.regexes:
             if pattern.search(raw_text):
-                score = max(score, len(pattern.pattern))
+                term_length = len(pattern.pattern)
+                score += term_length * 3
+                matched_terms += 1
+                best_term_length = max(best_term_length, term_length)
         for keyword in self.keywords:
             normalized = _normalize(keyword)
             if not normalized:
                 continue
+            matched = False
             if " " in normalized:
                 if normalized in normalized_text:
-                    score = max(score, len(normalized))
+                    matched = True
             elif normalized in tokens:
-                score = max(score, len(normalized))
-        return score
+                matched = True
+            if not matched:
+                continue
+            term_length = len(normalized)
+            score += term_length
+            matched_terms += 1
+            best_term_length = max(best_term_length, term_length)
+            if " " in normalized:
+                score += 2
+        return score, matched_terms, best_term_length
 
 
 def _build_default_rules() -> list[Rule]:
@@ -253,11 +267,17 @@ def _pick_best_rule(rules: Iterable[Rule], raw_text: str) -> Rule | None:
     normalized_text = _normalize(raw_text)
     tokens = set(normalized_text.split())
     best_rule = None
-    best_score = 0
+    best_signature = (0, 0, 0, "")
     for rule in rules:
-        score = rule.best_score(raw_text, normalized_text, tokens)
-        if score > best_score:
-            best_score = score
+        score, matched_terms, best_term_length = rule.score(raw_text, normalized_text, tokens)
+        signature = (
+            score,
+            matched_terms,
+            best_term_length,
+            _normalize(rule.category.name),
+        )
+        if signature > best_signature:
+            best_signature = signature
             best_rule = rule
     return best_rule
 

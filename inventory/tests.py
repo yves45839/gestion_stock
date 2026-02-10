@@ -10,6 +10,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .bot import ProductAssetBot
+from .category_auto import _pick_best_rule, Rule
 from .models import (
     Brand,
     Category,
@@ -1078,3 +1079,49 @@ class ProductDescriptionPromptStyleTests(TestCase):
         self.assertIn("Caracteristiques techniques detaillees", prompt)
         self.assertIn("Contenu du pack", prompt)
         self.assertIn("mini FAQ", prompt)
+
+
+class CategoryAutoAssignmentRuleTests(TestCase):
+    def setUp(self):
+        self.brand = Brand.objects.create(name="Hikvision")
+        self.default_category = Category.objects.create(name="Camera")
+
+    def test_pick_best_rule_prefers_most_relevant_category(self):
+        camera_rule = Rule(
+            category=self.default_category,
+            keywords=["camera", "camera ip", "dome"],
+        )
+        poe_rule = Rule(
+            category=Category.objects.create(name="Switch PoE"),
+            keywords=["switch", "poe", "ethernet"],
+        )
+        intercom_rule = Rule(
+            category=Category.objects.create(name="Interphone"),
+            keywords=["interphone", "visiophonie", "platine rue"],
+        )
+
+        best = _pick_best_rule(
+            [camera_rule, poe_rule, intercom_rule],
+            "SW-24-POE Switch ethernet manageable 24 ports",
+        )
+
+        self.assertIsNotNone(best)
+        self.assertEqual(best.category.name, "Switch PoE")
+
+    def test_pick_best_rule_uses_longer_and_multiple_matches(self):
+        camera_rule = Rule(
+            category=self.default_category,
+            keywords=["camera", "camera ip", "dome"],
+        )
+        recorder_rule = Rule(
+            category=Category.objects.create(name="Enregistreur"),
+            keywords=["nvr", "enregistreur"],
+        )
+
+        best = _pick_best_rule(
+            [camera_rule, recorder_rule],
+            "NVR 8 canaux enregistreur camera ip dome",
+        )
+
+        self.assertIsNotNone(best)
+        self.assertEqual(best.category.name, "Camera")
