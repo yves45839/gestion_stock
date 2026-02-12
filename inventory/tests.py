@@ -216,6 +216,37 @@ class InventoryViewTests(TestCase):
         self.assertTrue(data["found"])
         self.assertEqual(data["product"]["id"], self.product.id)
 
+    def test_products_feed_returns_extended_product_attributes(self):
+        self.product.description = "Description complète"
+        self.product.short_description = "Description courte"
+        self.product.long_description = "Description longue"
+        self.product.tech_specs_json = {"resolution": "4MP"}
+        self.product.video_links = ["https://example.com/video"]
+        self.product.purchase_price = Decimal("10.50")
+        self.product.sale_price = Decimal("25.90")
+        self.product.save()
+
+        response = self.client.get(reverse("inventory:products_feed"))
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["count"], 1)
+        product_payload = data["results"][0]
+
+        self.assertEqual(product_payload["id"], self.product.id)
+        self.assertEqual(product_payload["manufacturer_reference"], self.product.manufacturer_reference)
+        self.assertEqual(product_payload["short_description"], "Description courte")
+        self.assertEqual(product_payload["long_description"], "Description longue")
+        self.assertEqual(product_payload["tech_specs_json"], {"resolution": "4MP"})
+        self.assertEqual(product_payload["video_links"], ["https://example.com/video"])
+        self.assertEqual(product_payload["brand_id"], self.brand.id)
+        self.assertEqual(product_payload["category_id"], self.category.id)
+        self.assertEqual(product_payload["minimum_stock"], self.product.minimum_stock)
+        self.assertEqual(product_payload["purchase_price"], "10.50")
+        self.assertEqual(product_payload["sale_price"], "25.90")
+        self.assertIn("created_at", product_payload)
+        self.assertIn("updated_at", product_payload)
+
     def test_lookup_product_endpoint_returns_not_found_for_missing_product(self):
         response = self.client.get(reverse("inventory:lookup_product"), {"code": "000000"})
         self.assertEqual(response.status_code, 404)

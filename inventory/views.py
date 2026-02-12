@@ -3251,23 +3251,35 @@ def products_feed(request):
             {
                 "id": product.id,
                 "sku": product.sku,
+                "manufacturer_reference": product.manufacturer_reference,
                 "name": product.name,
                 "description": product.description,
+                "short_description": product.short_description,
+                "long_description": product.long_description,
+                "tech_specs_json": product.tech_specs_json,
+                "video_links": product.video_links,
                 "brand": product.brand.name,
+                "brand_id": product.brand_id,
                 "category": product.category.name,
+                "category_id": product.category_id,
                 "barcode": product.barcode,
+                "minimum_stock": product.minimum_stock,
                 "sale_price": str(product.sale_price) if product.sale_price is not None else None,
                 "purchase_price": str(product.purchase_price)
                 if product.purchase_price is not None
                 else None,
                 "stock_quantity": product.current_stock,
                 "image_url": product.image.url if product.image else None,
+                "image_is_placeholder": product.image_is_placeholder,
+                "pending_image_url": product.pending_image.url if product.pending_image else None,
+                "pending_image_is_placeholder": product.pending_image_is_placeholder,
                 "datasheet_url": product.datasheet_url,
                 "datasheet_pdf_url": product.datasheet_pdf.url if product.datasheet_pdf else None,
                 "datasheet_fetched_at": product.datasheet_fetched_at.isoformat()
                 if product.datasheet_fetched_at
                 else None,
                 "is_online": product.is_online,
+                "created_at": product.created_at.isoformat(),
                 "updated_at": product.updated_at.isoformat(),
             }
         )
