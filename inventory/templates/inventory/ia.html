@@ -214,7 +214,11 @@
                         {% elif product.datasheet_url %}
                             <a class="btn ghost" href="{{ product.datasheet_url }}" target="_blank" rel="noopener" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Source</a>
                         {% else %}
-                            <button type="button" class="btn ghost" disabled style="padding:0.35rem 0.6rem; font-size:0.85rem;">Télécharger</button>
+                            <form method="post" style="margin:0;" data-focus-form>
+                                {% csrf_token %}
+                                <input type="hidden" name="product_id" value="{{ product.id }}">
+                                <button type="submit" name="bot_action" value="datasheet_fetch_one" class="btn ghost" style="padding:0.35rem 0.6rem; font-size:0.85rem;">Télécharger</button>
+                            </form>
                         {% endif %}
                     </div>
                     <form method="post" class="ia-table-cell" data-label="Catégorie" style="gap:0.5rem; margin:0;" data-focus-form>
@@ -420,7 +424,7 @@
             <span class="pill">PDF</span>
         </div>
         <p class="muted-text" style="margin:0 0 0.75rem;">
-            Recherche via Google CSE, puis telecharge les fiches techniques Hikvision (PDF).
+            Recherche via Serper (prioritaire) puis Google CSE en secours, puis telecharge les fiches techniques Hikvision (PDF).
             Deduplication par modele pour limiter le quota.
         </p>
         <form method="post" class="form-grid" novalidate>
@@ -445,7 +449,7 @@
                     {{ datasheet_form.force.label }}
                 </label>
                 {% if not datasheet_configured %}
-                    <p class="muted-text" style="margin:0;">Google CSE n'est pas configure.</p>
+                    <p class="muted-text" style="margin:0;">Ajoutez SERPER_API_KEY ou GOOGLE_CSE_API_KEY + GOOGLE_CSE_CX.</p>
                 {% endif %}
             </div>
             <div class="field" style="display:flex; align-items:flex-end;">

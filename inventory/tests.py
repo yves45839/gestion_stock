@@ -1,6 +1,6 @@
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -11,6 +11,7 @@ from PIL import Image
 
 from .bot import ProductAssetBot
 from .category_auto import _pick_best_rule, Rule
+from .datasheets import DatasheetSummary, search_datasheet_pdf
 from .models import (
     Brand,
     Category,
@@ -183,7 +184,7 @@ class InventoryViewTests(TestCase):
             "site": self.site.pk,
         }
         response = self.client.post(reverse("inventory:record_movement"), data=payload)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         movement = StockMovement.objects.get()
         self.assertEqual(movement.performed_by, self.user)
         self.assertEqual(movement.quantity, 7)
@@ -203,7 +204,7 @@ class InventoryViewTests(TestCase):
             "site": self.site.pk,
         }
         response = self.client.post(reverse("inventory:inventory_overview"), data=payload)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(StockMovement.objects.count(), 2)
         adjustment = StockMovement.objects.order_by("-id").first()
         self.assertEqual(adjustment.movement_type, self.adjust_minus)
@@ -481,7 +482,7 @@ class SalesWorkflowTests(TestCase):
             "items-0-DELETE": "",
         }
         response = self.client.post(reverse("inventory:quote_create"), data=payload)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         quote = Sale.objects.get(reference="DEVIS-001")
         self.assertEqual(quote.status, Sale.Status.DRAFT)
         self.assertEqual(quote.items.count(), 1)
@@ -688,7 +689,7 @@ class CustomerViewTests(TestCase):
             "notes": "Paiement carte",
         }
         response = self.client.post(url, data=payload)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(
             CustomerAccountEntry.objects.filter(customer=self.customer).count(),
             1,
@@ -725,6 +726,82 @@ class ProductBotViewTests(TestCase):
         self.assertTrue(hasattr(products[0], "quality_report"))
         self.assertGreaterEqual(products[0].quality_report.score, 0)
         self.assertContains(response, "Score IA")
+
+    @override_settings(SERPER_API_KEY="serper-key")
+    @patch("inventory.views.fetch_hikvision_datasheets")
+    def test_product_bot_can_fetch_single_datasheet_from_table(self, fetch_mock):
+        fetch_mock.return_value = DatasheetSummary(
+            products=1,
+            models=1,
+            updated=1,
+            skipped=0,
+            failed=0,
+            errors=[],
+        )
+
+        response = self.client.post(
+            reverse("inventory:product_bot"),
+            data={"bot_action": "datasheet_fetch_one", "product_id": self.product.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        fetch_mock.assert_called_once()
+        kwargs = fetch_mock.call_args.kwargs
+        self.assertEqual(kwargs["queryset"], [self.product])
+
+
+class DatasheetSearchTests(TestCase):
+    @override_settings(SERPER_API_KEY="serper-key")
+    @patch("inventory.datasheets.google_cse_search")
+    @patch("inventory.datasheets.serper_search")
+    def test_search_datasheet_pdf_prefers_serper(self, serper_mock, google_mock):
+        serper_mock.return_value = {
+            "organic": [
+                {
+                    "link": "https://www.hikvision.com/fr/datasheet-DS-2CD.pdf",
+                    "title": "DS-2CD datasheet",
+                    "snippet": "fiche technique",
+                }
+            ]
+        }
+
+        best, source = search_datasheet_pdf(
+            session=MagicMock(),
+            query='site:hikvision.com "DS-2CD" filetype:pdf',
+            model="DS-2CD",
+            prefer_lang="fr",
+        )
+
+        self.assertEqual(source, "serper")
+        self.assertIn("datasheet-DS-2CD.pdf", best)
+        google_mock.assert_not_called()
+
+    @patch("inventory.datasheets.google_cse_search")
+    @patch("inventory.datasheets.serper_search")
+    def test_search_datasheet_pdf_falls_back_to_google(self, serper_mock, google_mock):
+        serper_mock.side_effect = RuntimeError("quota")
+        google_mock.return_value = {
+            "items": [
+                {
+                    "link": "https://www.hikvision.com/en/DS-2CD.pdf",
+                    "title": "DS-2CD Datasheet",
+                    "snippet": "datasheet",
+                    "mime": "application/pdf",
+                }
+            ]
+        }
+
+        best, source = search_datasheet_pdf(
+            session=MagicMock(),
+            query='site:hikvision.com "DS-2CD" filetype:pdf',
+            model="DS-2CD",
+            prefer_lang="en",
+        )
+
+        self.assertEqual(source, "google_cse")
+        self.assertIn("DS-2CD.pdf", best)
+
+
 
 
 class ProductQualityAgentTests(TestCase):

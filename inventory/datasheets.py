@@ -26,6 +26,7 @@ _HYPHENS = {
 }
 
 _DEFAULT_CSE_ENDPOINT = "https://www.googleapis.com/customsearch/v1"
+_DEFAULT_SERPER_ENDPOINT = "https://google.serper.dev/search"
 
 
 def _normalize_model(value: str) -> str:
@@ -84,6 +85,12 @@ def _get_cse_credentials() -> tuple[str, str, str]:
     return api_key or "", engine_id or "", endpoint
 
 
+def _get_serper_credentials() -> tuple[str, str]:
+    api_key = getattr(settings, "SERPER_API_KEY", None)
+    endpoint = getattr(settings, "SERPER_SEARCH_ENDPOINT", None) or _DEFAULT_SERPER_ENDPOINT
+    return api_key or "", endpoint
+
+
 def google_cse_search(
     session: requests.Session,
     query: str,
@@ -104,6 +111,74 @@ def google_cse_search(
     response = session.get(endpoint, params=params, timeout=30)
     response.raise_for_status()
     return response.json()
+
+
+def serper_search(
+    session: requests.Session,
+    query: str,
+    *,
+    num: int = 10,
+) -> dict:
+    api_key, endpoint = _get_serper_credentials()
+    if not api_key:
+        raise RuntimeError("Serper config missing (SERPER_API_KEY).")
+    payload = {
+        "q": query,
+        "num": max(1, min(int(num or 10), 10)),
+    }
+    response = session.post(
+        endpoint,
+        json=payload,
+        timeout=30,
+        headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _serper_to_cse_items(data: dict) -> list[dict]:
+    items: list[dict] = []
+    for candidate in data.get("organic") or []:
+        link = candidate.get("link") or ""
+        title = candidate.get("title") or ""
+        snippet = candidate.get("snippet") or ""
+        if not link:
+            continue
+        mime = "application/pdf" if ".pdf" in link.lower() else ""
+        items.append({"link": link, "title": title, "snippet": snippet, "mime": mime})
+    return items
+
+
+def search_datasheet_pdf(
+    session: requests.Session,
+    query: str,
+    model: str,
+    *,
+    prefer_lang: str = "fr",
+    num: int = 10,
+) -> tuple[Optional[str], str]:
+    search_errors: list[str] = []
+    try:
+        serper_data = serper_search(session, query, num=num)
+        serper_items = _serper_to_cse_items(serper_data)
+        best = pick_best_pdf(serper_items, model, prefer_lang=prefer_lang)
+        if best:
+            return best, "serper"
+        search_errors.append("Serper: no PDF result found")
+    except Exception as exc:  # noqa: BLE001
+        search_errors.append(f"Serper: {exc}")
+
+    try:
+        cse_data = google_cse_search(session, query, num=num)
+        cse_items = cse_data.get("items") or []
+        best = pick_best_pdf(cse_items, model, prefer_lang=prefer_lang)
+        if best:
+            return best, "google_cse"
+        search_errors.append("Google CSE: no PDF result found")
+    except Exception as exc:  # noqa: BLE001
+        search_errors.append(f"Google CSE: {exc}")
+
+    raise RuntimeError("; ".join(search_errors) or "No PDF result found.")
 
 
 def score_result(item: dict, model: str, prefer_lang: str = "fr") -> int:
@@ -308,11 +383,13 @@ def fetch_hikvision_datasheets(
 
         query = build_query(model, prefer_lang=prefer_lang)
         try:
-            data = google_cse_search(session, query, num=10)
-            items = data.get("items") or []
-            best = pick_best_pdf(items, model, prefer_lang=prefer_lang)
-            if not best:
-                raise RuntimeError("No PDF result found.")
+            best, source = search_datasheet_pdf(
+                session,
+                query,
+                model,
+                prefer_lang=prefer_lang,
+                num=10,
+            )
 
             if dry_run:
                 updated += len(products)
@@ -337,7 +414,7 @@ def fetch_hikvision_datasheets(
                 product.datasheet_fetched_at = timezone.now()
                 product.save(update_fields=["datasheet_url", "datasheet_pdf", "datasheet_fetched_at"])
                 updated += 1
-            logger.info("Downloaded datasheet for %s (sha256=%s)", model, sha256)
+            logger.info("Downloaded datasheet for %s via %s (sha256=%s)", model, source, sha256)
         except Exception as exc:  # noqa: BLE001
             failed += len(products)
             errors.append({"model": model, "error": str(exc)})
