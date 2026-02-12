@@ -1014,6 +1014,19 @@ def inventory_overview(request):
     }
     sort_choice = sort_param if sort_param in sort_options else "name"
 
+    if request.method == "POST" and request.POST.get("action") == "toggle_online":
+        product_id = request.POST.get("product_id")
+        product = get_object_or_404(Product, pk=product_id)
+        is_online = str(request.POST.get("is_online", "")).lower() in ("1", "true", "yes", "on")
+        if product.is_online != is_online:
+            product.is_online = is_online
+            product.save(update_fields=["is_online"])
+            state_label = "en ligne" if is_online else "hors ligne"
+            messages.success(request, f"{product.sku} est maintenant {state_label}.")
+        else:
+            messages.info(request, f"{product.sku} est deja dans cet etat.")
+        return redirect(request.POST.get("next") or request.get_full_path())
+
     adjustment_form = InventoryAdjustmentForm(
         request.POST or None, current_site=action_site or view_site, site_locked=site_locked
     )
@@ -2833,6 +2846,23 @@ def product_asset_bot(request):
                     request,
                     f"{product.sku} est deja dans cette categorie.",
                 )
+        elif action == "toggle_online":
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            is_online = str(request.POST.get("is_online", "")).lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            if product.is_online != is_online:
+                product.is_online = is_online
+                product.save(update_fields=["is_online"])
+                state_label = "en ligne" if is_online else "hors ligne"
+                messages.success(request, f"{product.sku} est maintenant {state_label}.")
+            else:
+                messages.info(request, f"{product.sku} est deja dans cet etat.")
+            return redirect(request.POST.get("next") or request.get_full_path())
         elif action == "datasheet_fetch_one":
             product_id = request.POST.get("product_id")
             product = get_object_or_404(Product, pk=product_id)
@@ -3025,6 +3055,7 @@ def product_asset_bot(request):
         "datasheet_pdf",
         "datasheet_url",
         "category_id",
+        "is_online",
     ).order_by("name")
     if catalog_query:
         catalog_queryset = catalog_queryset.filter(
