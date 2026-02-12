@@ -18,6 +18,14 @@
         transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
     .product-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(0, 198, 255, 0.24); border-color: rgba(77, 240, 255, 0.5); }
+    .product-card-shell { display: grid; gap: 0.55rem; }
+    .product-online-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+    }
     .product-thumb {
         height: 120px;
         display: flex;
@@ -225,7 +233,18 @@
         <div class="surface reveal" data-delay="160">
             <div class="product-grid">
                 {% for product in products %}
-                    <a class="product-card reveal pulse-border" data-delay="{% widthratio forloop.counter 1 30 %}" href="{% url 'inventory:product_detail' product.pk %}">
+                    <div class="product-card-shell reveal" data-delay="{% widthratio forloop.counter 1 30 %}">
+                    <form method="post" style="margin:0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="toggle_online">
+                        <input type="hidden" name="product_id" value="{{ product.id }}">
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <label class="product-online-toggle">
+                            <input type="checkbox" name="is_online" value="1" {% if product.is_online %}checked{% endif %} onchange="this.form.submit()">
+                            En ligne
+                        </label>
+                    </form>
+                    <a class="product-card pulse-border" href="{% url 'inventory:product_detail' product.pk %}">
                         <div class="product-thumb">
                             {% if product.image %}
                                 <img src="{{ product.image.url }}" alt="Image de {{ product.name }}" loading="lazy">
@@ -267,6 +286,7 @@
                             </div>
                         {% endif %}
                     </a>
+                    </div>
                 {% empty %}
                     <p class="muted-text" style="margin:0;">Aucun produit trouvé.</p>
                 {% endfor %}
