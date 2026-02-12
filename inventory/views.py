@@ -2351,7 +2351,8 @@ def product_asset_bot(request):
     category_ai_available = bool(getattr(settings, "MISTRAL_API_KEY", None))
     datasheet_result = None
     datasheet_configured = bool(
-        getattr(settings, "GOOGLE_CSE_API_KEY", None) and getattr(settings, "GOOGLE_CSE_CX", None)
+        getattr(settings, "SERPER_API_KEY", None)
+        or (getattr(settings, "GOOGLE_CSE_API_KEY", None) and getattr(settings, "GOOGLE_CSE_CX", None))
     )
     inline_mode = settings.PRODUCT_BOT_INLINE_RUN
     product_stats = Product.objects.aggregate(
@@ -2832,13 +2833,43 @@ def product_asset_bot(request):
                     request,
                     f"{product.sku} est deja dans cette categorie.",
                 )
+        elif action == "datasheet_fetch_one":
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            if product.datasheet_pdf:
+                messages.info(request, f"Une fiche est deja associee a {product.sku}.")
+            elif not datasheet_configured:
+                messages.warning(
+                    request,
+                    "Aucune source de recherche configuree. Ajoutez SERPER_API_KEY ou GOOGLE_CSE_API_KEY + GOOGLE_CSE_CX.",
+                )
+            else:
+                try:
+                    result = fetch_hikvision_datasheets(
+                        queryset=[product],
+                        prefer_lang="fr",
+                        force=False,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    messages.error(request, f"Erreur lors du telechargement: {exc}")
+                else:
+                    if result.updated:
+                        messages.success(request, f"Fiche technique telechargee pour {product.sku}.")
+                    elif result.failed:
+                        error_message = (result.errors[0].get("error") if result.errors else "Erreur inconnue")
+                        messages.warning(
+                            request,
+                            f"Impossible de recuperer la fiche technique pour {product.sku}: {error_message}",
+                        )
+                    else:
+                        messages.info(request, f"Aucune fiche technique trouvee pour {product.sku}.")
         elif action == "datasheet_fetch":
             datasheet_form = HikvisionDatasheetForm(request.POST)
             if datasheet_form.is_valid():
                 if not datasheet_configured:
                     messages.warning(
                         request,
-                        "Google CSE n'est pas configure. Renseignez GOOGLE_CSE_API_KEY et GOOGLE_CSE_CX.",
+                        "Aucune source de recherche configuree. Ajoutez SERPER_API_KEY ou GOOGLE_CSE_API_KEY + GOOGLE_CSE_CX.",
                     )
                 else:
                     try:
