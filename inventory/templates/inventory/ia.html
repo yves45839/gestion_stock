@@ -427,17 +427,24 @@
     <div class="surface surface-muted reveal" data-delay="320">
         <div class="surface-header">
             <div>
-                <p class="eyebrow">Hikvision</p>
+                <p class="eyebrow">Hikvision & Dahua</p>
                 <h2 class="surface-title">Fiches techniques PDF</h2>
             </div>
             <span class="pill">PDF</span>
         </div>
         <p class="muted-text" style="margin:0 0 0.75rem;">
-            Recherche via Serper (prioritaire) puis Google CSE en secours, puis telecharge les fiches techniques Hikvision (PDF).
+            Recherche via Serper (prioritaire) puis Google CSE en secours, puis telecharge les fiches techniques PDF pour Hikvision et/ou Dahua.
             Deduplication par modele pour limiter le quota.
         </p>
         <form method="post" class="form-grid" novalidate>
             {% csrf_token %}
+            <div class="field">
+                {{ datasheet_form.brand_scope.label_tag }}
+                {{ datasheet_form.brand_scope }}
+                {% for error in datasheet_form.brand_scope.errors %}
+                    <p class="muted-text" style="color: var(--danger);">{{ error }}</p>
+                {% endfor %}
+            </div>
             <div class="field">
                 {{ datasheet_form.limit.label_tag }}
                 {{ datasheet_form.limit }}

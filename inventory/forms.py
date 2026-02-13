@@ -462,6 +462,16 @@ class ProductAssetBotSelectionForm(forms.Form):
 
 
 class HikvisionDatasheetForm(forms.Form):
+    brand_scope = forms.ChoiceField(
+        label="Marque",
+        choices=(
+            ("hikvision", "Hikvision"),
+            ("dahua", "Dahua"),
+            ("both", "Hikvision + Dahua"),
+        ),
+        initial="both",
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
     limit = forms.IntegerField(
         required=False,
         min_value=1,
