@@ -11,7 +11,7 @@ from PIL import Image
 
 from .bot import ProductAssetBot
 from .category_auto import _pick_best_rule, Rule
-from .datasheets import DatasheetSummary, search_datasheet_pdf
+from .datasheets import DatasheetSummary, fetch_hikvision_datasheets, search_datasheet_pdf
 from .models import (
     Brand,
     Category,
@@ -831,6 +831,53 @@ class DatasheetSearchTests(TestCase):
 
         self.assertEqual(source, "google_cse")
         self.assertIn("DS-2CD.pdf", best)
+
+
+class DatasheetBatchFallbackTests(TestCase):
+    def setUp(self):
+        self.brand = Brand.objects.create(name="Hikvision")
+        self.category = Category.objects.create(name="Camera")
+
+    @patch("inventory.datasheets.download_pdf_streaming")
+    @patch("inventory.datasheets.search_datasheet_pdf")
+    def test_batch_fallback_retries_per_product_when_model_group_fails(self, search_mock, download_mock):
+        first = Product.objects.create(
+            sku="DS-PWA96-KIT-WE868",
+            manufacturer_reference="DS-PWA96-KIT-WE868",
+            name="Kit alarme 868",
+            brand=self.brand,
+            category=self.category,
+        )
+        second = Product.objects.create(
+            sku="DS-1310HP-EI",
+            manufacturer_reference="DS-1310HP-EI",
+            name="Switch PoE",
+            brand=self.brand,
+            category=self.category,
+        )
+
+        search_mock.side_effect = [
+            RuntimeError("Serper: no PDF result found; Google CSE: no PDF result found"),
+            ("https://example.com/datasheet-1.pdf", "google_cse"),
+            ("https://example.com/datasheet-2.pdf", "google_cse"),
+        ]
+        download_mock.side_effect = [
+            ("https://example.com/datasheet-1.pdf", b"%PDF-1", "h1"),
+            ("https://example.com/datasheet-2.pdf", b"%PDF-2", "h2"),
+        ]
+
+        result = fetch_hikvision_datasheets(
+            queryset=[first, second],
+            brand_name="HIKVISION",
+            force=False,
+            domain="hikvision.com",
+        )
+
+        self.assertEqual(result.updated, 2)
+        self.assertEqual(result.failed, 0)
+        self.assertEqual(result.errors, [])
+        self.assertEqual(search_mock.call_count, 3)
+        self.assertEqual(download_mock.call_count, 2)
 
 
 
