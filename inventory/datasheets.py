@@ -311,6 +311,26 @@ def _safe_filename(model: str) -> str:
     return f"{cleaned}.pdf"
 
 
+def _model_search_candidates(product: Product, fallback_model: str) -> list[str]:
+    candidates = [
+        extract_model(product),
+        _strip_unicode_hyphens(product.manufacturer_reference or "").strip(),
+        _strip_unicode_hyphens(product.sku or "").strip(),
+        fallback_model,
+    ]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        key = _normalize_model(candidate)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(candidate)
+    return deduped
+
+
 @dataclass
 class DatasheetSummary:
     products: int
@@ -391,6 +411,11 @@ def fetch_hikvision_datasheets(
             skipped += len(products)
             continue
 
+        targets = [product for product in products if force or not product.datasheet_pdf]
+        if not targets:
+            skipped += len(products)
+            continue
+
         query = build_query(model, prefer_lang=prefer_lang, domain=search_domain)
         try:
             best, source = search_datasheet_pdf(
@@ -402,7 +427,7 @@ def fetch_hikvision_datasheets(
             )
 
             if dry_run:
-                updated += len(products)
+                updated += len(targets)
                 continue
 
             final_url, content, sha256 = download_pdf_streaming(
@@ -414,7 +439,7 @@ def fetch_hikvision_datasheets(
             filename = _safe_filename(model)
 
             stored_name = None
-            for product in products:
+            for product in targets:
                 if stored_name:
                     product.datasheet_pdf.name = stored_name
                 else:
@@ -426,9 +451,60 @@ def fetch_hikvision_datasheets(
                 updated += 1
             logger.info("Downloaded datasheet for %s via %s (sha256=%s)", model, source, sha256)
         except Exception as exc:  # noqa: BLE001
-            failed += len(products)
-            errors.append({"model": model, "error": str(exc)})
             logger.warning("Datasheet fetch failed for %s: %s", model, exc)
+            remaining_products = list(targets)
+            for product in targets:
+                product_downloaded = False
+                for search_model in _model_search_candidates(product, model):
+                    fallback_query = build_query(search_model, prefer_lang=prefer_lang, domain=search_domain)
+                    try:
+                        best, source = search_datasheet_pdf(
+                            session,
+                            fallback_query,
+                            search_model,
+                            prefer_lang=prefer_lang,
+                            num=10,
+                        )
+                        if dry_run:
+                            updated += 1
+                            product_downloaded = True
+                            break
+                        final_url, content, sha256 = download_pdf_streaming(
+                            session,
+                            best,
+                            max_mb=max_mb,
+                            html_limit_kb=html_limit_kb,
+                        )
+                        filename = _safe_filename(search_model)
+                        product.datasheet_pdf.save(filename, ContentFile(content), save=False)
+                        product.datasheet_url = final_url
+                        product.datasheet_fetched_at = timezone.now()
+                        product.save(update_fields=["datasheet_url", "datasheet_pdf", "datasheet_fetched_at"])
+                        updated += 1
+                        product_downloaded = True
+                        logger.info(
+                            "Fallback datasheet download succeeded for %s (%s) via %s (sha256=%s)",
+                            model,
+                            product.sku,
+                            source,
+                            sha256,
+                        )
+                        break
+                    except Exception:  # noqa: BLE001
+                        continue
+
+                if product_downloaded:
+                    remaining_products.remove(product)
+
+            if remaining_products:
+                failed += len(remaining_products)
+                errors.append(
+                    {
+                        "model": model,
+                        "error": str(exc),
+                        "products": [product.id for product in remaining_products],
+                    }
+                )
         finally:
             if sleep_s:
                 time.sleep(sleep_s)
