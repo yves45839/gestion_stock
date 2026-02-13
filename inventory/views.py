@@ -74,7 +74,7 @@ from .product_asset import (
     run_product_asset_bot,
 )
 from .category_auto import run_auto_assign_categories
-from .datasheets import fetch_hikvision_datasheets
+from .datasheets import fetch_hikvision_datasheets, resolve_brand_datasheet_domain
 from .quality_agent import ProductQualityAgent
 
 try:
@@ -2902,30 +2902,63 @@ def product_asset_bot(request):
                         "Aucune source de recherche configuree. Ajoutez SERPER_API_KEY ou GOOGLE_CSE_API_KEY + GOOGLE_CSE_CX.",
                     )
                 else:
+                    brand_scope = datasheet_form.cleaned_data["brand_scope"]
+                    if brand_scope == "hikvision":
+                        brands_to_process = [("HIKVISION", "Hikvision")]
+                    elif brand_scope == "dahua":
+                        brands_to_process = [("DAHUA", "Dahua")]
+                    else:
+                        brands_to_process = [("HIKVISION", "Hikvision"), ("DAHUA", "Dahua")]
+
+                    combined = {
+                        "products": 0,
+                        "models": 0,
+                        "updated": 0,
+                        "skipped": 0,
+                        "failed": 0,
+                        "errors": [],
+                    }
+                    empty_brands = []
+
                     try:
-                        result = fetch_hikvision_datasheets(
-                            brand_name="HIKVISION",
-                            limit=datasheet_form.cleaned_data["limit"],
-                            prefer_lang=datasheet_form.cleaned_data["prefer_lang"],
-                            force=datasheet_form.cleaned_data["force"],
-                        )
+                        for brand_name, brand_label in brands_to_process:
+                            brand_result = fetch_hikvision_datasheets(
+                                brand_name=brand_name,
+                                domain=resolve_brand_datasheet_domain(brand_name),
+                                limit=datasheet_form.cleaned_data["limit"],
+                                prefer_lang=datasheet_form.cleaned_data["prefer_lang"],
+                                force=datasheet_form.cleaned_data["force"],
+                            )
+                            combined["products"] += brand_result.products
+                            combined["models"] += brand_result.models
+                            combined["updated"] += brand_result.updated
+                            combined["skipped"] += brand_result.skipped
+                            combined["failed"] += brand_result.failed
+                            combined["errors"].extend(brand_result.errors)
+                            if brand_result.products == 0:
+                                empty_brands.append(brand_label)
                     except Exception as exc:  # noqa: BLE001
                         messages.error(request, f"Erreur lors du telechargement: {exc}")
                     else:
-                        datasheet_result = result
-                        if result.products == 0:
-                            messages.info(request, "Aucun produit Hikvision a traiter.")
-                        elif result.failed:
+                        datasheet_result = type("DatasheetCombinedResult", (), combined)
+                        if combined["products"] == 0:
+                            messages.info(request, "Aucun produit Hikvision/Dahua a traiter.")
+                        elif combined["failed"]:
                             messages.warning(
                                 request,
-                                f"Fiches techniques: {result.updated} ok, {result.failed} en erreur.",
+                                f"Fiches techniques: {combined['updated']} ok, {combined['failed']} en erreur.",
                             )
                         else:
                             messages.success(
                                 request,
-                                f"Fiches techniques: {result.updated} telechargees, {result.skipped} ignorees.",
+                                f"Fiches techniques: {combined['updated']} telechargees, {combined['skipped']} ignorees.",
                             )
-                datasheet_form = HikvisionDatasheetForm()
+                        if empty_brands:
+                            messages.info(
+                                request,
+                                f"Aucun produit a traiter pour: {', '.join(empty_brands)}.",
+                            )
+                datasheet_form = HikvisionDatasheetForm(initial={"brand_scope": "both"})
         elif action == "auto_category":
             category_form = CategoryAutoAssignForm(request.POST)
             if category_form.is_valid():

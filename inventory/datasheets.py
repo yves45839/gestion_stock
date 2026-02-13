@@ -74,6 +74,13 @@ def build_query(model: str, prefer_lang: str = "fr", domain: str = "hikvision.co
     return query
 
 
+def resolve_brand_datasheet_domain(brand_name: str) -> str:
+    normalized = (brand_name or "").strip().lower()
+    if normalized == "dahua":
+        return "dahuasecurity.com"
+    return "hikvision.com"
+
+
 def _get_cse_credentials() -> tuple[str, str, str]:
     api_key = getattr(settings, "GOOGLE_CSE_API_KEY", None) or getattr(
         settings, "GOOGLE_CUSTOM_SEARCH_API_KEY", None
@@ -322,6 +329,7 @@ def fetch_hikvision_datasheets(
     prefer_lang: str = "fr",
     force: bool = False,
     dry_run: bool = False,
+    domain: Optional[str] = None,
 ) -> DatasheetSummary:
     if queryset is None:
         queryset = Product.objects.select_related("brand").filter(
@@ -361,6 +369,8 @@ def fetch_hikvision_datasheets(
     html_limit_kb = int(getattr(settings, "HIKVISION_DATASHEET_HTML_LIMIT_KB", 512))
     sleep_s = float(getattr(settings, "HIKVISION_DATASHEET_SLEEP", 1.0))
 
+    search_domain = domain or resolve_brand_datasheet_domain(brand_name)
+
     for model, products in buckets.items():
         existing_pdf = next((p.datasheet_pdf for p in products if p.datasheet_pdf), None)
         existing_url = next((p.datasheet_url for p in products if p.datasheet_url), None)
@@ -381,7 +391,7 @@ def fetch_hikvision_datasheets(
             skipped += len(products)
             continue
 
-        query = build_query(model, prefer_lang=prefer_lang)
+        query = build_query(model, prefer_lang=prefer_lang, domain=search_domain)
         try:
             best, source = search_datasheet_pdf(
                 session,
