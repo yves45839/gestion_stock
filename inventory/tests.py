@@ -225,6 +225,9 @@ class InventoryViewTests(TestCase):
         self.product.video_links = ["https://example.com/video"]
         self.product.purchase_price = Decimal("10.50")
         self.product.sale_price = Decimal("25.90")
+        self.product.image = SimpleUploadedFile("camera.jpg", b"fake-image", content_type="image/jpeg")
+        self.product.pending_image = SimpleUploadedFile("camera-pending.jpg", b"fake-image", content_type="image/jpeg")
+        self.product.datasheet_pdf = SimpleUploadedFile("camera.pdf", b"fake-pdf", content_type="application/pdf")
         self.product.save()
 
         response = self.client.get(reverse("inventory:products_feed"))
@@ -245,6 +248,9 @@ class InventoryViewTests(TestCase):
         self.assertEqual(product_payload["minimum_stock"], self.product.minimum_stock)
         self.assertEqual(product_payload["purchase_price"], "10.50")
         self.assertEqual(product_payload["sale_price"], "25.90")
+        self.assertTrue(product_payload["image_url"].startswith("http://testserver/media/"))
+        self.assertTrue(product_payload["pending_image_url"].startswith("http://testserver/media/"))
+        self.assertTrue(product_payload["datasheet_pdf_url"].startswith("http://testserver/media/"))
         self.assertIn("created_at", product_payload)
         self.assertIn("updated_at", product_payload)
 
