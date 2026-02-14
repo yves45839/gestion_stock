@@ -97,6 +97,16 @@ PERIOD_CHOICES = [
 PERIOD_LABELS = {key: label for key, label in PERIOD_CHOICES}
 
 
+def _absolute_media_url(request, file_field):
+    if not file_field:
+        return None
+    try:
+        url = file_field.url
+    except ValueError:
+        return None
+    return request.build_absolute_uri(url)
+
+
 def _months_ago(timestamp, months):
     total_months = timestamp.year * 12 + timestamp.month - 1 - months
     year = total_months // 12
@@ -3364,12 +3374,12 @@ def products_feed(request):
                 if product.purchase_price is not None
                 else None,
                 "stock_quantity": product.current_stock,
-                "image_url": product.image.url if product.image else None,
+                "image_url": _absolute_media_url(request, product.image),
                 "image_is_placeholder": product.image_is_placeholder,
-                "pending_image_url": product.pending_image.url if product.pending_image else None,
+                "pending_image_url": _absolute_media_url(request, product.pending_image),
                 "pending_image_is_placeholder": product.pending_image_is_placeholder,
                 "datasheet_url": product.datasheet_url,
-                "datasheet_pdf_url": product.datasheet_pdf.url if product.datasheet_pdf else None,
+                "datasheet_pdf_url": _absolute_media_url(request, product.datasheet_pdf),
                 "datasheet_fetched_at": product.datasheet_fetched_at.isoformat()
                 if product.datasheet_fetched_at
                 else None,
