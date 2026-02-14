@@ -38,12 +38,12 @@ DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
 ALLOWED_HOSTS = _env_list(
     'DJANGO_ALLOWED_HOSTS',
-    'samr.pythonanywhere.com,127.0.0.1,localhost,petit-budget.net',
+    'samr.pythonanywhere.com,127.0.0.1,localhost,petit-budget.net','secunologi-webs.vercel.app','https://secunologi-webs.vercel.app','secunologie.com', 'https://secunologie.com',
 )
 
 CSRF_TRUSTED_ORIGINS = _env_list(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
-    'https://petit-budget.net',
+    'https://petit-budget.net','secunologi-webs.vercel.app','https://secunologi-webs.vercel.app','secunologie.com', 'https://secunologie.com',
 )
 
 # Application definition

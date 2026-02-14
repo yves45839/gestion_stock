@@ -2,7 +2,7 @@ cat > .gitignore <<'EOF'
 # Python
 __pycache__/
 *.py[cod]
-
+.env
 # Django / local
 db.sqlite3
 /media/
