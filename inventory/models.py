@@ -133,6 +133,29 @@ class Category(TimeStampedModel):
         return self.name
 
 
+class SubCategory(TimeStampedModel):
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name="subcategories",
+    )
+    name = models.CharField(max_length=150)
+
+    class Meta:
+        ordering = ["category__name", "name"]
+        verbose_name = "sous-catégorie"
+        verbose_name_plural = "sous-catégories"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["category", "name"],
+                name="inventory_subcategory_unique_per_category",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.category} / {self.name}"
+
+
 class Site(TimeStampedModel):
     name = models.CharField(max_length=150, unique=True)
     description = models.TextField(blank=True)
@@ -232,6 +255,13 @@ class Product(VersionedModelMixin, TimeStampedModel):
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name="products")
     category = models.ForeignKey(
         Category, on_delete=models.PROTECT, related_name="products"
+    )
+    subcategory = models.ForeignKey(
+        SubCategory,
+        on_delete=models.PROTECT,
+        related_name="products",
+        blank=True,
+        null=True,
     )
     barcode = models.CharField("Code-barres", max_length=128, blank=True, null=True, unique=True)
     minimum_stock = models.PositiveIntegerField("Stock minimal", default=0)

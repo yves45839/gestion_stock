@@ -91,12 +91,26 @@ def _ensure_category(name: str | None) -> Category:
     return category
 
 
-def _category_name(record: dict) -> str | None:
-    for key in ("category_main", "category_sub", "categ_id", "category_type"):
+def _ensure_subcategory(category: Category, name: str | None):
+    from inventory.models import SubCategory
+
+    cleaned = _clean_text(name)
+    if not cleaned:
+        return None
+    subcategory, _ = SubCategory.objects.get_or_create(category=category, name=cleaned)
+    return subcategory
+
+
+def _category_main_name(record: dict) -> str | None:
+    for key in ("category_main", "categ_id", "category_type"):
         value = record.get(key)
         if value:
             return value
-    return None
+    return record.get("category_sub")
+
+
+def _category_sub_name(record: dict) -> str | None:
+    return record.get("category_sub")
 
 
 def _compute_barcode(record: dict) -> str | None:
@@ -246,7 +260,8 @@ class Command(BaseCommand):
     ):
         sku = _build_sku(record)
         brand = _ensure_brand(record.get("brand"))
-        category = _ensure_category(_category_name(record))
+        category = _ensure_category(_category_main_name(record))
+        subcategory = _ensure_subcategory(category, _category_sub_name(record))
         name = _clean_text(record.get("name"))
         if not name:
             identifier = record.get("odoo_id") or record.get("id")
@@ -269,6 +284,7 @@ class Command(BaseCommand):
             "manufacturer_reference": manufacturer_reference,
             "brand": brand,
             "category": category,
+            "subcategory": subcategory,
             "description": description,
             "barcode": barcode,
             "sale_price": sale_price,
@@ -297,6 +313,9 @@ class Command(BaseCommand):
                 updated = True
             if product.category != category:
                 product.category = category
+                updated = True
+            if product.subcategory != subcategory:
+                product.subcategory = subcategory
                 updated = True
         if created:
             summary["created"] += 1

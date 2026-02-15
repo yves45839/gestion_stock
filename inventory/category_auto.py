@@ -439,7 +439,8 @@ def run_auto_assign_categories(
                         change_lines.append(f"{product.sku} -> {suggested_category}")
                     else:
                         product.category = target_category
-                        product.save(update_fields=["category"])
+                        product.subcategory = None
+                        product.save(update_fields=["category", "subcategory"])
                     updated += 1
                     if source == "mistral":
                         ai_used += 1
@@ -508,7 +509,8 @@ def run_auto_assign_categories(
         )
         if not dry_run:
             product.category = rule.category
-            product.save(update_fields=["category"])
+            product.subcategory = None
+            product.save(update_fields=["category", "subcategory"])
         updated += 1
 
     evaluations_truncated = (

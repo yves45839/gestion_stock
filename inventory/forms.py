@@ -238,6 +238,7 @@ class ProductForm(forms.ModelForm):
             "is_online",
             "brand",
             "category",
+            "subcategory",
             "barcode",
             "minimum_stock",
             "purchase_price",
@@ -252,6 +253,7 @@ class ProductForm(forms.ModelForm):
             ),
             "brand": forms.Select(attrs={"class": "form-control"}),
             "category": forms.Select(attrs={"class": "form-control"}),
+            "subcategory": forms.Select(attrs={"class": "form-control"}),
             "barcode": forms.TextInput(attrs={"class": "form-control"}),
             "minimum_stock": forms.NumberInput(
                 attrs={"class": "form-control", "min": 0, "step": 1}

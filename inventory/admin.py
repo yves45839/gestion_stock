@@ -27,6 +27,7 @@ from .models import (
     Site,
     SiteAssignment,
     StockMovement,
+    SubCategory,
 )
 
 
@@ -41,6 +42,14 @@ class CategoryAdmin(admin.ModelAdmin):
     list_display = ("name",)
     search_fields = ("name",)
 
+
+
+
+@admin.register(SubCategory)
+class SubCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "category")
+    search_fields = ("name", "category__name")
+    list_filter = ("category",)
 
 @admin.register(Site)
 class SiteAdmin(admin.ModelAdmin):
@@ -112,6 +121,7 @@ class ProductAdmin(admin.ModelAdmin):
         "name",
         "brand",
         "category",
+        "subcategory",
         "is_online",
         "barcode",
         "minimum_stock",
@@ -119,7 +129,7 @@ class ProductAdmin(admin.ModelAdmin):
         "duplicate_info",
     )
     search_fields = ("sku", "manufacturer_reference", "name", "barcode")
-    list_filter = (DuplicateProductFilter, "brand", "category", "is_online")
+    list_filter = (DuplicateProductFilter, "brand", "category", "subcategory", "is_online")
     inlines = (StockMovementInline,)
     actions = ("delete_duplicate_products",)
 
