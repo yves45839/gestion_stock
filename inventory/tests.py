@@ -10,7 +10,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .bot import ProductAssetBot
-from .category_auto import _pick_best_rule, Rule
+from .category_auto import _pick_best_rule, Rule, run_auto_assign_categories
 from .datasheets import DatasheetSummary, fetch_hikvision_datasheets, search_datasheet_pdf
 from .models import (
     Brand,
@@ -253,6 +253,34 @@ class InventoryViewTests(TestCase):
         self.assertTrue(product_payload["datasheet_pdf_url"].startswith("http://testserver/media/"))
         self.assertIn("created_at", product_payload)
         self.assertIn("updated_at", product_payload)
+
+    @patch("inventory.views.run_auto_assign_categories")
+    def test_product_bot_can_auto_assign_category_for_one_product(self, mocked_auto_assign):
+        mocked_auto_assign.return_value = {
+            "evaluated": 1,
+            "updated": 1,
+            "skipped": 0,
+            "unmatched": 0,
+            "evaluations": [
+                {
+                    "suggested_category": "Antenne",
+                    "source": "mistral",
+                }
+            ],
+        }
+
+        response = self.client.post(
+            reverse("inventory:product_bot"),
+            data={
+                "bot_action": "auto_category_one",
+                "product_id": self.product.id,
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mocked_auto_assign.assert_called_once()
+        self.assertContains(response, "Categorie mise a jour")
 
     def test_lookup_product_endpoint_returns_not_found_for_missing_product(self):
         response = self.client.get(reverse("inventory:lookup_product"), {"code": "000000"})
@@ -1240,6 +1268,44 @@ class ProductDescriptionPromptStyleTests(TestCase):
         self.assertIn("Caracteristiques techniques detaillees", prompt)
         self.assertIn("Contenu du pack", prompt)
         self.assertIn("mini FAQ", prompt)
+
+
+class CategoryAutoAssignSingleProductTests(TestCase):
+    def setUp(self):
+        self.brand = Brand.objects.create(name="Hikvision")
+        self.uncategorized = Category.objects.create(name="Non classe")
+        self.camera = Category.objects.create(name="Camera")
+        self.switch = Category.objects.create(name="Switch")
+        self.camera_product = Product.objects.create(
+            sku="CAM-AI-001",
+            name="Camera IP 4MP",
+            manufacturer_reference="DS-2CD1000",
+            brand=self.brand,
+            category=self.uncategorized,
+        )
+        self.switch_product = Product.objects.create(
+            sku="SW-AI-001",
+            name="Switch PoE 8 ports",
+            manufacturer_reference="SWP-8",
+            brand=self.brand,
+            category=self.uncategorized,
+        )
+
+    def test_run_auto_assign_categories_can_target_one_product(self):
+        result = run_auto_assign_categories(
+            rules_path=Path("category_rules.json"),
+            apply_all=True,
+            dry_run=False,
+            product_ids=[self.camera_product.id],
+        )
+
+        self.assertEqual(result["evaluated"], 1)
+        self.assertEqual(result["updated"], 1)
+
+        self.camera_product.refresh_from_db()
+        self.switch_product.refresh_from_db()
+        self.assertEqual(self.camera_product.category, self.camera)
+        self.assertEqual(self.switch_product.category, self.uncategorized)
 
 
 class CategoryAutoAssignmentRuleTests(TestCase):
