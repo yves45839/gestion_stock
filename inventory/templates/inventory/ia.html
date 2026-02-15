@@ -512,7 +512,7 @@
             <span class="pill">Auto</span>
         </div>
         <p class="muted-text" style="margin:0 0 0.75rem;">
-            Lance l'attribution automatique des categories pour les produits.
+            Lance l'attribution automatique des categories pour les produits, ou cree en 1 clic toutes les categories applicables via Mistral.
         </p>
         <form method="post" class="form-grid" novalidate>
             {% csrf_token %}
@@ -547,8 +547,9 @@
                     <p class="muted-text" style="margin:0;">Mistral n'est pas configure.</p>
                 {% endif %}
             </div>
-            <div class="field" style="display:flex; align-items:flex-end;">
+            <div class="field" style="display:flex; align-items:flex-end; gap:0.5rem; flex-wrap:wrap;">
                 <button type="submit" name="bot_action" value="auto_category" class="btn">Lancer la categorisation</button>
+                <button type="submit" name="bot_action" value="auto_category_project" class="btn secondary">1 clic: creer les categories du projet</button>
             </div>
         </form>
         {% if category_result %}

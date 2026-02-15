@@ -3003,6 +3003,42 @@ def product_asset_bot(request):
                                 f"Aucun produit a traiter pour: {', '.join(empty_brands)}.",
                             )
                 datasheet_form = HikvisionDatasheetForm(initial={"brand_scope": "both"})
+        elif action == "auto_category_project":
+            if not category_ai_available:
+                messages.warning(
+                    request,
+                    "Mistral n'est pas configure, creation en un clic indisponible.",
+                )
+            else:
+                result = run_auto_assign_categories(
+                    rules_path=Path("category_rules.json").expanduser(),
+                    apply_all=True,
+                    limit=None,
+                    dry_run=False,
+                    max_details=200,
+                    use_ai=True,
+                    ai_allow_create=True,
+                )
+                category_result = result
+                category_evaluations = result.get("evaluations") or []
+                category_evaluations_truncated = result.get(
+                    "evaluations_truncated", False
+                ) or (result.get("evaluated", 0) > len(category_evaluations))
+                category_mode_label = "Traitement"
+                category_is_dry_run = False
+                category_scope_label = "Tous les produits (1 clic projet)"
+                category_limit_value = None
+                if result.get("empty"):
+                    messages.info(request, "Aucun produit a traiter.")
+                else:
+                    messages.success(
+                        request,
+                        "Creation categories projet: "
+                        f"{result['updated']} maj, {result['skipped']} inchanges, "
+                        f"{result['unmatched']} sans correspondance, "
+                        f"{result.get('categories_created', 0)} categories creees, "
+                        f"{result.get('subcategories_created', 0)} sous-categories creees.",
+                    )
         elif action == "auto_category":
             category_form = CategoryAutoAssignForm(request.POST)
             if category_form.is_valid():
