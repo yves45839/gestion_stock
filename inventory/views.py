@@ -2867,15 +2867,18 @@ def product_asset_bot(request):
                 dry_run=False,
                 max_details=1,
                 use_ai=category_ai_available,
+                ai_allow_create=category_ai_available,
                 product_ids=[product.id],
             )
             if result.get("updated"):
                 evaluation = (result.get("evaluations") or [{}])[0]
                 suggested = evaluation.get("suggested_category") or "categorie"
+                suggested_sub = evaluation.get("suggested_subcategory") or ""
                 source = evaluation.get("source") or "regles"
+                detail = f"{suggested} / {suggested_sub}" if suggested_sub else suggested
                 messages.success(
                     request,
-                    f"Categorie mise a jour pour {product.sku}: {suggested} (source: {source}).",
+                    f"Categorie mise a jour pour {product.sku}: {detail} (source: {source}).",
                 )
             elif result.get("skipped"):
                 messages.info(
@@ -3000,6 +3003,42 @@ def product_asset_bot(request):
                                 f"Aucun produit a traiter pour: {', '.join(empty_brands)}.",
                             )
                 datasheet_form = HikvisionDatasheetForm(initial={"brand_scope": "both"})
+        elif action == "auto_category_project":
+            if not category_ai_available:
+                messages.warning(
+                    request,
+                    "Mistral n'est pas configure, creation en un clic indisponible.",
+                )
+            else:
+                result = run_auto_assign_categories(
+                    rules_path=Path("category_rules.json").expanduser(),
+                    apply_all=True,
+                    limit=None,
+                    dry_run=False,
+                    max_details=200,
+                    use_ai=True,
+                    ai_allow_create=True,
+                )
+                category_result = result
+                category_evaluations = result.get("evaluations") or []
+                category_evaluations_truncated = result.get(
+                    "evaluations_truncated", False
+                ) or (result.get("evaluated", 0) > len(category_evaluations))
+                category_mode_label = "Traitement"
+                category_is_dry_run = False
+                category_scope_label = "Tous les produits (1 clic projet)"
+                category_limit_value = None
+                if result.get("empty"):
+                    messages.info(request, "Aucun produit a traiter.")
+                else:
+                    messages.success(
+                        request,
+                        "Creation categories projet: "
+                        f"{result['updated']} maj, {result['skipped']} inchanges, "
+                        f"{result['unmatched']} sans correspondance, "
+                        f"{result.get('categories_created', 0)} categories creees, "
+                        f"{result.get('subcategories_created', 0)} sous-categories creees.",
+                    )
         elif action == "auto_category":
             category_form = CategoryAutoAssignForm(request.POST)
             if category_form.is_valid():
@@ -3020,6 +3059,7 @@ def product_asset_bot(request):
                     dry_run=category_form.cleaned_data.get("dry_run"),
                     max_details=200,
                     use_ai=use_ai,
+                    ai_allow_create=use_ai,
                 )
                 category_result = result
                 category_evaluations = result.get("evaluations") or []
@@ -3044,7 +3084,8 @@ def product_asset_bot(request):
                     messages.success(
                         request,
                         f"{category_mode_label} categories: {result['updated']} maj, {result['skipped']} inchanges, "
-                        f"{result['unmatched']} sans correspondance.",
+                        f"{result['unmatched']} sans correspondance, {result.get('categories_created', 0)} creees, "
+                        f"{result.get('subcategories_created', 0)} sous-categories creees.",
                     )
                     if category_is_dry_run and result.get("evaluated"):
                         messages.info(
