@@ -2856,6 +2856,35 @@ def product_asset_bot(request):
                     request,
                     f"{product.sku} est deja dans cette categorie.",
                 )
+        elif action == "auto_category_one":
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            result = run_auto_assign_categories(
+                rules_path=Path("category_rules.json").expanduser(),
+                apply_all=True,
+                dry_run=False,
+                max_details=1,
+                use_ai=category_ai_available,
+                product_ids=[product.id],
+            )
+            if result.get("updated"):
+                evaluation = (result.get("evaluations") or [{}])[0]
+                suggested = evaluation.get("suggested_category") or "categorie"
+                source = evaluation.get("source") or "regles"
+                messages.success(
+                    request,
+                    f"Categorie mise a jour pour {product.sku}: {suggested} (source: {source}).",
+                )
+            elif result.get("skipped"):
+                messages.info(
+                    request,
+                    f"{product.sku} est deja dans la meilleure categorie.",
+                )
+            else:
+                messages.warning(
+                    request,
+                    f"Aucune categorie pertinente trouvee pour {product.sku}.",
+                )
         elif action == "toggle_online":
             product_id = request.POST.get("product_id")
             product = get_object_or_404(Product, pk=product_id)

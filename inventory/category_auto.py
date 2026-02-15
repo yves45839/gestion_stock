@@ -290,6 +290,7 @@ def run_auto_assign_categories(
     dry_run: bool = False,
     max_details: int | None = None,
     use_ai: bool = False,
+    product_ids: Iterable[int] | None = None,
 ) -> dict:
     rules, default_category = _load_rules(rules_path)
     if not rules:
@@ -311,8 +312,27 @@ def run_auto_assign_categories(
         ):
             uncategorized_ids.append(category.id)
 
-    queryset = Product.objects.select_related("category").order_by("name")
-    if not apply_all:
+    queryset = Product.objects.select_related("brand", "category").order_by("name")
+    if product_ids is not None:
+        normalized_ids = [int(pk) for pk in product_ids if pk]
+        if not normalized_ids:
+            return {
+                "evaluated": 0,
+                "updated": 0,
+                "skipped": 0,
+                "unmatched": 0,
+                "changes": [],
+                "change_lines": [],
+                "evaluations": [],
+                "evaluations_truncated": False,
+                "ai_used": 0,
+                "ai_attempted": 0,
+                "ai_available": bool(ai_generator),
+                "data_used": 0,
+                "empty": True,
+            }
+        queryset = queryset.filter(id__in=normalized_ids)
+    elif not apply_all:
         if uncategorized_ids:
             queryset = queryset.filter(category_id__in=uncategorized_ids)
         else:
