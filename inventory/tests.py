@@ -25,6 +25,7 @@ from .models import (
     Site,
     SiteAssignment,
     StockMovement,
+    SubCategory,
 )
 
 
@@ -218,9 +219,11 @@ class InventoryViewTests(TestCase):
         self.assertEqual(data["product"]["id"], self.product.id)
 
     def test_products_feed_returns_extended_product_attributes(self):
+        subcategory = SubCategory.objects.create(category=self.category, name="Directionnelle")
         self.product.description = "Description complète"
         self.product.short_description = "Description courte"
         self.product.long_description = "Description longue"
+        self.product.subcategory = subcategory
         self.product.tech_specs_json = {"resolution": "4MP"}
         self.product.video_links = ["https://example.com/video"]
         self.product.purchase_price = Decimal("10.50")
@@ -245,6 +248,8 @@ class InventoryViewTests(TestCase):
         self.assertEqual(product_payload["video_links"], ["https://example.com/video"])
         self.assertEqual(product_payload["brand_id"], self.brand.id)
         self.assertEqual(product_payload["category_id"], self.category.id)
+        self.assertEqual(product_payload["subcategory"], "Directionnelle")
+        self.assertEqual(product_payload["subcategory_id"], self.product.subcategory_id)
         self.assertEqual(product_payload["minimum_stock"], self.product.minimum_stock)
         self.assertEqual(product_payload["purchase_price"], "10.50")
         self.assertEqual(product_payload["sale_price"], "25.90")

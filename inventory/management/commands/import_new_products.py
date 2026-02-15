@@ -14,12 +14,14 @@ from inventory.management.commands.import_render_products import (
     _as_decimal,
     _build_image_filename,
     _build_sku,
-    _category_name,
+    _category_main_name,
+    _category_sub_name,
     _clean_description,
     _clean_text,
     _compute_barcode,
     _ensure_brand,
     _ensure_category,
+    _ensure_subcategory,
     _ensure_unique_barcode,
 )
 from inventory.models import Product
@@ -101,7 +103,8 @@ class Command(BaseCommand):
 
     def _create_product(self, record: dict, sku: str) -> Product:
         brand = _ensure_brand(record.get("brand"))
-        category = _ensure_category(_category_name(record))
+        category = _ensure_category(_category_main_name(record))
+        subcategory = _ensure_subcategory(category, _category_sub_name(record))
         name = _clean_text(record.get("name"))
         if not name:
             identifier = record.get("odoo_id") or record.get("id")
@@ -125,6 +128,7 @@ class Command(BaseCommand):
             description=description,
             brand=brand,
             category=category,
+            subcategory=subcategory,
             barcode=barcode,
             sale_price=sale_price,
         )

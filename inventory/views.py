@@ -66,6 +66,7 @@ from .models import (
     SaleScan,
     Site,
     StockMovement,
+    SubCategory,
     Version,
     get_default_site,
 )
@@ -287,7 +288,7 @@ def dashboard(request):
     tz = timezone.get_current_timezone()
     products = (
         Product.objects.with_stock_quantity(site=active_site)
-        .select_related("brand", "category")
+        .select_related("brand", "category", "subcategory")
     )
     aggregates = products.aggregate(
         total_stock=Coalesce(Sum("current_stock"), Value(0)),
@@ -975,7 +976,7 @@ def inventory_overview(request):
     view_site = site_context["active_site"]
     action_site = site_context["action_site"]
     site_locked = bool(action_site and not request.user.is_superuser)
-    products = Product.objects.select_related("brand", "category")
+    products = Product.objects.select_related("brand", "category", "subcategory")
     search = (request.GET.get("q") or "").strip()
     if search:
         search_query = Q()
@@ -1101,7 +1102,7 @@ def inventory_overview(request):
             "category": getattr(product.category, "name", ""),
             "is_online": product.is_online,
         }
-        for product in Product.objects.select_related("brand", "category").order_by("name")
+        for product in Product.objects.select_related("brand", "category", "subcategory").order_by("name")
     ]
 
     context = {
@@ -1261,7 +1262,7 @@ def inventory_physical(request):
     )
     products_snapshot = (
         Product.objects.with_stock_quantity(site=current_site)
-        .select_related("brand", "category")
+        .select_related("brand", "category", "subcategory")
         .order_by("name")
     )
     if session is None:
@@ -1422,7 +1423,7 @@ def product_detail(request, pk):
     active_site = site_context["active_site"]
     return_url = _get_return_url(request, "inventory:inventory_overview")
     product = get_object_or_404(
-        Product.objects.with_stock_quantity(site=active_site).select_related("brand", "category"),
+        Product.objects.with_stock_quantity(site=active_site).select_related("brand", "category", "subcategory"),
         pk=pk,
     )
     _attach_site_stocks([product])
@@ -2846,7 +2847,8 @@ def product_asset_bot(request):
             category = get_object_or_404(Category, pk=category_id)
             if product.category_id != category.id:
                 product.category = category
-                product.save(update_fields=["category"])
+                product.subcategory = None
+                product.save(update_fields=["category", "subcategory"])
                 messages.success(
                     request,
                     f"Categorie mise a jour pour {product.sku}.",
@@ -3340,7 +3342,7 @@ def lookup_product(request):
     active_site = _get_active_site(request)
     product = (
         Product.objects.with_stock_quantity(site=active_site)
-        .select_related("brand", "category")
+        .select_related("brand", "category", "subcategory")
         .for_scan_code(code)
         .first()
     )
@@ -3376,7 +3378,7 @@ def products_feed(request):
         return HttpResponseNotAllowed(["GET"])
     products = (
         Product.objects.with_stock_quantity()
-        .select_related("brand", "category")
+        .select_related("brand", "category", "subcategory")
         .order_by("name")
     )
     payload = []
@@ -3396,6 +3398,8 @@ def products_feed(request):
                 "brand_id": product.brand_id,
                 "category": product.category.name,
                 "category_id": product.category_id,
+                "subcategory": product.subcategory.name if product.subcategory_id else None,
+                "subcategory_id": product.subcategory_id,
                 "barcode": product.barcode,
                 "minimum_stock": product.minimum_stock,
                 "sale_price": str(product.sale_price) if product.sale_price is not None else None,
