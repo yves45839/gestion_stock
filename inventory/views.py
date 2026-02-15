@@ -3003,6 +3003,33 @@ def product_asset_bot(request):
                                 f"Aucun produit a traiter pour: {', '.join(empty_brands)}.",
                             )
                 datasheet_form = HikvisionDatasheetForm(initial={"brand_scope": "both"})
+        elif action == "auto_category_all":
+            result = run_auto_assign_categories(
+                rules_path=Path("category_rules.json").expanduser(),
+                apply_all=True,
+                limit=None,
+                dry_run=False,
+                max_details=200,
+                use_ai=category_ai_available,
+                ai_allow_create=category_ai_available,
+            )
+            category_result = result
+            category_evaluations = result.get("evaluations") or []
+            category_evaluations_truncated = result.get(
+                "evaluations_truncated", False
+            ) or (result.get("evaluated", 0) > len(category_evaluations))
+            category_mode_label = "Traitement"
+            category_is_dry_run = False
+            category_scope_label = "Tous les produits"
+            if result.get("empty"):
+                messages.info(request, "Aucun produit a traiter.")
+            else:
+                messages.success(
+                    request,
+                    f"Traitement categories: {result['updated']} maj, {result['skipped']} inchanges, "
+                    f"{result['unmatched']} sans correspondance, {result.get('categories_created', 0)} creees, "
+                    f"{result.get('subcategories_created', 0)} sous-categories creees.",
+                )
         elif action == "auto_category":
             category_form = CategoryAutoAssignForm(request.POST)
             if category_form.is_valid():
