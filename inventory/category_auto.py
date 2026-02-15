@@ -11,7 +11,7 @@ from typing import Iterable, Pattern
 from django.conf import settings
 from django.core.management.base import CommandError
 
-from inventory.models import Category, Product
+from inventory.models import Category, Product, SubCategory
 from inventory.bot import MistralTextGenerator
 
 
@@ -220,6 +220,12 @@ class Rule:
         return score, matched_terms, best_term_length
 
 
+@dataclass
+class AICategorySuggestion:
+    category: str
+    subcategory: str | None = None
+
+
 def _build_default_rules() -> list[Rule]:
     rules: list[Rule] = []
     for category in Category.objects.order_by("name"):
@@ -290,6 +296,7 @@ def run_auto_assign_categories(
     dry_run: bool = False,
     max_details: int | None = None,
     use_ai: bool = False,
+    ai_allow_create: bool = False,
     product_ids: Iterable[int] | None = None,
 ) -> dict:
     rules, default_category = _load_rules(rules_path)
@@ -329,6 +336,8 @@ def run_auto_assign_categories(
                 "ai_attempted": 0,
                 "ai_available": bool(ai_generator),
                 "data_used": 0,
+                "categories_created": 0,
+                "subcategories_created": 0,
                 "empty": True,
             }
         queryset = queryset.filter(id__in=normalized_ids)
@@ -349,6 +358,8 @@ def run_auto_assign_categories(
                 "ai_attempted": 0,
                 "ai_available": bool(ai_generator),
                 "data_used": 0,
+                "categories_created": 0,
+                "subcategories_created": 0,
                 "empty": True,
             }
 
@@ -362,6 +373,8 @@ def run_auto_assign_categories(
     ai_used = 0
     ai_attempted = 0
     data_used = 0
+    categories_created = 0
+    subcategories_created = 0
     changes: list[dict] = []
     change_lines: list[str] = []
     evaluations: list[dict] = []
@@ -401,19 +414,67 @@ def run_auto_assign_categories(
                     source = "data"
                 elif use_ai and ai_generator and candidate_categories:
                     ai_attempted += 1
-                    suggested_category = _ai_pick_category(
+                    ai_suggestion = _ai_pick_category_with_subcategory(
                         ai_generator,
                         product,
                         candidate_categories,
                     )
                     source = "mistral"
-                    if suggested_category:
+                    suggested_subcategory = None
+                    if ai_suggestion:
+                        suggested_category = ai_suggestion.category
+                        suggested_subcategory = ai_suggestion.subcategory
                         target_category = categories_by_name.get(suggested_category)
+                        if not target_category and ai_allow_create:
+                            target_category, created_category = Category.objects.get_or_create(
+                                name=suggested_category
+                            )
+                            if created_category:
+                                categories_created += 1
+                            categories_by_name[target_category.name] = target_category
+                            candidate_categories.append(target_category)
+                            category_hints[target_category.id] = {
+                                "category": target_category,
+                                "weights": Counter(_tokenize_text(target_category.name)),
+                            }
+                    else:
+                        suggested_subcategory = None
             if suggested_category:
                 if target_category is None:
                     target_category = categories_by_name.get(suggested_category)
                 if target_category:
+                    target_subcategory = None
+                    if source == "mistral" and ai_suggestion and ai_suggestion.subcategory:
+                        target_subcategory, created_subcategory = SubCategory.objects.get_or_create(
+                            category=target_category,
+                            name=ai_suggestion.subcategory,
+                        )
+                        if created_subcategory:
+                            subcategories_created += 1
                     if product.category_id == target_category.id:
+                        if (
+                            (product.subcategory_id or None)
+                            != (target_subcategory.id if target_subcategory else None)
+                        ):
+                            if not dry_run:
+                                product.subcategory = target_subcategory
+                                product.save(update_fields=["subcategory"])
+                            updated += 1
+                            if source == "mistral":
+                                ai_used += 1
+                            _append_evaluation(
+                                {
+                                    "product_id": product.id,
+                                    "sku": product.sku,
+                                    "name": product.name,
+                                    "current_category": current_category,
+                                    "suggested_category": suggested_category,
+                                    "suggested_subcategory": target_subcategory.name,
+                                    "status": "updated",
+                                    "source": source,
+                                }
+                            )
+                            continue
                         skipped += 1
                         _append_evaluation(
                             {
@@ -422,6 +483,7 @@ def run_auto_assign_categories(
                                 "name": product.name,
                                 "current_category": current_category,
                                 "suggested_category": suggested_category,
+                                "suggested_subcategory": target_subcategory.name if target_subcategory else "",
                                 "status": "skipped",
                                 "source": source,
                             }
@@ -439,7 +501,7 @@ def run_auto_assign_categories(
                         change_lines.append(f"{product.sku} -> {suggested_category}")
                     else:
                         product.category = target_category
-                        product.subcategory = None
+                        product.subcategory = target_subcategory
                         product.save(update_fields=["category", "subcategory"])
                     updated += 1
                     if source == "mistral":
@@ -453,6 +515,7 @@ def run_auto_assign_categories(
                             "name": product.name,
                             "current_category": current_category,
                             "suggested_category": suggested_category,
+                            "suggested_subcategory": target_subcategory.name if target_subcategory else "",
                             "status": "updated",
                             "source": source,
                         }
@@ -529,6 +592,8 @@ def run_auto_assign_categories(
         "ai_attempted": ai_attempted,
         "ai_available": bool(ai_generator),
         "data_used": data_used,
+        "categories_created": categories_created,
+        "subcategories_created": subcategories_created,
         "empty": False,
     }
 
@@ -809,18 +874,18 @@ def _best_category_by_tokens(
     return best
 
 
-def _ai_pick_category(
+def _ai_pick_category_with_subcategory(
     generator: MistralTextGenerator,
     product: Product,
     categories: list[Category],
-) -> str | None:
+) -> AICategorySuggestion | None:
     if not categories:
         return None
     max_candidates = int(getattr(settings, "CATEGORY_AI_MAX_CANDIDATES", 80))
     candidates = _rank_categories(product, categories, max_candidates)
     if not candidates:
         return None
-    prompt = _build_ai_prompt(product, candidates)
+    prompt = _build_ai_prompt_with_subcategory(product, candidates, categories)
     response = generator.generate_text(
         prompt,
         temperature=float(getattr(settings, "CATEGORY_AI_TEMPERATURE", 0.2)),
@@ -828,7 +893,7 @@ def _ai_pick_category(
     )
     if not response:
         return None
-    return _parse_ai_response(response, candidates)
+    return _parse_ai_response_with_subcategory(response, candidates)
 
 
 def _rank_categories(
@@ -858,7 +923,11 @@ def _rank_categories(
     return [name for _, name in scored[:max_candidates]]
 
 
-def _build_ai_prompt(product: Product, candidates: list[str]) -> str:
+def _build_ai_prompt_with_subcategory(
+    product: Product,
+    candidates: list[str],
+    categories: list[Category],
+) -> str:
     details = [
         f"Produit: {product.name}",
         f"SKU: {product.sku}",
@@ -874,32 +943,63 @@ def _build_ai_prompt(product: Product, candidates: list[str]) -> str:
     if description := (product.description or "").strip():
         details.append(f"Description: {_truncate(description, 240)}")
     category_block = "\n".join(f"- {name}" for name in candidates)
+    subcategory_map: dict[str, list[str]] = {}
+    for category in categories:
+        if category.name not in candidates:
+            continue
+        subs = list(
+            category.subcategories.order_by("name").values_list("name", flat=True)[:40]
+        )
+        if subs:
+            subcategory_map[category.name] = subs
+    subcategory_block = "\n".join(
+        f"- {name}: {', '.join(subs)}" for name, subs in subcategory_map.items()
+    )
     return (
-        "Tu es un assistant qui choisit la meilleure categorie pour un produit.\n"
-        "Choisis une categorie uniquement dans la liste ci-dessous. "
-        "Si aucune ne convient, reponds NONE.\n"
-        "Reponds uniquement en JSON sur une seule ligne: {\"category\": \"...\"}.\n\n"
+        "Tu es un assistant qui choisit la meilleure categorie et sous-categorie pour un produit.\n"
+        "Tu peux reutiliser une categorie existante ou en proposer une nouvelle si rien ne convient.\n"
+        "Reponds uniquement en JSON sur une seule ligne: "
+        '{"category":"...","subcategory":"..."}. '
+        "Si la sous-categorie n'est pas utile, mets null.\n\n"
         + "\n".join(details)
         + "\n\nCategories disponibles:\n"
         + category_block
+        + "\n\nSous-categories connues:\n"
+        + (subcategory_block or "(aucune)")
     )
 
 
-def _parse_ai_response(response: str, candidates: list[str]) -> str | None:
+def _parse_ai_response_with_subcategory(
+    response: str,
+    candidates: list[str],
+) -> AICategorySuggestion | None:
     normalized_map = {_normalize(name): name for name in candidates}
     raw = response.strip()
     if raw.startswith("```"):
         raw = raw.strip("`").strip()
-    match = re.search(r'"category"\s*:\s*"([^"]+)"', raw, re.IGNORECASE)
+    match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
     if match:
-        raw = match.group(1)
-    raw = raw.strip().strip('"').strip()
-    if not raw:
+        raw = match.group(0)
+    payload = None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        category_match = re.search(r'"category"\s*:\s*"([^"]+)"', raw, re.IGNORECASE)
+        if category_match:
+            payload = {"category": category_match.group(1)}
+    if not isinstance(payload, dict):
         return None
-    normalized = _normalize(raw)
+    category = str(payload.get("category") or "").strip()
+    if not category:
+        return None
+    normalized = _normalize(category)
     if normalized in {"none", "aucun", "aucune", "sans correspondance", "no match"}:
         return None
-    return normalized_map.get(normalized)
+    category_name = normalized_map.get(normalized, category)
+    subcategory = str(payload.get("subcategory") or "").strip()
+    if _normalize(subcategory) in {"none", "null", "n a", "na", ""}:
+        subcategory = ""
+    return AICategorySuggestion(category=category_name, subcategory=subcategory or None)
 
 
 def _truncate(value: str, limit: int) -> str:
