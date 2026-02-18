@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Ventes confirmées - {{ range_label }}</title>
+    <style>
+        @page { size: A4; margin: 1.5cm; }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #111;
+        }
+        h1 {
+            margin: 0 0 0.25rem;
+            font-size: 20px;
+        }
+        .meta {
+            margin: 0 0 1rem;
+            color: #555;
+            font-size: 11px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #f5f5f5;
+            font-weight: 700;
+        }
+        td.amount {
+            text-align: right;
+            white-space: nowrap;
+        }
+        .empty {
+            margin-top: 1rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ventes confirmées</h1>
+    <p class="meta">Période : {{ period_label }} — {{ range_label }}</p>
+    <p class="meta">Généré le {{ generated_at|date:"d/m/Y H:i" }}</p>
+
+    {% if confirmed_sales %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Référence</th>
+                    <th>Date</th>
+                    <th>Client</th>
+                    <th>Montant</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in confirmed_sales %}
+                    <tr>
+                        <td>{{ sale.reference }}</td>
+                        <td>{{ sale.sale_date|date:"d/m/Y" }}</td>
+                        <td>{{ sale.customer_display_name }}</td>
+                        <td class="amount">{{ sale.total_amount|floatformat:2 }} FCFA</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">Aucune vente confirmée sur la période sélectionnée.</p>
+    {% endif %}
+</body>
+</html>
