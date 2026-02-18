@@ -92,7 +92,10 @@
                 <h2 class="surface-title">Factures ({{ confirmed_sales_count }})</h2>
                 <p class="muted-text" style="margin:0;">Ventes confirmées générant une facture dans la période.</p>
             </div>
-            <a class="btn secondary" href="{% url 'inventory:sales_list' %}">Voir les ventes</a>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <a class="btn secondary" href="{{ export_sales_pdf_url }}">Exporter PDF</a>
+                <a class="btn secondary" href="{% url 'inventory:sales_list' %}">Voir les ventes</a>
+            </div>
         </div>
         {% if confirmed_sales %}
             <table>
