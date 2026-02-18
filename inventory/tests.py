@@ -259,6 +259,29 @@ class InventoryViewTests(TestCase):
         self.assertIn("created_at", product_payload)
         self.assertIn("updated_at", product_payload)
 
+
+    def test_analytics_exposes_confirmed_sales_pdf_export_url(self):
+        response = self.client.get(reverse("inventory:analytics"), {"period": "custom", "start": "2026-01-01", "end": "2026-01-31"})
+        self.assertEqual(response.status_code, 200)
+        export_url = response.context["export_sales_pdf_url"]
+        self.assertIn(reverse("inventory:analytics_sales_pdf"), export_url)
+        self.assertIn("period=custom", export_url)
+        self.assertIn("start=2026-01-01", export_url)
+        self.assertIn("end=2026-01-31", export_url)
+
+    @patch("inventory.views.HTML")
+    def test_analytics_confirmed_sales_pdf_returns_pdf_file(self, mocked_html):
+        html_instance = mocked_html.return_value
+        response = self.client.get(
+            reverse("inventory:analytics_sales_pdf"),
+            {"period": "custom", "start": "2026-01-01", "end": "2026-01-31"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn('attachment; filename="ventes-confirmees.pdf"', response["Content-Disposition"])
+        html_instance.write_pdf.assert_called_once_with(response)
+
     @patch("inventory.views.run_auto_assign_categories")
     def test_product_bot_can_auto_assign_category_for_one_product(self, mocked_auto_assign):
         mocked_auto_assign.return_value = {

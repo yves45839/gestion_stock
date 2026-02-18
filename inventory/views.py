@@ -734,8 +734,54 @@ def analytics(request):
         "customers_count": customers_count,
         "confirmed_sales_count": confirmed_sales_count,
         "quotes_count": quotes_count,
+        "export_sales_pdf_url": (
+            f"{reverse('inventory:analytics_sales_pdf')}?"
+            f"period={selected_period}&start={start_input}&end={end_input}"
+        ),
     }
     return render(request, "inventory/analytics.html", context)
+
+
+def analytics_sales_pdf(request):
+    now = timezone.now()
+    selected_period = request.GET.get("period") or "month"
+    start, end = _time_range_for_period(selected_period, now)
+    custom_start_value = request.GET.get("start")
+    custom_end_value = request.GET.get("end")
+    if selected_period == "custom":
+        custom_range = _build_custom_range(custom_start_value, custom_end_value)
+        if custom_range:
+            start, end = custom_range
+        else:
+            selected_period = "month"
+            start, end = _time_range_for_period(selected_period, now)
+
+    period_label = PERIOD_LABELS.get(selected_period, PERIOD_LABELS["month"])
+    range_label = f"{start.strftime('%d/%m/%Y')} – {end.strftime('%d/%m/%Y')}"
+    confirmed_sales = (
+        Sale.objects.filter(status=Sale.Status.CONFIRMED, sale_date__gte=start, sale_date__lte=end)
+        .select_related("customer")
+        .order_by("-sale_date")
+    )
+
+    context = {
+        "period_label": period_label,
+        "range_label": range_label,
+        "confirmed_sales": confirmed_sales,
+        "generated_at": timezone.now(),
+    }
+    html = render_to_string("inventory/analytics_confirmed_sales_pdf.html", context, request=request)
+    if HTML is None:
+        messages.error(
+            request,
+            "WeasyPrint n'est pas installé. Installez-le avec 'pip install weasyprint' pour l'export PDF.",
+        )
+        return redirect("inventory:analytics")
+
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = 'attachment; filename="ventes-confirmees.pdf"'
+    HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf(response)
+    return response
 
 
 def customers_list(request):
