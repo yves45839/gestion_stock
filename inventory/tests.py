@@ -297,6 +297,52 @@ class InventoryViewTests(TestCase):
         self.assertEqual(first_row["product__brand__name"], self.brand.name)
         self.assertEqual(first_row["distinct_products"], 1)
 
+    def test_analytics_can_filter_products_by_brand(self):
+        other_brand = Brand.objects.create(name="Autre marque")
+        other_product = Product.objects.create(
+            name="Produit autre marque",
+            sku="SKU-OTHER",
+            brand=other_brand,
+            category=self.category,
+            cost_price=Decimal("5.00"),
+            sale_price=Decimal("10.00"),
+            quantity_in_stock=0,
+        )
+        sale = Sale.objects.create(
+            reference="FAC-ANALYTICS-002",
+            customer=None,
+            sale_date=timezone.now(),
+            status=Sale.Status.CONFIRMED,
+            site=self.site,
+        )
+        SaleItem.objects.create(
+            sale=sale,
+            product=self.product,
+            description=self.product.name,
+            quantity=2,
+            unit_price=Decimal("1000.00"),
+            line_type=SaleItem.LineType.PRODUCT,
+        )
+        SaleItem.objects.create(
+            sale=sale,
+            product=other_product,
+            description=other_product.name,
+            quantity=4,
+            unit_price=Decimal("1000.00"),
+            line_type=SaleItem.LineType.PRODUCT,
+        )
+
+        response = self.client.get(
+            reverse("inventory:analytics"),
+            {"period": "month", "group_by": "product", "brand": str(self.brand.pk)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_brand"], self.brand)
+        products = response.context["sales_breakdown"]
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0]["product_id"], self.product.id)
+
     def test_analytics_filters_by_active_site(self):
         other_site = Site.objects.create(name="Second site")
         active_sale = Sale.objects.create(
