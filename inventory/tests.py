@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -167,6 +168,21 @@ class InventoryViewTests(TestCase):
         )
         SiteAssignment.objects.create(user=self.user, site=self.site)
         self.client.force_login(self.user)
+
+    def test_analytics_ignores_dates_when_period_is_not_custom(self):
+        customer = Customer.objects.create(name="Client trimestriel")
+        forty_days_ago = timezone.now() - timedelta(days=40)
+        Customer.objects.filter(pk=customer.pk).update(created_at=forty_days_ago)
+
+        today = timezone.localdate().isoformat()
+        response = self.client.get(
+            reverse("inventory:analytics"),
+            {"period": "3months", "start": today, "end": today, "site": self.site.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_period"], "3months")
+        self.assertEqual(response.context["customers_count"], 1)
 
     def test_dashboard_renders(self):
         response = self.client.get(reverse("inventory:dashboard"))

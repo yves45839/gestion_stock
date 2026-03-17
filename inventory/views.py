@@ -172,15 +172,12 @@ def _resolve_period_range(period, reference, start_value, end_value):
     start, end = _time_range_for_period(selected_period, reference)
     used_custom_inputs = False
 
-    has_custom_inputs = bool(start_value or end_value)
-    if selected_period == "custom" or has_custom_inputs:
+    if selected_period == "custom":
         custom_range = _build_custom_range(start_value, end_value)
         if custom_range:
             start, end = custom_range
-            if has_custom_inputs:
-                selected_period = "custom"
-                used_custom_inputs = True
-        elif selected_period == "custom":
+            used_custom_inputs = True
+        else:
             selected_period = "month"
             start, end = _time_range_for_period(selected_period, reference)
 
