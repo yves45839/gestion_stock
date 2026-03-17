@@ -587,6 +587,13 @@ def analytics(request):
     selected_dimension = request.GET.get("group_by") or "product"
     if selected_dimension not in ANALYSIS_DIMENSION_LABELS:
         selected_dimension = "product"
+    selected_brand = None
+    selected_brand_id = request.GET.get("brand")
+    if selected_brand_id and selected_dimension == "product":
+        try:
+            selected_brand = Brand.objects.get(pk=int(selected_brand_id))
+        except (Brand.DoesNotExist, TypeError, ValueError):
+            selected_brand = None
 
     customers_qs = Customer.objects.filter(created_at__gte=start, created_at__lte=end).order_by(
         "-created_at"
@@ -664,8 +671,11 @@ def analytics(request):
             .order_by("-sold_quantity", "-sold_amount")[:30]
         )
     else:
+        breakdown_items = product_items
+        if selected_brand is not None:
+            breakdown_items = breakdown_items.filter(product__brand=selected_brand)
         sales_breakdown = list(
-            product_items.values(
+            breakdown_items.values(
                 "product_id",
                 "product__name",
                 "product__sku",
@@ -789,6 +799,7 @@ def analytics(request):
         "customers_count": customers_count,
         "confirmed_sales_count": confirmed_sales_count,
         "quotes_count": quotes_count,
+        "selected_brand": selected_brand,
         "export_sales_pdf_url": (
             f"{reverse('inventory:analytics_sales_pdf')}?"
             f"period={selected_period}&start={start_input}&end={end_input}&group_by={selected_dimension}"

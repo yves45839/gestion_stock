@@ -187,6 +187,9 @@
             <p class="muted-text" style="margin:0;">Classement des volumes et montants vendus sur la période.</p>
         </div>
     </div>
+    {% if selected_dimension == "product" and selected_brand %}
+        <p class="muted-text" style="margin:0 0 0.75rem;">Filtre marque: <strong>{{ selected_brand.name|default:"Sans marque" }}</strong> — <a href="{% url 'inventory:analytics' %}?period={{ selected_period }}&group_by=brand&site={{ selected_site }}&start={{ start_input }}&end={{ end_input }}">retour au classement des marques</a></p>
+    {% endif %}
     {% if sales_breakdown %}
         <table>
             <thead>
@@ -204,7 +207,7 @@
             </thead>
             <tbody>
                 {% for row in sales_breakdown %}
-                    <tr>
+                    <tr {% if selected_dimension == "brand" %}data-href="{% url 'inventory:analytics' %}?period={{ selected_period }}&group_by=product&site={{ selected_site }}&start={{ start_input }}&end={{ end_input }}&brand={{ row.product__brand_id|default:'' }}" role="button"{% endif %}>
                         {% if selected_dimension == "brand" %}
                             <td>{{ row.product__brand__name|default:"Sans marque" }}</td>
                             <td>{{ row.distinct_products }}</td>
