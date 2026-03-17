@@ -383,6 +383,52 @@ class InventoryViewTests(TestCase):
         self.assertEqual(response.context["sales_totals"]["total_quantity"], 2)
         self.assertEqual(response.context["selected_site"], str(self.site.pk))
 
+    def test_analytics_uses_custom_dates_even_when_period_is_not_custom(self):
+        march_sale = Sale.objects.create(
+            reference="FAC-ANALYTICS-MARCH",
+            customer=None,
+            sale_date=timezone.make_aware(timezone.datetime(2026, 3, 5, 10, 0)),
+            status=Sale.Status.CONFIRMED,
+            site=self.site,
+        )
+        january_sale = Sale.objects.create(
+            reference="FAC-ANALYTICS-JAN",
+            customer=None,
+            sale_date=timezone.make_aware(timezone.datetime(2026, 1, 12, 10, 0)),
+            status=Sale.Status.CONFIRMED,
+            site=self.site,
+        )
+        SaleItem.objects.create(
+            sale=march_sale,
+            product=self.product,
+            description=self.product.name,
+            quantity=2,
+            unit_price=Decimal("1000.00"),
+            line_type=SaleItem.LineType.PRODUCT,
+        )
+        SaleItem.objects.create(
+            sale=january_sale,
+            product=self.product,
+            description=self.product.name,
+            quantity=7,
+            unit_price=Decimal("1000.00"),
+            line_type=SaleItem.LineType.PRODUCT,
+        )
+
+        response = self.client.get(
+            reverse("inventory:analytics"),
+            {
+                "period": "month",
+                "start": "2026-01-01",
+                "end": "2026-01-31",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_period"], "custom")
+        self.assertEqual(response.context["confirmed_sales_count"], 1)
+        self.assertEqual(response.context["sales_totals"]["total_quantity"], 7)
+
     @patch("inventory.views.HTML")
     def test_analytics_confirmed_sales_pdf_returns_pdf_file(self, mocked_html):
         html_instance = mocked_html.return_value

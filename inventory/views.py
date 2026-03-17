@@ -167,6 +167,26 @@ def _build_custom_range(start, end):
     return start_dt, end_dt
 
 
+def _resolve_period_range(period, reference, start_value, end_value):
+    selected_period = period or "month"
+    start, end = _time_range_for_period(selected_period, reference)
+    used_custom_inputs = False
+
+    has_custom_inputs = bool(start_value or end_value)
+    if selected_period == "custom" or has_custom_inputs:
+        custom_range = _build_custom_range(start_value, end_value)
+        if custom_range:
+            start, end = custom_range
+            if has_custom_inputs:
+                selected_period = "custom"
+                used_custom_inputs = True
+        elif selected_period == "custom":
+            selected_period = "month"
+            start, end = _time_range_for_period(selected_period, reference)
+
+    return selected_period, start, end, used_custom_inputs
+
+
 
 def _parse_list_date_range(start_value, end_value):
     tz = timezone.get_current_timezone()
@@ -565,21 +585,25 @@ def analytics(request):
     site_context = _site_context(request)
     active_site = site_context["active_site"]
     now = timezone.now()
-    selected_period = request.GET.get("period") or "month"
-    start, end = _time_range_for_period(selected_period, now)
+    requested_period = request.GET.get("period") or "month"
     custom_start_value = request.GET.get("start")
     custom_end_value = request.GET.get("end")
-    if selected_period == "custom":
-        custom_range = _build_custom_range(custom_start_value, custom_end_value)
-        if custom_range:
-            start, end = custom_range
-        else:
-            messages.warning(
-                request,
-                "Plage personnalisée invalide : affichage sur le mois en cours.",
-            )
-            selected_period = "month"
-            start, end = _time_range_for_period(selected_period, now)
+    selected_period, start, end, used_custom_inputs = _resolve_period_range(
+        requested_period,
+        now,
+        custom_start_value,
+        custom_end_value,
+    )
+    if requested_period == "custom" and selected_period != "custom":
+        messages.warning(
+            request,
+            "Plage personnalisée invalide : affichage sur le mois en cours.",
+        )
+    elif used_custom_inputs and requested_period != "custom":
+        messages.info(
+            request,
+            "Plage personnalisée appliquée à partir des dates saisies.",
+        )
     start_input = custom_start_value or start.date().isoformat()
     end_input = custom_end_value or end.date().isoformat()
     period_label = PERIOD_LABELS.get(selected_period, PERIOD_LABELS["month"])
@@ -813,17 +837,15 @@ def analytics(request):
 def analytics_sales_pdf(request):
     active_site = _get_active_site(request)
     now = timezone.now()
-    selected_period = request.GET.get("period") or "month"
-    start, end = _time_range_for_period(selected_period, now)
+    requested_period = request.GET.get("period") or "month"
     custom_start_value = request.GET.get("start")
     custom_end_value = request.GET.get("end")
-    if selected_period == "custom":
-        custom_range = _build_custom_range(custom_start_value, custom_end_value)
-        if custom_range:
-            start, end = custom_range
-        else:
-            selected_period = "month"
-            start, end = _time_range_for_period(selected_period, now)
+    selected_period, start, end, _ = _resolve_period_range(
+        requested_period,
+        now,
+        custom_start_value,
+        custom_end_value,
+    )
 
     period_label = PERIOD_LABELS.get(selected_period, PERIOD_LABELS["month"])
     range_label = f"{start.strftime('%d/%m/%Y')} – {end.strftime('%d/%m/%Y')}"
