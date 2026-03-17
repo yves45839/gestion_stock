@@ -269,6 +269,32 @@ class InventoryViewTests(TestCase):
         self.assertIn("start=2026-01-01", export_url)
         self.assertIn("end=2026-01-31", export_url)
 
+
+    def test_analytics_group_by_brand_breakdown(self):
+        sale = Sale.objects.create(
+            reference="FAC-ANALYTICS-001",
+            customer=None,
+            sale_date=timezone.now(),
+            status=Sale.Status.CONFIRMED,
+        )
+        SaleItem.objects.create(
+            sale=sale,
+            product=self.product,
+            description=self.product.name,
+            quantity=3,
+            unit_price=Decimal("1000.00"),
+            line_type=SaleItem.LineType.PRODUCT,
+        )
+
+        response = self.client.get(reverse("inventory:analytics"), {"period": "month", "group_by": "brand"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_dimension"], "brand")
+        self.assertTrue(response.context["sales_breakdown"])
+        first_row = response.context["sales_breakdown"][0]
+        self.assertEqual(first_row["product__brand__name"], self.brand.name)
+        self.assertEqual(first_row["distinct_products"], 1)
+
     @patch("inventory.views.HTML")
     def test_analytics_confirmed_sales_pdf_returns_pdf_file(self, mocked_html):
         html_instance = mocked_html.return_value

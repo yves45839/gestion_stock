@@ -97,6 +97,13 @@ PERIOD_CHOICES = [
 
 PERIOD_LABELS = {key: label for key, label in PERIOD_CHOICES}
 
+ANALYSIS_DIMENSION_CHOICES = [
+    ("product", "Produit"),
+    ("brand", "Marque"),
+]
+
+ANALYSIS_DIMENSION_LABELS = {key: label for key, label in ANALYSIS_DIMENSION_CHOICES}
+
 
 def _absolute_media_url(request, file_field):
     if not file_field:
@@ -575,6 +582,9 @@ def analytics(request):
     end_input = custom_end_value or end.date().isoformat()
     period_label = PERIOD_LABELS.get(selected_period, PERIOD_LABELS["month"])
     range_label = f"{start.strftime('%d/%m/%Y')} – {end.strftime('%d/%m/%Y')}"
+    selected_dimension = request.GET.get("group_by") or "product"
+    if selected_dimension not in ANALYSIS_DIMENSION_LABELS:
+        selected_dimension = "product"
 
     customers_qs = Customer.objects.filter(created_at__gte=start, created_at__lte=end).order_by(
         "-created_at"
@@ -632,6 +642,36 @@ def analytics(request):
         .order_by("-sold_quantity", "-sold_amount")
         [:20]
     )
+    if selected_dimension == "brand":
+        sales_breakdown = list(
+            product_items.values("product__brand_id", "product__brand__name")
+            .annotate(
+                sold_quantity=Coalesce(Sum("quantity"), Value(0)),
+                sold_amount=Coalesce(
+                    Sum(amount_expression),
+                    Value(Decimal("0.00"), output_field=decimal_field),
+                ),
+                distinct_products=Count("product_id", distinct=True),
+            )
+            .order_by("-sold_quantity", "-sold_amount")[:30]
+        )
+    else:
+        sales_breakdown = list(
+            product_items.values(
+                "product_id",
+                "product__name",
+                "product__sku",
+                "product__brand__name",
+            )
+            .annotate(
+                sold_quantity=Coalesce(Sum("quantity"), Value(0)),
+                sold_amount=Coalesce(
+                    Sum(amount_expression),
+                    Value(Decimal("0.00"), output_field=decimal_field),
+                ),
+            )
+            .order_by("-sold_quantity", "-sold_amount")[:30]
+        )
     reception_entries = list(
         StockMovement.objects.filter(
             movement_date__gte=start,
@@ -720,6 +760,9 @@ def analytics(request):
 
     context = {
         "period_choices": PERIOD_CHOICES,
+        "dimension_choices": ANALYSIS_DIMENSION_CHOICES,
+        "selected_dimension": selected_dimension,
+        "selected_dimension_label": ANALYSIS_DIMENSION_LABELS[selected_dimension],
         "selected_period": selected_period,
         "start_input": start_input,
         "end_input": end_input,
@@ -729,6 +772,7 @@ def analytics(request):
         "confirmed_sales": confirmed_sales,
         "quotes": quotes,
         "product_performance": product_performance,
+        "sales_breakdown": sales_breakdown,
         "cards": cards,
         "sales_totals": sales_totals,
         "customers_count": customers_count,
@@ -736,7 +780,7 @@ def analytics(request):
         "quotes_count": quotes_count,
         "export_sales_pdf_url": (
             f"{reverse('inventory:analytics_sales_pdf')}?"
-            f"period={selected_period}&start={start_input}&end={end_input}"
+            f"period={selected_period}&start={start_input}&end={end_input}&group_by={selected_dimension}"
         ),
     }
     return render(request, "inventory/analytics.html", context)
