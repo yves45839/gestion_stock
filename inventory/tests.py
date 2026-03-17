@@ -268,6 +268,7 @@ class InventoryViewTests(TestCase):
         self.assertIn("period=custom", export_url)
         self.assertIn("start=2026-01-01", export_url)
         self.assertIn("end=2026-01-31", export_url)
+        self.assertIn(f"site={self.site.pk}", export_url)
 
 
     def test_analytics_group_by_brand_breakdown(self):
@@ -276,6 +277,7 @@ class InventoryViewTests(TestCase):
             customer=None,
             sale_date=timezone.now(),
             status=Sale.Status.CONFIRMED,
+            site=self.site,
         )
         SaleItem.objects.create(
             sale=sale,
@@ -294,6 +296,46 @@ class InventoryViewTests(TestCase):
         first_row = response.context["sales_breakdown"][0]
         self.assertEqual(first_row["product__brand__name"], self.brand.name)
         self.assertEqual(first_row["distinct_products"], 1)
+
+    def test_analytics_filters_by_active_site(self):
+        other_site = Site.objects.create(name="Second site")
+        active_sale = Sale.objects.create(
+            reference="FAC-ANALYTICS-SITE-1",
+            customer=None,
+            sale_date=timezone.now(),
+            status=Sale.Status.CONFIRMED,
+            site=self.site,
+        )
+        other_sale = Sale.objects.create(
+            reference="FAC-ANALYTICS-SITE-2",
+            customer=None,
+            sale_date=timezone.now(),
+            status=Sale.Status.CONFIRMED,
+            site=other_site,
+        )
+        SaleItem.objects.create(
+            sale=active_sale,
+            product=self.product,
+            description=self.product.name,
+            quantity=2,
+            unit_price=Decimal("800.00"),
+            line_type=SaleItem.LineType.PRODUCT,
+        )
+        SaleItem.objects.create(
+            sale=other_sale,
+            product=self.product,
+            description=self.product.name,
+            quantity=5,
+            unit_price=Decimal("900.00"),
+            line_type=SaleItem.LineType.PRODUCT,
+        )
+
+        response = self.client.get(reverse("inventory:analytics"), {"period": "month"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["confirmed_sales_count"], 1)
+        self.assertEqual(response.context["sales_totals"]["total_quantity"], 2)
+        self.assertEqual(response.context["selected_site"], str(self.site.pk))
 
     @patch("inventory.views.HTML")
     def test_analytics_confirmed_sales_pdf_returns_pdf_file(self, mocked_html):
