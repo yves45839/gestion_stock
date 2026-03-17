@@ -33,6 +33,19 @@
                 {% endfor %}
             </select>
         </div>
+        {% if can_switch_site %}
+            <div class="field">
+                <label for="site">Magasin</label>
+                <select name="site" id="site">
+                    <option value="" {% if selected_site == "" %}selected{% endif %}>Vue globale</option>
+                    {% for site in sites %}
+                        <option value="{{ site.pk }}" {% if selected_site == site.pk|stringformat:"s" %}selected{% endif %}>{{ site.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% else %}
+            <input type="hidden" name="site" value="{{ selected_site }}">
+        {% endif %}
         <div class="field">
             <label for="start">Début</label>
             <input type="date" id="start" name="start" value="{{ start_input }}">

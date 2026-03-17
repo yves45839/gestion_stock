@@ -562,6 +562,8 @@ def dashboard(request):
 
 
 def analytics(request):
+    site_context = _site_context(request)
+    active_site = site_context["active_site"]
     now = timezone.now()
     selected_period = request.GET.get("period") or "month"
     start, end = _time_range_for_period(selected_period, now)
@@ -598,6 +600,8 @@ def analytics(request):
         .prefetch_related("items__product")
         .order_by("-sale_date")
     )
+    if active_site:
+        confirmed_sales_qs = confirmed_sales_qs.filter(site=active_site)
     confirmed_sales = list(confirmed_sales_qs[:6])
     confirmed_sales_count = confirmed_sales_qs.count()
 
@@ -606,6 +610,8 @@ def analytics(request):
         .select_related("customer")
         .order_by("-sale_date")
     )
+    if active_site:
+        quotes_qs = quotes_qs.filter(site=active_site)
     quotes = list(quotes_qs[:6])
     quotes_count = quotes_qs.count()
 
@@ -622,6 +628,8 @@ def analytics(request):
         line_type=SaleItem.LineType.PRODUCT,
         product__isnull=False,
     )
+    if active_site:
+        product_items = product_items.filter(sale__site=active_site)
     sales_totals = product_items.aggregate(
         total_amount=Coalesce(
             Sum(amount_expression),
@@ -672,14 +680,17 @@ def analytics(request):
             )
             .order_by("-sold_quantity", "-sold_amount")[:30]
         )
+    receptions_qs = StockMovement.objects.filter(
+        movement_date__gte=start,
+        movement_date__lte=end,
+        movement_type__direction=MovementType.MovementDirection.ENTRY,
+    )
+    if active_site:
+        receptions_qs = receptions_qs.filter(site=active_site)
     reception_entries = list(
-        StockMovement.objects.filter(
-            movement_date__gte=start,
-            movement_date__lte=end,
-            movement_type__direction=MovementType.MovementDirection.ENTRY,
+        receptions_qs.values("product_id", "product__name", "product__sku").annotate(
+            received_quantity=Coalesce(Sum("quantity"), Value(0))
         )
-        .values("product_id", "product__name", "product__sku")
-        .annotate(received_quantity=Coalesce(Sum("quantity"), Value(0)))
     )
 
     performance_map: dict[int, dict[str, object]] = {}
@@ -781,12 +792,15 @@ def analytics(request):
         "export_sales_pdf_url": (
             f"{reverse('inventory:analytics_sales_pdf')}?"
             f"period={selected_period}&start={start_input}&end={end_input}&group_by={selected_dimension}"
+            f"&site={site_context['selected_site']}"
         ),
     }
+    context.update(site_context)
     return render(request, "inventory/analytics.html", context)
 
 
 def analytics_sales_pdf(request):
+    active_site = _get_active_site(request)
     now = timezone.now()
     selected_period = request.GET.get("period") or "month"
     start, end = _time_range_for_period(selected_period, now)
@@ -807,6 +821,8 @@ def analytics_sales_pdf(request):
         .select_related("customer")
         .order_by("-sale_date")
     )
+    if active_site:
+        confirmed_sales = confirmed_sales.filter(site=active_site)
 
     context = {
         "period_label": period_label,
