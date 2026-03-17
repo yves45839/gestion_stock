@@ -26,6 +26,14 @@
             </select>
         </div>
         <div class="field">
+            <label for="group_by">Analyser par</label>
+            <select name="group_by" id="group_by">
+                {% for value, label in dimension_choices %}
+                    <option value="{{ value }}" {% if selected_dimension == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
             <label for="start">Début</label>
             <input type="date" id="start" name="start" value="{{ start_input }}">
         </div>
@@ -156,6 +164,53 @@
             <p class="muted-text" style="margin:0;">Aucun devis créé sur la période.</p>
         {% endif %}
     </div>
+</section>
+
+
+<section class="surface reveal" data-delay="210">
+    <div class="surface-header">
+        <div>
+            <h2 class="surface-title">Ventes par {{ selected_dimension_label|lower }}</h2>
+            <p class="muted-text" style="margin:0;">Classement des volumes et montants vendus sur la période.</p>
+        </div>
+    </div>
+    {% if sales_breakdown %}
+        <table>
+            <thead>
+                <tr>
+                    {% if selected_dimension == "brand" %}
+                        <th>Marque</th>
+                        <th>Produits vendus</th>
+                    {% else %}
+                        <th>Produit</th>
+                        <th>Marque</th>
+                    {% endif %}
+                    <th>Quantité vendue</th>
+                    <th>Montant vendu</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in sales_breakdown %}
+                    <tr>
+                        {% if selected_dimension == "brand" %}
+                            <td>{{ row.product__brand__name|default:"Sans marque" }}</td>
+                            <td>{{ row.distinct_products }}</td>
+                        {% else %}
+                            <td>
+                                <div style="font-weight:700;">{{ row.product__name }}</div>
+                                <div class="muted-text" style="font-size:0.85rem;">{{ row.product__sku }}</div>
+                            </td>
+                            <td>{{ row.product__brand__name }}</td>
+                        {% endif %}
+                        <td>{{ row.sold_quantity }}</td>
+                        <td>{{ row.sold_amount|floatformat:2 }} FCFA</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted-text" style="margin:0;">Aucune vente produit enregistrée sur la période.</p>
+    {% endif %}
 </section>
 
 <section class="surface reveal" data-delay="220">
