@@ -362,6 +362,35 @@ class InventoryViewTests(TestCase):
         self.assertFalse(Product.objects.filter(barcode="NEWCODE123").exists())
         self.assertIn("Produit introuvable", response.context["scan_message"])
 
+    def test_inventory_overview_search_ignores_generic_words_for_brand_queries(self):
+        dahua = Brand.objects.create(name="Dahua")
+        other_brand = Brand.objects.create(name="TP-Link")
+        category = Category.objects.create(name="Camera")
+        Product.objects.create(
+            sku="DAH-001",
+            name="Caméra dôme",
+            manufacturer_reference="DH-IPC",
+            brand=dahua,
+            category=category,
+        )
+        Product.objects.create(
+            sku="TPL-001",
+            name="Routeur",
+            manufacturer_reference="TL-WR",
+            brand=other_brand,
+            category=category,
+        )
+
+        response = self.client.get(
+            reverse("inventory:inventory_overview"),
+            {"q": "appareil dahua"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        products = list(response.context["products"].object_list)
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0].brand.name, "Dahua")
+
 
 class ImportViewTests(TestCase):
     def setUp(self):

@@ -1069,10 +1069,24 @@ def inventory_overview(request):
     products = Product.objects.select_related("brand", "category", "subcategory")
     search = (request.GET.get("q") or "").strip()
     if search:
+        ignored_terms = {
+            "appareil",
+            "appareils",
+            "produit",
+            "produits",
+            "article",
+            "articles",
+        }
+        terms = [term for term in search.split() if term.lower() not in ignored_terms]
+        if not terms:
+            terms = search.split()
         search_query = Q()
-        for term in search.split():
-            token = Q(name__icontains=term) | Q(sku__icontains=term) | Q(
-                manufacturer_reference__icontains=term
+        for term in terms:
+            token = (
+                Q(name__icontains=term)
+                | Q(sku__icontains=term)
+                | Q(manufacturer_reference__icontains=term)
+                | Q(brand__name__icontains=term)
             )
             search_query &= token
         products = products.filter(search_query)
