@@ -115,6 +115,16 @@ def _absolute_media_url(request, file_field):
     return request.build_absolute_uri(url)
 
 
+def _absolute_media_url(request, file_field):
+    if not file_field:
+        return None
+    try:
+        url = file_field.url
+    except ValueError:
+        return None
+    return request.build_absolute_uri(url)
+
+
 def _months_ago(timestamp, months):
     total_months = timestamp.year * 12 + timestamp.month - 1 - months
     year = total_months // 12
