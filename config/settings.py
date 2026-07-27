@@ -80,12 +80,17 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'inventory.context_processors.site_switcher',
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+
+# Redirections d'authentification (connexion / déconnexion)
+LOGIN_REDIRECT_URL = 'inventory:dashboard'
+LOGOUT_REDIRECT_URL = 'login'
 
 
 # Database
