@@ -8,19 +8,18 @@
         flex-direction: column;
         gap: 0.5rem;
         padding: 1rem;
-        border: 1px solid var(--border-strong);
+        border: 1px solid var(--border);
         border-radius: 14px;
-        background: linear-gradient(155deg, rgba(15, 28, 50, 0.95) 0%, rgba(12, 23, 41, 0.98) 100%);
+        background: var(--surface);
         text-decoration: none;
         color: var(--text);
-        box-shadow: var(--shadow);
         transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
     }
     .customer-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 14px 30px rgba(0, 198, 255, 0.28);
-        border-color: rgba(77, 240, 255, 0.35);
-        background: linear-gradient(155deg, rgba(17, 32, 55, 0.96) 0%, rgba(14, 27, 47, 0.99) 100%);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        border-color: var(--accent);
+        background: var(--surface-muted);
     }
     .customer-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
     .customer-name { margin: 0; font-weight: 800; font-size: 1.05rem; }

@@ -8,16 +8,15 @@
         display: flex;
         flex-direction: column;
         gap: 0.65rem;
-        border: 1px solid var(--border-strong);
+        border: 1px solid var(--border);
         border-radius: 16px;
         padding: 0.95rem 1rem;
-        background: linear-gradient(180deg, #122540, #0b1629);
+        background: var(--surface);
         text-decoration: none;
         color: var(--text);
-        box-shadow: var(--shadow);
         transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
-    .product-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(0, 198, 255, 0.24); border-color: rgba(77, 240, 255, 0.5); }
+    .product-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); border-color: var(--accent); }
     .product-card-shell { display: grid; gap: 0.55rem; }
     .product-online-toggle {
         display: inline-flex;
@@ -31,8 +30,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(255,255,255,0.04);
-        border: 1px dashed var(--border-strong);
+        background: var(--surface-muted);
+        border: 1px dashed var(--border);
         border-radius: 12px;
         overflow: hidden;
     }
@@ -42,21 +41,21 @@
     .product-meta .sku { margin: 0; color: var(--muted); font-size: 0.85rem; }
     .product-footer { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
     .price { font-weight: 700; font-size: 1.05rem; color: var(--accent); }
-    .price.muted { color: #c6d6f2; font-size: 0.95rem; font-weight: 600; }
+    .price.muted { color: var(--muted); font-size: 0.95rem; font-weight: 600; }
     .stock { padding: 0.3rem 0.65rem; border-radius: 10px; font-weight: 700; font-size: 0.85rem; border: 1px solid transparent; }
-    .stock.safe { background: rgba(110, 242, 166, 0.18); color: var(--success); border-color: rgba(110, 242, 166, 0.45); }
-    .stock.warn { background: rgba(252, 179, 92, 0.16); color: var(--warning); border-color: rgba(252, 179, 92, 0.45); }
+    .stock.safe { background: #e7f3ec; color: var(--success); border-color: var(--success); }
+    .stock.warn { background: #fdf1de; color: #8a4d00; border-color: #8a4d00; }
     .autocomplete-panel { position: relative; }
     .autocomplete-results {
         position: absolute;
         top: calc(100% + 6px);
         left: 0;
         right: 0;
-        background: #0b1424;
-        color: #f1f5f9;
-        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
         border-radius: 10px;
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
         z-index: 40;
         max-height: 320px;
         overflow-y: auto;
@@ -77,30 +76,30 @@
     .autocomplete-option:hover,
     .autocomplete-option:focus,
     .autocomplete-option:focus-visible {
-        background: rgba(110, 242, 166, 0.12);
-        color: #ffffff;
-        outline: 2px solid rgba(110, 242, 166, 0.45);
+        background: var(--surface-muted);
+        color: var(--text);
+        outline: 2px solid var(--accent);
         outline-offset: -2px;
     }
     .autocomplete-empty {
         padding: 0.75rem 1rem;
-        color: #cbd5e1;
-        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+        background: var(--surface);
     }
     .product-thumb {
         width: 42px;
         height: 42px;
         border-radius: 9px;
-        background: #1b2b45;
+        background: var(--surface-muted);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
         flex-shrink: 0;
-        border: 1px solid var(--border-strong);
+        border: 1px solid var(--border);
     }
     .product-thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .product-thumb.fallback { font-weight: 700; color: #cbd5e1; }
+    .product-thumb.fallback { font-weight: 700; color: var(--muted); }
 </style>
 
 <section class="page-header reveal">
