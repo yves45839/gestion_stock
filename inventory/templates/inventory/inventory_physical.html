@@ -5,18 +5,67 @@
     <div>
         <p class="eyebrow">Inventaire</p>
         <h1 class="page-title">Inventaire physique</h1>
-        <p class="lead">Comptage complet des articles par site, écarts et démarques.</p>
+        <p class="lead">Comptage à l'aveugle par site, écarts et démarques.</p>
         <div class="chip-row" style="margin-top:0.5rem;">
-            <span class="pill">Session : {{ session.name }}</span>
-            <span class="pill">Site : {{ current_site.name|default:"-" }}</span>
-            <span class="pill">Statut : {{ session.get_status_display }}</span>
-            {% if session.closed_at %}<span class="pill">Clôturé le {{ session.closed_at|date:"d/m/Y H:i" }}</span>{% endif %}
+            {% if session %}
+                <span class="pill">Session : {{ session.name }}</span>
+                <span class="pill">Périmètre : {{ session.scope_label }}</span>
+                <span class="pill">Site : {{ current_site.name|default:"-" }}</span>
+                <span class="pill">Statut : {{ session.get_status_display }}</span>
+                {% if session.closed_at %}<span class="pill">Clôturé le {{ session.closed_at|date:"d/m/Y H:i" }}</span>{% endif %}
+            {% else %}
+                <span class="pill">Site : {{ current_site.name|default:"-" }}</span>
+                <span class="pill">Aucun inventaire en cours</span>
+            {% endif %}
         </div>
     </div>
     <div class="toolbar">
         <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Retour produits</a>
     </div>
 </section>
+
+{% if not session %}
+    <div class="surface">
+        {% if can_manage %}
+            <h2 class="surface-title" style="margin-bottom:0.5rem;">Démarrer un inventaire</h2>
+            <p class="muted-text" style="margin:0 0 0.75rem;">
+                Choisissez un périmètre : un inventaire tournant (une catégorie ou une marque à la fois)
+                est plus court et plus fiable qu'un inventaire général.
+            </p>
+            <form method="post" class="toolbar" style="gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="start">
+                <div style="min-width:220px;">
+                    <label for="start-category">Catégorie (optionnel)</label>
+                    <select id="start-category" name="category">
+                        <option value="">Toutes les catégories</option>
+                        {% for category in categories %}
+                            <option value="{{ category.pk }}">{{ category.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="min-width:220px;">
+                    <label for="start-brand">Marque (optionnel)</label>
+                    <select id="start-brand" name="brand">
+                        <option value="">Toutes les marques</option>
+                        {% for brand in brands %}
+                            <option value="{{ brand.pk }}">{{ brand.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn">Démarrer l'inventaire</button>
+            </form>
+            <p class="muted-text" style="margin:0.75rem 0 0; font-size:0.85rem;">
+                Pendant l'inventaire, les mouvements manuels de stock sont bloqués pour les produits
+                du périmètre ; une vente invalide le comptage du produit concerné.
+            </p>
+        {% else %}
+            <p class="muted-text" style="margin:0;">
+                Aucun inventaire n'est en cours sur ce site. Demandez à un responsable d'en démarrer un.
+            </p>
+        {% endif %}
+    </div>
+{% else %}
 
 <div class="surface" style="margin-bottom:0.75rem;">
     <form method="get" class="toolbar" style="gap:0.75rem; flex-wrap:wrap;">
@@ -27,22 +76,31 @@
                 <div class="autocomplete-results" data-search-results></div>
             </div>
         </div>
-        <label style="display:flex; align-items:center; gap:0.4rem; margin-top:1.4rem;">
-            <input type="checkbox" name="diff_only" value="1" {% if show_only_differences %}checked{% endif %} />
-            <span>Uniquement les écarts</span>
-        </label>
+        {% if can_manage %}
+            <label style="display:flex; align-items:center; gap:0.4rem; margin-top:1.4rem;">
+                <input type="checkbox" name="diff_only" value="1" {% if show_only_differences %}checked{% endif %} />
+                <span>Uniquement les écarts</span>
+            </label>
+        {% endif %}
         <label style="display:flex; align-items:center; gap:0.4rem; margin-top:1.4rem;">
             <input type="checkbox" name="uncounted_only" value="1" {% if show_only_uncounted %}checked{% endif %} />
             <span>Restant à compter</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:0.4rem; margin-top:1.4rem;">
+            <input type="checkbox" name="recount_only" value="1" {% if show_only_recounts %}checked{% endif %} />
+            <span>À recompter</span>
         </label>
         <button type="submit" class="btn secondary" style="margin-top:1.1rem;">Appliquer les filtres</button>
     </form>
     <div class="chip-row" style="margin-top:0.5rem;">
         <span class="pill" data-pill-progress>Comptées : {{ counted_count }} / {{ total_lines }}</span>
+        <span class="pill" data-pill-recount>À recompter : {{ recount_pending }}</span>
         <span class="pill">{{ lines|length }} ligne(s) affichée(s) sur {{ total_lines }}</span>
-        <span class="pill">Écarts filtrés : {{ totals.total_difference }} | Démarque filtrée : {{ totals.total_loss }} FCFA</span>
-        {% if totals.total_difference != overall_totals.total_difference or totals.total_loss != overall_totals.total_loss %}
-            <span class="pill muted-text">Inventaire complet : {{ overall_totals.total_difference }} écart(s), {{ overall_totals.total_loss }} FCFA</span>
+        {% if can_manage %}
+            <span class="pill">Écarts filtrés : {{ totals.total_difference }} | Démarque filtrée : {{ totals.total_loss }} FCFA</span>
+            {% if totals.total_difference != overall_totals.total_difference or totals.total_loss != overall_totals.total_loss %}
+                <span class="pill muted-text">Inventaire complet : {{ overall_totals.total_difference }} écart(s), {{ overall_totals.total_loss }} FCFA</span>
+            {% endif %}
         {% endif %}
     </div>
 </div>
@@ -50,14 +108,18 @@
 <div class="surface" style="overflow-x:auto;">
     <form method="post">
         {% csrf_token %}
-        <table>
+        <table data-can-manage="{% if can_manage %}1{% else %}0{% endif %}">
             <thead>
                 <tr>
                     <th style="min-width:220px;">Produit</th>
-                    <th>Attendu</th>
+                    {% if can_manage or session.is_closed %}<th>Attendu</th>{% endif %}
                     <th>Compté</th>
-                    <th>Écart</th>
-                    <th>Démarque</th>
+                    {% if can_manage or session.is_closed %}
+                        <th>Écart</th>
+                        <th>Démarque</th>
+                    {% else %}
+                        <th>Statut</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -67,7 +129,7 @@
                             <div style="font-weight:700;">{{ line.product.name }}</div>
                             <div class="muted-text" style="font-size:0.9rem;">{{ line.product.sku }} · {{ line.product.brand.name }} / {{ line.product.category.name }}</div>
                         </td>
-                        <td>{{ line.expected_qty }}</td>
+                        {% if can_manage or session.is_closed %}<td>{{ line.expected_qty }}</td>{% endif %}
                         <td>
                             {% if session.is_closed %}
                                 {% if line.is_counted %}{{ line.counted_qty }}{% else %}<span class="muted-text">Non compté</span>{% endif %}
@@ -86,47 +148,77 @@
                                 </div>
                             {% endif %}
                         </td>
-                        <td data-diff-cell="{{ line.id }}">
-                            {% if not line.is_counted %}
-                                <span class="tag">Non compté</span>
-                            {% elif line.difference < 0 %}
-                                <span style="color:var(--danger); font-weight:700;">{{ line.difference }}</span>
-                            {% elif line.difference > 0 %}
-                                <span style="color:var(--success); font-weight:700;">+{{ line.difference }}</span>
-                            {% else %}
-                                <span class="muted-text">0</span>
-                            {% endif %}
-                        </td>
-                        <td data-loss-cell="{{ line.id }}">
-                            {% if line.value_loss and line.value_loss > 0 %}
-                                <span style="color:var(--danger); font-weight:700;">-{{ line.value_loss }} FCFA</span>
-                            {% else %}
-                                <span class="muted-text">0</span>
-                            {% endif %}
-                        </td>
+                        {% if can_manage or session.is_closed %}
+                            <td data-diff-cell="{{ line.id }}">
+                                {% if not line.is_counted %}
+                                    <span class="tag">Non compté</span>
+                                {% else %}
+                                    {% if line.difference < 0 %}
+                                        <span style="color:var(--danger); font-weight:700;">{{ line.difference }}</span>
+                                    {% elif line.difference > 0 %}
+                                        <span style="color:var(--success); font-weight:700;">+{{ line.difference }}</span>
+                                    {% else %}
+                                        <span class="muted-text">0</span>
+                                    {% endif %}
+                                    {% if line.needs_recount %}
+                                        <span class="badge warn" style="margin-left:0.35rem;">À recompter</span>
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            <td data-loss-cell="{{ line.id }}">
+                                {% if line.value_loss and line.value_loss > 0 %}
+                                    <span style="color:var(--danger); font-weight:700;">-{{ line.value_loss }} FCFA</span>
+                                {% else %}
+                                    <span class="muted-text">0</span>
+                                {% endif %}
+                            </td>
+                        {% else %}
+                            <td data-status-cell="{{ line.id }}">
+                                {% if not line.is_counted %}
+                                    <span class="tag">Non compté</span>
+                                {% elif line.needs_recount %}
+                                    <span class="badge warn">À recompter</span>
+                                {% else %}
+                                    <span class="badge success">Compté</span>
+                                {% endif %}
+                            </td>
+                        {% endif %}
                     </tr>
                 {% empty %}
-                    <tr><td colspan="5" class="muted-text">Aucun produit à inventorier.</td></tr>
+                    <tr><td colspan="5" class="muted-text">Aucun produit dans ce périmètre.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
-        <div class="surface" style="margin-top:0.75rem; display:flex; justify-content:space-between; align-items:center; gap:1rem;">
+        <div class="surface" style="margin-top:0.75rem; display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
             <div>
                 <div class="eyebrow" style="margin-bottom:0.2rem;">Synthèse</div>
                 <div class="chip-row">
-                    <span class="pill" data-pill-diff>Total écarts : {{ totals.total_difference }}</span>
-                    <span class="pill" data-pill-loss>Démarque estimée : {{ totals.total_loss }} FCFA</span>
+                    {% if can_manage %}
+                        <span class="pill" data-pill-diff>Total écarts : {{ totals.total_difference }}</span>
+                        <span class="pill" data-pill-loss>Démarque estimée : {{ totals.total_loss }} FCFA</span>
+                    {% endif %}
                     <span class="pill">Lignes : {{ lines|length }}</span>
                 </div>
                 <p class="muted-text" style="margin:0.4rem 0 0; font-size:0.85rem;">
-                    À la clôture, les écarts sont recalculés sur le stock réel du moment ;
-                    les lignes non comptées ne génèrent aucun ajustement.
+                    {% if can_manage %}
+                        À la clôture, les écarts sont recalculés sur le stock réel du moment ; les lignes non
+                        comptées ne génèrent aucun ajustement et les gros écarts exigent un second comptage
+                        concordant (ressaisir la même quantité).
+                    {% else %}
+                        Comptez chaque produit et saisissez la quantité trouvée. Pour une ligne « À recompter »,
+                        recomptez physiquement puis ressaisissez la quantité.
+                    {% endif %}
                 </p>
             </div>
             {% if not session.is_closed %}
                 <div class="toolbar">
                     <button type="submit" name="action" value="save" class="btn secondary">Enregistrer</button>
-                    <button type="submit" name="action" value="close" class="btn" data-close-button data-uncounted="{{ uncounted_count }}">Clôturer et générer les ajustements</button>
+                    {% if can_manage %}
+                        <button type="submit" name="action" value="close" class="btn"
+                                data-close-button
+                                data-uncounted="{{ uncounted_count }}"
+                                data-recount="{{ recount_pending }}">Clôturer et générer les ajustements</button>
+                    {% endif %}
                 </div>
             {% endif %}
         </div>
@@ -193,17 +285,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Sauvegarde AJAX ligne par ligne ---
     const lineEndpoint = "{% url 'inventory:inventory_physical_line' %}";
-    const csrfInput = document.querySelector("input[name=csrfmiddlewaretoken]");
+    const csrfInput = document.querySelector("form[method=post] input[name=csrfmiddlewaretoken]");
     const csrfToken = csrfInput ? csrfInput.value : "";
 
-    const renderDiff = (cell, isCounted, difference) => {
+    const recountBadge = () => {
+        const badge = document.createElement("span");
+        badge.className = "badge warn";
+        badge.textContent = "À recompter";
+        return badge;
+    };
+
+    const renderDiff = (cell, data) => {
         if (!cell) return;
         cell.innerHTML = "";
+        if (!data.is_counted) {
+            const tag = document.createElement("span");
+            tag.className = "tag";
+            tag.textContent = "Non compté";
+            cell.appendChild(tag);
+            return;
+        }
         const span = document.createElement("span");
-        if (!isCounted) {
-            span.className = "tag";
-            span.textContent = "Non compté";
-        } else if (difference < 0) {
+        const difference = data.difference;
+        if (difference < 0) {
             span.style.color = "var(--danger)";
             span.style.fontWeight = "700";
             span.textContent = String(difference);
@@ -216,6 +320,11 @@ document.addEventListener("DOMContentLoaded", () => {
             span.textContent = "0";
         }
         cell.appendChild(span);
+        if (data.needs_recount) {
+            const badge = recountBadge();
+            badge.style.marginLeft = "0.35rem";
+            cell.appendChild(badge);
+        }
     };
 
     const renderLoss = (cell, valueLoss) => {
@@ -233,6 +342,24 @@ document.addEventListener("DOMContentLoaded", () => {
         cell.appendChild(span);
     };
 
+    const renderStatus = (cell, data) => {
+        if (!cell) return;
+        cell.innerHTML = "";
+        if (!data.is_counted) {
+            const tag = document.createElement("span");
+            tag.className = "tag";
+            tag.textContent = "Non compté";
+            cell.appendChild(tag);
+        } else if (data.needs_recount) {
+            cell.appendChild(recountBadge());
+        } else {
+            const badge = document.createElement("span");
+            badge.className = "badge success";
+            badge.textContent = "Compté";
+            cell.appendChild(badge);
+        }
+    };
+
     const saveLine = async (input) => {
         const lineId = input.dataset.lineId;
         const state = document.querySelector(`[data-save-state="${lineId}"]`);
@@ -248,20 +375,33 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             const data = await response.json();
             if (!response.ok || !data.ok) throw new Error(data.error || "Erreur");
-            renderDiff(document.querySelector(`[data-diff-cell="${lineId}"]`), data.is_counted, data.difference);
-            renderLoss(document.querySelector(`[data-loss-cell="${lineId}"]`), data.value_loss);
+            if (Object.prototype.hasOwnProperty.call(data, "difference")) {
+                renderDiff(document.querySelector(`[data-diff-cell="${lineId}"]`), data);
+                renderLoss(document.querySelector(`[data-loss-cell="${lineId}"]`), data.value_loss);
+                const pillDiff = document.querySelector("[data-pill-diff]");
+                if (pillDiff) pillDiff.textContent = `Total écarts : ${data.total_difference}`;
+                const pillLoss = document.querySelector("[data-pill-loss]");
+                if (pillLoss) pillLoss.textContent = `Démarque estimée : ${data.total_loss} FCFA`;
+            } else {
+                renderStatus(document.querySelector(`[data-status-cell="${lineId}"]`), data);
+            }
             // Le champ témoin suit la valeur enregistrée : l'envoi du
             // formulaire complet n'écrasera pas cette saisie déjà sauvée.
             const orig = document.querySelector(`input[name="orig_${lineId}"]`);
             if (orig) orig.value = data.counted_qty === null ? "" : String(data.counted_qty);
             const progress = document.querySelector("[data-pill-progress]");
             if (progress) progress.textContent = `Comptées : ${data.counted_count} / ${data.total_lines}`;
-            const pillDiff = document.querySelector("[data-pill-diff]");
-            if (pillDiff) pillDiff.textContent = `Total écarts : ${data.total_difference}`;
-            const pillLoss = document.querySelector("[data-pill-loss]");
-            if (pillLoss) pillLoss.textContent = `Démarque estimée : ${data.total_loss} FCFA`;
+            const pillRecount = document.querySelector("[data-pill-recount]");
+            if (pillRecount && Object.prototype.hasOwnProperty.call(data, "recount_pending")) {
+                pillRecount.textContent = `À recompter : ${data.recount_pending}`;
+            }
             const closeButton = document.querySelector("[data-close-button]");
-            if (closeButton) closeButton.dataset.uncounted = String(data.total_lines - data.counted_count);
+            if (closeButton) {
+                closeButton.dataset.uncounted = String(data.total_lines - data.counted_count);
+                if (Object.prototype.hasOwnProperty.call(data, "recount_pending")) {
+                    closeButton.dataset.recount = String(data.recount_pending);
+                }
+            }
             if (state) { state.textContent = "✓"; state.style.color = "var(--success)"; }
         } catch (err) {
             if (state) { state.textContent = "✗ non enregistré"; state.style.color = "var(--danger)"; }
@@ -276,6 +416,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (closeButton) {
         closeButton.addEventListener("click", (event) => {
             const uncounted = parseInt(closeButton.dataset.uncounted || "0", 10);
+            const recount = parseInt(closeButton.dataset.recount || "0", 10);
+            if (recount > 0) {
+                window.alert(`${recount} ligne(s) doivent être recomptées avant la clôture (écart important). Utilisez le filtre « À recompter ».`);
+                event.preventDefault();
+                return;
+            }
             let message = "Clôturer l'inventaire ? Les ajustements de stock seront générés sur le stock réel du moment.";
             if (uncounted > 0) {
                 message = `${uncounted} ligne(s) ne sont pas comptées : elles seront ignorées (aucun ajustement). ` + message;
@@ -287,4 +433,5 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 </script>
+{% endif %}
 {% endblock %}
