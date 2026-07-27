@@ -29,6 +29,7 @@ from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonRespo
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.template.loader import render_to_string
 
 from .background import enqueue_product_asset_job
@@ -3926,7 +3927,31 @@ def _get_requested_site(request):
     site_id = request.GET.get("site")
     if site_id:
         return Site.objects.filter(pk=site_id).first()
+    # Site choisi via le sélecteur du topbar (superutilisateurs) : persiste
+    # en session pour que toutes les pages en tiennent compte.
+    if getattr(request.user, "is_superuser", False):
+        session_site_id = request.session.get("active_site_id")
+        if session_site_id:
+            return Site.objects.filter(pk=session_site_id).first()
     return None
+
+
+def set_active_site(request):
+    """Bascule le site actif depuis le sélecteur du topbar (superusers)."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    if not request.user.is_superuser:
+        raise PermissionDenied("Réservé aux superutilisateurs.")
+    site_id = (request.POST.get("site") or "").strip()
+    if site_id and Site.objects.filter(pk=site_id).exists():
+        request.session["active_site_id"] = int(site_id)
+    else:
+        # Chaîne vide ou site inconnu -> retour à la vue globale.
+        request.session.pop("active_site_id", None)
+    next_url = request.POST.get("next") or reverse("inventory:dashboard")
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = reverse("inventory:dashboard")
+    return redirect(next_url)
 
 
 def _get_action_site(request):

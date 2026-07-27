@@ -7,6 +7,7 @@ app_name = "inventory"
 
 urlpatterns = [
     path("", login_required(views.dashboard), name="dashboard"),
+    path("site/actif/", login_required(views.set_active_site), name="set_active_site"),
     path("analyses/", login_required(views.analytics), name="analytics"),
     path("analyses/ventes-confirmees/pdf/", login_required(views.analytics_sales_pdf), name="analytics_sales_pdf"),
     path("clients/", login_required(views.customers_list), name="customer_list"),

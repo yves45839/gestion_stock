@@ -1954,3 +1954,76 @@ class InventoryPhysicalTests(TestCase):
         # Le comptage est caduc : la ligne repasse à « non compté ».
         self.assertIsNone(line.counted_qty)
         self.assertFalse(line.verified)
+
+
+class TopbarNavigationTests(TestCase):
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="vincent", password="vincent-pass", email="v@example.com"
+        )
+        self.employee = get_user_model().objects.create_user(
+            username="employe", password="employe-pass"
+        )
+        self.site, _ = Site.objects.get_or_create(name="Riviera 2")
+        self.other_site, _ = Site.objects.get_or_create(name="Treichville")
+        SiteAssignment.objects.create(user=self.employee, site=self.site)
+
+    def test_superuser_sees_site_switcher(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("inventory:dashboard"))
+        self.assertContains(response, 'id="nav-site-select"')
+        self.assertContains(response, "Site : Riviera 2")
+
+    def test_employee_sees_chip_not_switcher(self):
+        self.client.force_login(self.employee)
+        response = self.client.get(reverse("inventory:dashboard"))
+        self.assertNotContains(response, 'id="nav-site-select"')
+        self.assertContains(response, "Site: Riviera 2")
+
+    def test_switch_site_persists_in_session(self):
+        self.client.force_login(self.superuser)
+        response = self.client.post(
+            reverse("inventory:set_active_site"),
+            {"site": self.site.pk, "next": reverse("inventory:dashboard")},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.client.session["active_site_id"], self.site.pk)
+        # Le site choisi s'applique partout : l'inventaire physique ne
+        # redirige plus vers la liste produits faute de site.
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Riviera 2")
+
+    def test_switch_back_to_global_clears_session(self):
+        self.client.force_login(self.superuser)
+        self.client.post(reverse("inventory:set_active_site"), {"site": self.site.pk})
+        self.client.post(reverse("inventory:set_active_site"), {"site": ""})
+        self.assertNotIn("active_site_id", self.client.session)
+
+    def test_switch_site_forbidden_for_non_superuser(self):
+        self.client.force_login(self.employee)
+        response = self.client.post(
+            reverse("inventory:set_active_site"), {"site": self.other_site.pk}
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("active_site_id", self.client.session)
+
+    def test_switch_site_rejects_external_redirect(self):
+        self.client.force_login(self.superuser)
+        response = self.client.post(
+            reverse("inventory:set_active_site"),
+            {"site": self.site.pk, "next": "https://evil.example.com/"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("inventory:dashboard"))
+
+    def test_logout_button_present_and_works(self):
+        self.client.force_login(self.employee)
+        response = self.client.get(reverse("inventory:dashboard"))
+        self.assertContains(response, "Déconnexion")
+        response = self.client.post(reverse("logout"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("login"))
+        response = self.client.get(reverse("inventory:dashboard"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
