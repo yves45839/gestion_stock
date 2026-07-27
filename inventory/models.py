@@ -724,7 +724,8 @@ class InventoryCountLine(TimeStampedModel):
         related_name="inventory_lines",
     )
     expected_qty = models.IntegerField(default=0)
-    counted_qty = models.IntegerField(default=0)
+    # None = ligne pas encore comptée (comptage à l'aveugle).
+    counted_qty = models.IntegerField(null=True, blank=True, default=None)
     difference = models.IntegerField(default=0)
     value_loss = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
 
@@ -737,8 +738,16 @@ class InventoryCountLine(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.session} - {self.product}"
 
+    @property
+    def is_counted(self) -> bool:
+        return self.counted_qty is not None
+
     def recompute(self):
-        self.difference = (self.counted_qty or 0) - (self.expected_qty or 0)
+        if self.counted_qty is None:
+            self.difference = 0
+            self.value_loss = Decimal("0.00")
+            return
+        self.difference = self.counted_qty - (self.expected_qty or 0)
         purchase_price = self.product.purchase_price or Decimal("0.00")
         loss_units = abs(self.difference) if self.difference < 0 else 0
         self.value_loss = purchase_price * Decimal(loss_units)

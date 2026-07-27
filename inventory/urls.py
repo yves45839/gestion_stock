@@ -37,6 +37,11 @@ urlpatterns = [
         name="inventory_physical",
     ),
     path(
+        "inventaire/physique/ligne/",
+        login_required(views.inventory_physical_line),
+        name="inventory_physical_line",
+    ),
+    path(
         "inventaire/valorisation/",
         login_required(views.stock_valuation),
         name="stock_valuation",

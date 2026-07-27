@@ -1391,6 +1391,22 @@ def stock_valuation(request):
     return render(request, "inventory/stock_valuation.html", context)
 
 
+def _parse_counted_qty(raw_value, fallback):
+    """Interprète une saisie de quantité comptée.
+
+    Chaîne vide -> None (ligne "non comptée"), entier négatif ramené à 0,
+    valeur invalide -> on conserve la valeur existante.
+    """
+    stripped = (raw_value or "").strip()
+    if stripped == "":
+        return None
+    try:
+        counted_value = int(stripped)
+    except (TypeError, ValueError):
+        return fallback
+    return max(counted_value, 0)
+
+
 def inventory_physical(request):
     site_context = _site_context(request)
     view_site = site_context["active_site"]
@@ -1437,7 +1453,9 @@ def inventory_physical(request):
                     session=session,
                     product=product,
                     expected_qty=initial_qty,
-                    counted_qty=initial_qty,
+                    # Comptage à l'aveugle : la ligne reste "non comptée"
+                    # tant que personne n'a saisi de quantité.
+                    counted_qty=None,
                     difference=0,
                     value_loss=Decimal("0.00"),
                 )
@@ -1452,6 +1470,7 @@ def inventory_physical(request):
 
     search = (request.GET.get("q") or "").strip()
     show_only_differences = request.GET.get("diff_only") == "1"
+    show_only_uncounted = request.GET.get("uncounted_only") == "1"
 
     lines_qs = all_lines_qs
     if search:
@@ -1467,7 +1486,9 @@ def inventory_physical(request):
             search_query &= token
         lines_qs = lines_qs.filter(search_query)
     if show_only_differences:
-        lines_qs = lines_qs.exclude(difference=0)
+        lines_qs = lines_qs.filter(counted_qty__isnull=False).exclude(difference=0)
+    if show_only_uncounted:
+        lines_qs = lines_qs.filter(counted_qty__isnull=True)
 
     if request.method == "POST" and not session.is_closed:
         action = request.POST.get("action", "save")
@@ -1477,12 +1498,15 @@ def inventory_physical(request):
                 field_name = f"counted_{line.id}"
                 if field_name not in request.POST:
                     continue
-                try:
-                    counted_value = int(request.POST.get(field_name, line.counted_qty))
-                except (TypeError, ValueError):
-                    counted_value = line.counted_qty
-                if counted_value < 0:
-                    counted_value = 0
+                raw_value = request.POST.get(field_name, "")
+                # Un champ témoin orig_<id> mémorise la valeur affichée au
+                # chargement : on n'applique que les champs réellement
+                # modifiés par CET utilisateur, pour que deux compteurs
+                # simultanés ne s'écrasent pas mutuellement.
+                orig_field = f"orig_{line.id}"
+                if orig_field in request.POST and request.POST.get(orig_field, "") == raw_value:
+                    continue
+                counted_value = _parse_counted_qty(raw_value, line.counted_qty)
                 if counted_value != line.counted_qty:
                     line.counted_qty = counted_value
                     line.recompute()
@@ -1490,10 +1514,24 @@ def inventory_physical(request):
                     updated += 1
 
             if action == "close":
+                # Le stock attendu est refigé sur le stock réel au moment de
+                # la clôture : les mouvements survenus pendant le comptage
+                # (ventes, réceptions) ne faussent plus les ajustements.
+                live_stock = {
+                    product.pk: product.current_stock or 0
+                    for product in Product.objects.with_stock_quantity(site=current_site).filter(
+                        pk__in=session.lines.values_list("product_id", flat=True)
+                    )
+                }
                 adjustments = []
+                skipped_uncounted = 0
                 for line in all_lines_qs:
-                    # recompute before clôture in case the loop above did not run (no changes)
+                    line.expected_qty = live_stock.get(line.product_id, 0)
                     line.recompute()
+                    line.save(update_fields=["expected_qty", "difference", "value_loss", "updated_at"])
+                    if not line.is_counted:
+                        skipped_uncounted += 1
+                        continue
                     if line.difference == 0:
                         continue
                     movement_type = _get_adjustment_movement_type(line.difference > 0)
@@ -1518,7 +1556,13 @@ def inventory_physical(request):
                 session.status = InventoryCountSession.Status.CLOSED
                 session.closed_at = timezone.now()
                 session.save(update_fields=["status", "closed_at", "updated_at"])
-                messages.success(request, "Inventaire clôturé et ajustements enregistrés.")
+                closing_message = "Inventaire clôturé et ajustements enregistrés."
+                if skipped_uncounted:
+                    closing_message += (
+                        f" {skipped_uncounted} ligne(s) non comptée(s) ont été ignorées"
+                        " (aucun ajustement généré pour elles)."
+                    )
+                messages.success(request, closing_message)
                 return redirect(reverse("inventory:inventory_physical"))
         if updated:
             messages.success(request, f"{updated} ligne(s) mises à jour.")
@@ -1552,6 +1596,9 @@ def inventory_physical(request):
         for line in all_lines_qs
     ]
 
+    total_lines = all_lines_qs.count()
+    counted_count = all_lines_qs.filter(counted_qty__isnull=False).count()
+
     context = {
         "session": session,
         "lines": lines_qs,
@@ -1559,13 +1606,70 @@ def inventory_physical(request):
         "current_site": current_site,
         "search": search,
         "show_only_differences": show_only_differences,
-        "total_lines": all_lines_qs.count(),
+        "show_only_uncounted": show_only_uncounted,
+        "total_lines": total_lines,
+        "counted_count": counted_count,
+        "uncounted_count": total_lines - counted_count,
         "totals": totals,
         "overall_totals": overall_totals,
         "product_dataset": product_dataset,
     }
     context.update(site_context)
     return render(request, "inventory/inventory_physical.html", context)
+
+
+def inventory_physical_line(request):
+    """Sauvegarde AJAX d'une seule ligne de comptage.
+
+    Chaque saisie est enregistrée immédiatement et indépendamment : deux
+    compteurs travaillant en même temps sur la même session ne peuvent plus
+    écraser mutuellement leurs saisies.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    try:
+        line_id = int(request.POST.get("line_id", ""))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Ligne invalide."}, status=400)
+    line = (
+        InventoryCountLine.objects.select_related("session", "product")
+        .filter(pk=line_id)
+        .first()
+    )
+    if line is None:
+        return JsonResponse({"ok": False, "error": "Ligne introuvable."}, status=404)
+    if line.session.is_closed:
+        return JsonResponse({"ok": False, "error": "Session clôturée."}, status=409)
+
+    counted_value = _parse_counted_qty(request.POST.get("counted_qty", ""), line.counted_qty)
+    if counted_value != line.counted_qty:
+        line.counted_qty = counted_value
+        line.recompute()
+        line.save(update_fields=["counted_qty", "difference", "value_loss", "updated_at"])
+
+    session_lines = line.session.lines
+    totals = session_lines.aggregate(
+        total_difference=Coalesce(Sum("difference"), Value(0)),
+        total_loss=Coalesce(
+            Sum("value_loss"),
+            Value(Decimal("0.00")),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ),
+    )
+    return JsonResponse(
+        {
+            "ok": True,
+            "line_id": line.pk,
+            "counted_qty": line.counted_qty,
+            "is_counted": line.is_counted,
+            "difference": line.difference,
+            "value_loss": str(line.value_loss),
+            "counted_count": session_lines.filter(counted_qty__isnull=False).count(),
+            "total_lines": session_lines.count(),
+            "total_difference": totals["total_difference"],
+            "total_loss": str(totals["total_loss"]),
+        }
+    )
 
 
 def product_detail(request, pk):
