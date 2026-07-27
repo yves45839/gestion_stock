@@ -69,6 +69,7 @@ from .models import (
     SubCategory,
     Version,
     get_default_site,
+    invalidate_open_inventory_counts,
 )
 from .product_asset import (
     reserve_product_asset_job,
@@ -1051,6 +1052,17 @@ def record_movement(request):
             ]
             if not line_forms:
                 messages.error(request, "Ajoutez au moins un produit ? d?placer.")
+            elif (
+                locked := _products_in_open_count(
+                    header_form.cleaned_data["site"],
+                    [form.cleaned_data["product"] for form in line_forms],
+                )
+            ):
+                messages.error(
+                    request,
+                    "Mouvement refusé : produit(s) en cours d'inventaire sur ce site"
+                    f" ({', '.join(locked[:5])}). Clôturez l'inventaire ou comptez d'abord.",
+                )
             else:
                 with transaction.atomic():
                     created = 0
@@ -1078,11 +1090,18 @@ def record_movement(request):
                 single_form.fields["site"].queryset = Site.objects.filter(pk=allowed_site.pk)
             if single_form.is_valid():
                 movement = single_form.save(commit=False)
-                movement.performed_by = request.user if request.user.is_authenticated else None
-                movement._history_user = request.user if request.user.is_authenticated else None
-                movement.save()
-                messages.success(request, "Mouvement enregistré avec succès.")
-                return redirect(reverse("inventory:dashboard"))
+                if _products_in_open_count(movement.site, [movement.product]):
+                    messages.error(
+                        request,
+                        f"Mouvement refusé : {movement.product.name} est en cours"
+                        " d'inventaire sur ce site. Clôturez l'inventaire d'abord.",
+                    )
+                else:
+                    movement.performed_by = request.user if request.user.is_authenticated else None
+                    movement._history_user = request.user if request.user.is_authenticated else None
+                    movement.save()
+                    messages.success(request, "Mouvement enregistré avec succès.")
+                    return redirect(reverse("inventory:dashboard"))
     else:
         header_form = MovementHeaderForm(
             current_site=action_site or view_site,
@@ -1208,6 +1227,13 @@ def inventory_overview(request):
             messages.error(request, "Aucun type de mouvement d'ajustement disponible.")
             return redirect(reverse("inventory:inventory_overview"))
         adjustment_site = adjustment_form.cleaned_data["site"]
+        if _products_in_open_count(adjustment_site, [product]):
+            messages.error(
+                request,
+                f"Ajustement refusé : {product.name} est en cours d'inventaire sur ce"
+                " site. Saisissez le comptage dans l'inventaire physique.",
+            )
+            return redirect(reverse("inventory:inventory_overview"))
         adjustment = StockMovement(
             product=product,
             movement_type=movement_type,
@@ -1391,6 +1417,42 @@ def stock_valuation(request):
     return render(request, "inventory/stock_valuation.html", context)
 
 
+def _products_in_open_count(site, products):
+    """Noms des produits actuellement sous inventaire ouvert sur ce site.
+
+    Sert au gel des mouvements manuels pendant un comptage : corriger le
+    stock d'un produit en cours de comptage fausserait l'inventaire.
+    """
+    if site is None:
+        return []
+    product_ids = [product.pk for product in products if product is not None]
+    if not product_ids:
+        return []
+    return list(
+        InventoryCountLine.objects.filter(
+            session__site=site,
+            session__status=InventoryCountSession.Status.OPEN,
+            product_id__in=product_ids,
+        ).values_list("product__name", flat=True)
+    )
+
+
+def _parse_counted_qty(raw_value, fallback):
+    """Interprète une saisie de quantité comptée.
+
+    Chaîne vide -> None (ligne "non comptée"), entier négatif ramené à 0,
+    valeur invalide -> on conserve la valeur existante.
+    """
+    stripped = (raw_value or "").strip()
+    if stripped == "":
+        return None
+    try:
+        counted_value = int(stripped)
+    except (TypeError, ValueError):
+        return fallback
+    return max(counted_value, 0)
+
+
 def inventory_physical(request):
     site_context = _site_context(request)
     view_site = site_context["active_site"]
@@ -1404,29 +1466,58 @@ def inventory_physical(request):
         )
         return redirect(reverse("inventory:inventory_overview"))
 
+    # Séparation des rôles : les responsables (staff) démarrent et clôturent
+    # les sessions et voient le stock théorique ; les compteurs saisissent
+    # les quantités à l'aveugle.
+    can_manage = bool(request.user.is_staff or request.user.is_superuser)
+
     session = (
         InventoryCountSession.objects.filter(status=InventoryCountSession.Status.OPEN, site=current_site)
         .order_by("-started_at")
-        .select_related("site", "created_by")
+        .select_related("site", "created_by", "category", "brand")
         .first()
     )
-    products_snapshot = (
+
+    if request.method == "POST" and request.POST.get("action") == "start":
+        if not can_manage:
+            messages.error(request, "Seul un responsable peut démarrer un inventaire.")
+            return redirect(reverse("inventory:inventory_physical"))
+        if session is not None:
+            messages.error(request, "Un inventaire est déjà en cours sur ce site.")
+            return redirect(reverse("inventory:inventory_physical"))
+        category = Category.objects.filter(pk=request.POST.get("category") or None).first()
+        brand = Brand.objects.filter(pk=request.POST.get("brand") or None).first()
+        scope_parts = [part for part in (category and category.name, brand and brand.name) if part]
+        scope_suffix = f" ({', '.join(scope_parts)})" if scope_parts else ""
+        session = InventoryCountSession.objects.create(
+            name=f"Inventaire du {timezone.now().strftime('%d/%m/%Y %H:%M')}{scope_suffix}",
+            site=current_site,
+            category=category,
+            brand=brand,
+            created_by=request.user if request.user.is_authenticated else None,
+        )
+        messages.success(request, f"Inventaire démarré — {session.scope_label}.")
+        return redirect(reverse("inventory:inventory_physical"))
+
+    if session is None:
+        context = {
+            "session": None,
+            "can_manage": can_manage,
+            "current_site": current_site,
+            "site_locked": site_locked,
+            "categories": Category.objects.order_by("name"),
+            "brands": Brand.objects.order_by("name"),
+        }
+        context.update(site_context)
+        return render(request, "inventory/inventory_physical.html", context)
+
+    products_snapshot = session.product_scope(
         Product.objects.with_stock_quantity(site=current_site)
         .select_related("brand", "category", "subcategory")
         .order_by("name")
     )
-    if session is None:
-        session = InventoryCountSession.objects.create(
-            name=f"Inventaire du {timezone.now().strftime('%d/%m/%Y %H:%M')}",
-            site=current_site,
-            created_by=request.user if request.user.is_authenticated else None,
-        )
-        missing_products = products_snapshot
-    else:
-        existing_product_ids = set(
-            session.lines.values_list("product_id", flat=True)
-        )
-        missing_products = products_snapshot.exclude(pk__in=existing_product_ids)
+    existing_product_ids = set(session.lines.values_list("product_id", flat=True))
+    missing_products = products_snapshot.exclude(pk__in=existing_product_ids)
 
     if missing_products:
         lines = []
@@ -1437,7 +1528,9 @@ def inventory_physical(request):
                     session=session,
                     product=product,
                     expected_qty=initial_qty,
-                    counted_qty=initial_qty,
+                    # Comptage à l'aveugle : la ligne reste "non comptée"
+                    # tant que personne n'a saisi de quantité.
+                    counted_qty=None,
                     difference=0,
                     value_loss=Decimal("0.00"),
                 )
@@ -1451,7 +1544,9 @@ def inventory_physical(request):
     ).order_by("product__name")
 
     search = (request.GET.get("q") or "").strip()
-    show_only_differences = request.GET.get("diff_only") == "1"
+    show_only_differences = request.GET.get("diff_only") == "1" and can_manage
+    show_only_uncounted = request.GET.get("uncounted_only") == "1"
+    show_only_recounts = request.GET.get("recount_only") == "1"
 
     lines_qs = all_lines_qs
     if search:
@@ -1467,7 +1562,9 @@ def inventory_physical(request):
             search_query &= token
         lines_qs = lines_qs.filter(search_query)
     if show_only_differences:
-        lines_qs = lines_qs.exclude(difference=0)
+        lines_qs = lines_qs.filter(counted_qty__isnull=False).exclude(difference=0)
+    if show_only_uncounted:
+        lines_qs = lines_qs.filter(counted_qty__isnull=True)
 
     if request.method == "POST" and not session.is_closed:
         action = request.POST.get("action", "save")
@@ -1477,23 +1574,60 @@ def inventory_physical(request):
                 field_name = f"counted_{line.id}"
                 if field_name not in request.POST:
                     continue
-                try:
-                    counted_value = int(request.POST.get(field_name, line.counted_qty))
-                except (TypeError, ValueError):
-                    counted_value = line.counted_qty
-                if counted_value < 0:
-                    counted_value = 0
+                raw_value = request.POST.get(field_name, "")
+                # Un champ témoin orig_<id> mémorise la valeur affichée au
+                # chargement : on n'applique que les champs réellement
+                # modifiés par CET utilisateur, pour que deux compteurs
+                # simultanés ne s'écrasent pas mutuellement.
+                orig_field = f"orig_{line.id}"
+                if orig_field in request.POST and request.POST.get(orig_field, "") == raw_value:
+                    continue
+                counted_value = _parse_counted_qty(raw_value, line.counted_qty)
                 if counted_value != line.counted_qty:
                     line.counted_qty = counted_value
+                    line.verified = False
                     line.recompute()
-                    line.save(update_fields=["counted_qty", "difference", "value_loss", "updated_at"])
+                    line.save(update_fields=["counted_qty", "verified", "difference", "value_loss", "updated_at"])
                     updated += 1
 
             if action == "close":
-                adjustments = []
+                # Séparation des rôles : seul un responsable peut générer
+                # les ajustements de stock.
+                if not can_manage:
+                    messages.error(request, "Seul un responsable peut clôturer un inventaire.")
+                    return redirect(reverse("inventory:inventory_physical"))
+                # Le stock attendu est refigé sur le stock réel au moment de
+                # la clôture : les mouvements survenus pendant le comptage
+                # (ventes, réceptions) ne faussent plus les ajustements.
+                live_stock = {
+                    product.pk: product.current_stock or 0
+                    for product in Product.objects.with_stock_quantity(site=current_site).filter(
+                        pk__in=session.lines.values_list("product_id", flat=True)
+                    )
+                }
                 for line in all_lines_qs:
-                    # recompute before clôture in case the loop above did not run (no changes)
+                    line.expected_qty = live_stock.get(line.product_id, 0)
                     line.recompute()
+                    line.save(update_fields=["expected_qty", "difference", "value_loss", "updated_at"])
+                # Gros écarts : un second comptage concordant (ressaisie de
+                # la même quantité) est exigé avant d'ajuster le stock.
+                pending_recounts = [line for line in all_lines_qs if line.needs_recount]
+                if pending_recounts:
+                    messages.error(
+                        request,
+                        f"Clôture refusée : {len(pending_recounts)} ligne(s) présentent un écart"
+                        " important et doivent être recomptées (ressaisissez la quantité pour"
+                        " confirmer le comptage).",
+                    )
+                    return redirect(
+                        reverse("inventory:inventory_physical") + "?recount_only=1"
+                    )
+                adjustments = []
+                skipped_uncounted = 0
+                for line in all_lines_qs:
+                    if not line.is_counted:
+                        skipped_uncounted += 1
+                        continue
                     if line.difference == 0:
                         continue
                     movement_type = _get_adjustment_movement_type(line.difference > 0)
@@ -1518,7 +1652,13 @@ def inventory_physical(request):
                 session.status = InventoryCountSession.Status.CLOSED
                 session.closed_at = timezone.now()
                 session.save(update_fields=["status", "closed_at", "updated_at"])
-                messages.success(request, "Inventaire clôturé et ajustements enregistrés.")
+                closing_message = "Inventaire clôturé et ajustements enregistrés."
+                if skipped_uncounted:
+                    closing_message += (
+                        f" {skipped_uncounted} ligne(s) non comptée(s) ont été ignorées"
+                        " (aucun ajustement généré pour elles)."
+                    )
+                messages.success(request, closing_message)
                 return redirect(reverse("inventory:inventory_physical"))
         if updated:
             messages.success(request, f"{updated} ligne(s) mises à jour.")
@@ -1540,6 +1680,11 @@ def inventory_physical(request):
         ),
     )
 
+    lines_display = list(lines_qs)
+    if show_only_recounts:
+        lines_display = [line for line in lines_display if line.needs_recount]
+    recount_pending = sum(1 for line in all_lines_qs if line.needs_recount)
+
     product_dataset = [
         {
             "id": line.product.id,
@@ -1552,20 +1697,100 @@ def inventory_physical(request):
         for line in all_lines_qs
     ]
 
+    total_lines = all_lines_qs.count()
+    counted_count = all_lines_qs.filter(counted_qty__isnull=False).count()
+
     context = {
         "session": session,
-        "lines": lines_qs,
+        "lines": lines_display,
+        "can_manage": can_manage,
         "site_locked": site_locked,
         "current_site": current_site,
         "search": search,
         "show_only_differences": show_only_differences,
-        "total_lines": all_lines_qs.count(),
+        "show_only_uncounted": show_only_uncounted,
+        "show_only_recounts": show_only_recounts,
+        "total_lines": total_lines,
+        "counted_count": counted_count,
+        "uncounted_count": total_lines - counted_count,
+        "recount_pending": recount_pending,
         "totals": totals,
         "overall_totals": overall_totals,
         "product_dataset": product_dataset,
     }
     context.update(site_context)
     return render(request, "inventory/inventory_physical.html", context)
+
+
+def inventory_physical_line(request):
+    """Sauvegarde AJAX d'une seule ligne de comptage.
+
+    Chaque saisie est enregistrée immédiatement et indépendamment : deux
+    compteurs travaillant en même temps sur la même session ne peuvent plus
+    écraser mutuellement leurs saisies.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    try:
+        line_id = int(request.POST.get("line_id", ""))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Ligne invalide."}, status=400)
+    line = (
+        InventoryCountLine.objects.select_related("session", "product")
+        .filter(pk=line_id)
+        .first()
+    )
+    if line is None:
+        return JsonResponse({"ok": False, "error": "Ligne introuvable."}, status=404)
+    if line.session.is_closed:
+        return JsonResponse({"ok": False, "error": "Session clôturée."}, status=409)
+
+    counted_value = _parse_counted_qty(request.POST.get("counted_qty", ""), line.counted_qty)
+    if counted_value != line.counted_qty:
+        line.counted_qty = counted_value
+        line.verified = False
+        line.recompute()
+        line.save(update_fields=["counted_qty", "verified", "difference", "value_loss", "updated_at"])
+    elif counted_value is not None and not line.verified:
+        # Double comptage concordant : ressaisir la même quantité sur une
+        # ligne déjà comptée vaut second comptage et lève l'obligation de
+        # recomptage des gros écarts.
+        line.verified = True
+        line.save(update_fields=["verified", "updated_at"])
+
+    session_lines = line.session.lines
+    payload = {
+        "ok": True,
+        "line_id": line.pk,
+        "counted_qty": line.counted_qty,
+        "is_counted": line.is_counted,
+        "needs_recount": line.needs_recount,
+        "counted_count": session_lines.filter(counted_qty__isnull=False).count(),
+        "total_lines": session_lines.count(),
+        "recount_pending": sum(
+            1 for candidate in session_lines.select_related("product") if candidate.needs_recount
+        ),
+    }
+    # Mode aveugle : le stock théorique, les écarts et la démarque ne sont
+    # renvoyés qu'aux responsables.
+    if request.user.is_staff or request.user.is_superuser:
+        totals = session_lines.aggregate(
+            total_difference=Coalesce(Sum("difference"), Value(0)),
+            total_loss=Coalesce(
+                Sum("value_loss"),
+                Value(Decimal("0.00")),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            ),
+        )
+        payload.update(
+            {
+                "difference": line.difference,
+                "value_loss": str(line.value_loss),
+                "total_difference": totals["total_difference"],
+                "total_loss": str(totals["total_loss"]),
+            }
+        )
+    return JsonResponse(payload)
 
 
 def product_detail(request, pk):
@@ -1851,11 +2076,17 @@ def sale_create(request):
                             item.product = line["product"]
                         items_to_create.append(item)
                     SaleItem.objects.bulk_create(items_to_create)
-                    sale.confirm(
+                    invalidated_counts = sale.confirm(
                         performed_by=request.user if request.user.is_authenticated else None,
                         site=action_site,
                     )
                 messages.success(request, "La vente a été enregistrée et le stock mis à jour.")
+                if invalidated_counts:
+                    messages.warning(
+                        request,
+                        "Attention : un inventaire est en cours sur ce site. Le comptage de"
+                        f" {', '.join(invalidated_counts[:5])} a été invalidé et devra être refait.",
+                    )
                 return redirect(reverse("inventory:sales_list"))
     else:
         sale_form = SaleForm(initial={"reference": _generate_sale_reference()})
@@ -2372,11 +2603,17 @@ def quote_confirm(request, pk):
     if request.method != "POST":
         return redirect(reverse("inventory:quote_detail", args=[sale.pk]))
     if sale.status != Sale.Status.CONFIRMED:
-        sale.confirm(
+        invalidated_counts = sale.confirm(
             performed_by=request.user if request.user.is_authenticated else None,
             site=_get_active_site(request),
         )
         messages.success(request, "Devis converti en vente.")
+        if invalidated_counts:
+            messages.warning(
+                request,
+                "Attention : un inventaire est en cours sur ce site. Le comptage de"
+                f" {', '.join(invalidated_counts[:5])} a été invalidé et devra être refait.",
+            )
     return redirect(reverse("inventory:sales_list"))
 
 
@@ -3909,6 +4146,12 @@ def _process_csv_import(
                         site=movement_site,
                     )
                     summary["movements"] += 1
+                    invalidated = invalidate_open_inventory_counts(movement_site, [product])
+                    if invalidated:
+                        summary["errors"].append(
+                            f"Ligne {index}: {product.name} était en cours d'inventaire,"
+                            " son comptage a été invalidé."
+                        )
     return summary
 
 

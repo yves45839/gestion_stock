@@ -141,19 +141,19 @@
 
 <style>
 .table th, .table td { border-bottom:1px solid var(--border); padding:0.5rem; }
-.field-error { color:#b91c1c; font-size:0.85rem; }
+.field-error { color: var(--danger); font-size:0.85rem; }
 .btn.small { padding:0.35rem 0.75rem; font-size:0.9rem; }
 .table select,
 .table input {
-    background:#fff;
-    color:#0f172a;
+    background: var(--surface);
+    color: var(--text);
     border:1px solid var(--border);
 }
 .table select:focus,
 .table input:focus {
-    outline:2px solid var(--accent-strong);
+    outline:2px solid var(--accent);
     outline-offset:1px;
-    border-color: var(--accent-strong);
+    border-color: var(--accent);
 }
 .product-select { display:none; }
 .autocomplete-panel { position:relative; }
@@ -162,11 +162,11 @@
     top:calc(100% + 4px);
     left:0;
     right:0;
-    background:#0f172a;
-    color:#e2e8f0;
+    background: var(--surface);
+    color: var(--text);
     border:1px solid var(--border);
     border-radius:8px;
-    box-shadow:0 10px 30px rgba(0,0,0,0.18);
+    box-shadow:0 8px 30px rgba(0,0,0,0.12);
     z-index:30;
     max-height:220px;
     overflow-y:auto;
@@ -184,13 +184,13 @@
     text-align:left;
 }
 .autocomplete-option:hover,
-.autocomplete-option:focus { background:rgba(255,255,255,0.06); outline:none; }
-.autocomplete-empty { padding:0.55rem 0.7rem; color:#cbd5e1; }
+.autocomplete-option:focus { background: var(--surface-muted); outline:none; }
+.autocomplete-empty { padding:0.55rem 0.7rem; color: var(--muted); }
 .product-thumb {
     width: 40px;
     height: 40px;
     border-radius: 8px;
-    background: #f3f4f6;
+    background: var(--surface-muted);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -199,7 +199,7 @@
     border: 1px solid var(--border);
 }
 .product-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.product-thumb.fallback { font-weight: 600; color: #cbd5e1; }
+.product-thumb.fallback { font-weight: 600; color: var(--muted); }
 .product-preview {
     display: flex;
     align-items: center;
@@ -209,16 +209,16 @@
 }
 .product-preview strong { color: inherit; display: block; }
 #id_movement_type {
-    background:#fff;
-    color:#0f172a;
+    background: var(--surface);
+    color: var(--text);
     border:1px solid var(--border);
     border-radius:8px;
     padding:0.45rem 0.5rem;
 }
 #id_movement_type:focus {
-    outline:2px solid var(--accent-strong);
+    outline:2px solid var(--accent);
     outline-offset:1px;
-    border-color: var(--accent-strong);
+    border-color: var(--accent);
 }
 </style>
 

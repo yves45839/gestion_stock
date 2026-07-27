@@ -36,35 +36,34 @@
 
 <style>
 .product-form {
-    background: linear-gradient(145deg, rgba(15, 28, 50, 0.95), rgba(12, 23, 39, 0.98));
-    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    border: 1px solid var(--border);
 }
 .product-form label {
-    color: #f9fbff;
+    color: var(--text);
     font-weight: 700;
 }
 .product-form .field-error {
-    color: #ff9b9b;
+    color: var(--danger);
     font-size:0.85rem;
 }
 .product-form input, .product-form select, .product-form textarea {
     width:100%;
-    background: var(--field-bg);
+    background: var(--surface);
     color: var(--text);
-    border:1px solid var(--border-strong);
+    border:1px solid var(--border);
     border-radius:10px;
     padding:0.55rem 0.65rem;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 12px 28px rgba(0,0,0,0.35);
 }
 .product-form input::placeholder, .product-form textarea::placeholder {
-    color: var(--field-placeholder);
-    opacity: 0.95;
+    color: var(--muted);
+    opacity: 1;
 }
 .product-form input:focus, .product-form select:focus, .product-form textarea:focus {
-    outline:2px solid var(--accent-strong);
+    outline:2px solid var(--accent);
     outline-offset:1px;
-    border-color: var(--accent-strong);
-    background: rgba(77, 240, 255, 0.06);
+    border-color: var(--accent);
+    background: var(--surface-muted);
 }
 </style>
 {% endblock %}

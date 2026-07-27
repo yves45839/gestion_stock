@@ -687,6 +687,22 @@ class InventoryCountSession(TimeStampedModel):
         null=True,
         blank=True,
     )
+    # Périmètre optionnel : permet les inventaires tournants (comptage par
+    # catégorie ou par marque) au lieu d'un inventaire général bloquant.
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name="inventory_sessions",
+        null=True,
+        blank=True,
+    )
+    brand = models.ForeignKey(
+        Brand,
+        on_delete=models.PROTECT,
+        related_name="inventory_sessions",
+        null=True,
+        blank=True,
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     started_at = models.DateTimeField(default=timezone.now)
     closed_at = models.DateTimeField(blank=True, null=True)
@@ -711,6 +727,23 @@ class InventoryCountSession(TimeStampedModel):
     def is_closed(self) -> bool:
         return self.status == self.Status.CLOSED
 
+    @property
+    def scope_label(self) -> str:
+        parts = []
+        if self.category:
+            parts.append(f"Catégorie : {self.category.name}")
+        if self.brand:
+            parts.append(f"Marque : {self.brand.name}")
+        return " · ".join(parts) if parts else "Tout le site"
+
+    def product_scope(self, queryset):
+        """Restreint un queryset de produits au périmètre de la session."""
+        if self.category:
+            queryset = queryset.filter(category=self.category)
+        if self.brand:
+            queryset = queryset.filter(brand=self.brand)
+        return queryset
+
 
 class InventoryCountLine(TimeStampedModel):
     session = models.ForeignKey(
@@ -724,9 +757,13 @@ class InventoryCountLine(TimeStampedModel):
         related_name="inventory_lines",
     )
     expected_qty = models.IntegerField(default=0)
-    counted_qty = models.IntegerField(default=0)
+    # None = ligne pas encore comptée (comptage à l'aveugle).
+    counted_qty = models.IntegerField(null=True, blank=True, default=None)
     difference = models.IntegerField(default=0)
     value_loss = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    # True quand un second comptage a confirmé la même quantité (double
+    # comptage concordant) : requis avant clôture pour les gros écarts.
+    verified = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ("session", "product")
@@ -737,11 +774,68 @@ class InventoryCountLine(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.session} - {self.product}"
 
+    @property
+    def is_counted(self) -> bool:
+        return self.counted_qty is not None
+
+    def requires_verification(self) -> bool:
+        """Écart assez important pour exiger un second comptage concordant.
+
+        Seuils configurables : INVENTORY_RECOUNT_UNITS (écart en unités,
+        défaut 5) et INVENTORY_RECOUNT_VALUE (écart valorisé au prix d'achat
+        en FCFA, défaut 100 000).
+        """
+        if not self.is_counted or self.difference == 0:
+            return False
+        units_threshold = getattr(settings, "INVENTORY_RECOUNT_UNITS", 5)
+        value_threshold = Decimal(str(getattr(settings, "INVENTORY_RECOUNT_VALUE", 100_000)))
+        if abs(self.difference) >= units_threshold:
+            return True
+        purchase_price = self.product.purchase_price or Decimal("0.00")
+        return purchase_price * Decimal(abs(self.difference)) >= value_threshold
+
+    @property
+    def needs_recount(self) -> bool:
+        return self.requires_verification() and not self.verified
+
     def recompute(self):
-        self.difference = (self.counted_qty or 0) - (self.expected_qty or 0)
+        if self.counted_qty is None:
+            self.difference = 0
+            self.value_loss = Decimal("0.00")
+            return
+        self.difference = self.counted_qty - (self.expected_qty or 0)
         purchase_price = self.product.purchase_price or Decimal("0.00")
         loss_units = abs(self.difference) if self.difference < 0 else 0
         self.value_loss = purchase_price * Decimal(loss_units)
+
+
+def invalidate_open_inventory_counts(site, products) -> list[str]:
+    """Invalide le comptage des produits qui viennent de bouger en stock.
+
+    Un mouvement (vente, retour, import) sur un produit déjà compté dans une
+    session ouverte rend ce comptage caduc : la ligne repasse à « non
+    compté » et devra être recomptée avant la clôture. Retourne les noms des
+    produits invalidés pour affichage d'un avertissement.
+    """
+    if site is None:
+        return []
+    product_ids = [product.pk for product in products if product is not None]
+    if not product_ids:
+        return []
+    lines = InventoryCountLine.objects.filter(
+        session__site=site,
+        session__status=InventoryCountSession.Status.OPEN,
+        product_id__in=product_ids,
+        counted_qty__isnull=False,
+    ).select_related("product")
+    invalidated = []
+    for line in lines:
+        line.counted_qty = None
+        line.verified = False
+        line.recompute()
+        line.save(update_fields=["counted_qty", "verified", "difference", "value_loss", "updated_at"])
+        invalidated.append(line.product.name)
+    return invalidated
 
 
 class Sale(VersionedModelMixin, TimeStampedModel):
@@ -818,9 +912,12 @@ class Sale(VersionedModelMixin, TimeStampedModel):
         return total
 
     def confirm(self, performed_by=None, movement_type=None, site=None):
+        """Confirme la vente et retourne les produits dont un comptage
+        d'inventaire en cours a été invalidé par cette vente."""
         if self.status == self.Status.CONFIRMED:
-            return
+            return []
         previous_site = self.site
+        moved_products = []
         with transaction.atomic():
             if movement_type is None:
                 movement_type, _ = MovementType.objects.get_or_create(
@@ -853,6 +950,7 @@ class Sale(VersionedModelMixin, TimeStampedModel):
                     site=movement_site,
                 )
                 item.stock_movement = movement
+                moved_products.append(item.product)
                 item.save(update_fields=["stock_movement", "scanned_at"])
                 if item.scan_code:
                     SaleScan.objects.update_or_create(
@@ -876,6 +974,7 @@ class Sale(VersionedModelMixin, TimeStampedModel):
             self.save(update_fields=update_fields)
             self._sync_customer_account_entry()
             self._sync_customer_payment_entry()
+            return invalidate_open_inventory_counts(movement_site, moved_products)
 
     def _sync_customer_account_entry(self):
         if not self.customer:
@@ -1067,6 +1166,7 @@ class SaleItem(TimeStampedModel):
             comment=f"Retour {self.sale.reference} - {self.product.name}",
             site=movement_site,
         )
+        invalidate_open_inventory_counts(movement_site, [self.product])
         self.returned_quantity += quantity
         self.save(update_fields=["returned_quantity"])
         return movement

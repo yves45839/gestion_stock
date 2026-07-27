@@ -1585,3 +1585,372 @@ class CategoryAutoAssignmentRuleTests(TestCase):
 
         self.assertIsNotNone(best)
         self.assertEqual(best.category.name, "Camera")
+
+
+class InventoryPhysicalTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="compteur", password="compteur-pass"
+        )
+        self.manager = get_user_model().objects.create_user(
+            username="chef", password="chef-pass", is_staff=True
+        )
+        self.site = Site.objects.create(name="Depot Principal")
+        SiteAssignment.objects.create(user=self.user, site=self.site)
+        SiteAssignment.objects.create(user=self.manager, site=self.site)
+        self.brand = Brand.objects.create(name="Hikvision")
+        self.category = Category.objects.create(name="Camera")
+        self.other_category = Category.objects.create(name="Cablage")
+        self.entry_type, _ = MovementType.objects.get_or_create(
+            code="RECEPTION_INV",
+            defaults={
+                "name": "Réception",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        self.exit_type, _ = MovementType.objects.get_or_create(
+            code="VENTE_INV",
+            defaults={
+                "name": "Vente",
+                "direction": MovementType.MovementDirection.EXIT,
+            },
+        )
+        self.adjust_plus, _ = MovementType.objects.get_or_create(
+            code="AJUSTEMENT_PLUS",
+            defaults={
+                "name": "Ajustement +",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        self.adjust_minus, _ = MovementType.objects.get_or_create(
+            code="AJUSTEMENT_MOINS",
+            defaults={
+                "name": "Ajustement -",
+                "direction": MovementType.MovementDirection.EXIT,
+            },
+        )
+        self.product = Product.objects.create(
+            sku="CAM-INV-1",
+            name="Camera inventaire",
+            brand=self.brand,
+            category=self.category,
+            purchase_price=Decimal("1000.00"),
+        )
+        self.other_product = Product.objects.create(
+            sku="CAB-INV-2",
+            name="Cable inventaire",
+            brand=self.brand,
+            category=self.other_category,
+            purchase_price=Decimal("500.00"),
+        )
+        StockMovement.objects.create(
+            product=self.product,
+            movement_type=self.entry_type,
+            site=self.site,
+            quantity=10,
+        )
+        StockMovement.objects.create(
+            product=self.other_product,
+            movement_type=self.entry_type,
+            site=self.site,
+            quantity=4,
+        )
+        self.client.force_login(self.user)
+
+    def _start_session(self, category=None, brand=None):
+        """Démarre une session (responsable), matérialise les lignes, puis
+        redonne la main au compteur."""
+        from .models import InventoryCountSession
+
+        self.client.force_login(self.manager)
+        data = {"action": "start"}
+        if category is not None:
+            data["category"] = category.pk
+        if brand is not None:
+            data["brand"] = brand.pk
+        self.client.post(reverse("inventory:inventory_physical"), data)
+        self.client.get(reverse("inventory:inventory_physical"))
+        session = InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+        lines = {line.product_id: line for line in session.lines.all()}
+        self.client.force_login(self.user)
+        return session, lines
+
+    def test_start_requires_manager(self):
+        from .models import InventoryCountSession
+
+        response = self.client.post(
+            reverse("inventory:inventory_physical"), {"action": "start"}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(InventoryCountSession.objects.exists())
+
+    def test_new_session_lines_start_uncounted(self):
+        session, lines = self._start_session()
+        line = lines[self.product.pk]
+        self.assertIsNone(line.counted_qty)
+        self.assertFalse(line.is_counted)
+        self.assertEqual(line.expected_qty, 10)
+        self.assertEqual(line.difference, 0)
+
+    def test_scoped_session_limits_lines_to_category(self):
+        session, lines = self._start_session(category=self.category)
+        self.assertIn(self.product.pk, lines)
+        self.assertNotIn(self.other_product.pk, lines)
+        self.assertEqual(session.category, self.category)
+
+    def test_counter_view_is_blind(self):
+        self._start_session()
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        self.assertNotContains(response, "Attendu")
+        # Les pastilles écarts/démarque ne sont pas rendues pour un compteur
+        # (le sélecteur reste présent dans le JS, mais pas l'élément).
+        self.assertNotContains(response, "data-pill-loss>")
+        self.assertNotContains(response, "data-pill-diff>")
+        self.client.force_login(self.manager)
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        self.assertContains(response, "Attendu")
+        self.assertContains(response, "data-pill-loss>")
+
+    def test_ajax_save_is_blind_for_counter(self):
+        session, lines = self._start_session()
+        response = self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": lines[self.product.pk].pk, "counted_qty": "7"},
+        )
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertNotIn("difference", payload)
+        self.assertNotIn("value_loss", payload)
+        self.assertEqual(payload["counted_qty"], 7)
+
+    def test_ajax_save_updates_only_target_line(self):
+        session, lines = self._start_session()
+        line = lines[self.product.pk]
+        other = lines[self.other_product.pk]
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "7"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["counted_qty"], 7)
+        self.assertEqual(payload["difference"], -3)
+        self.assertEqual(payload["counted_count"], 1)
+        line.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(line.counted_qty, 7)
+        self.assertEqual(line.value_loss, Decimal("3000.00"))
+        self.assertIsNone(other.counted_qty)
+
+    def test_ajax_save_rejects_closed_session(self):
+        from .models import InventoryCountSession
+
+        session, lines = self._start_session()
+        session.status = InventoryCountSession.Status.CLOSED
+        session.save(update_fields=["status"])
+        response = self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": lines[self.product.pk].pk, "counted_qty": "7"},
+        )
+        self.assertEqual(response.status_code, 409)
+
+    def test_bulk_save_does_not_clobber_other_users_count(self):
+        session, lines = self._start_session()
+        line = lines[self.product.pk]
+        # L'utilisateur B enregistre 7 via AJAX pendant que la page de
+        # l'utilisateur A affiche encore une ligne non comptée.
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "7"},
+        )
+        # L'utilisateur A renvoie le formulaire complet : son champ est
+        # inchangé (vide, témoin vide) -> la saisie de B doit survivre.
+        self.client.post(
+            reverse("inventory:inventory_physical"),
+            {
+                "action": "save",
+                f"counted_{line.pk}": "",
+                f"orig_{line.pk}": "",
+            },
+        )
+        line.refresh_from_db()
+        self.assertEqual(line.counted_qty, 7)
+
+    def test_close_requires_manager(self):
+        from .models import InventoryCountSession
+
+        session, lines = self._start_session()
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.OPEN)
+
+    def test_close_adjusts_against_live_stock(self):
+        session, lines = self._start_session()
+        line = lines[self.product.pk]
+        # Comptage : 5 pièces en rayon (écart -5 vs cliché, mais sous les
+        # seuils de recomptage après recalcul sur stock réel).
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "5"},
+        )
+        # Une vente de 2 pièces a lieu pendant l'inventaire : stock réel 8.
+        # NB : créée directement (sans passer par Sale.confirm) pour tester
+        # le recalcul de clôture indépendamment de l'invalidation.
+        StockMovement.objects.create(
+            product=self.product,
+            movement_type=self.exit_type,
+            site=self.site,
+            quantity=2,
+        )
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            reverse("inventory:inventory_physical"),
+            {"action": "close"},
+        )
+        self.assertEqual(response.status_code, 302)
+        line.refresh_from_db()
+        # L'attendu est refigé sur le stock réel à la clôture (8), pas sur
+        # le cliché d'ouverture (10) : écart -3, pas -5.
+        self.assertEqual(line.expected_qty, 8)
+        self.assertEqual(line.difference, -3)
+        adjustment = StockMovement.objects.filter(
+            product=self.product, movement_type=self.adjust_minus
+        ).get()
+        self.assertEqual(adjustment.quantity, 3)
+        final_stock = (
+            Product.objects.with_stock_quantity(site=self.site)
+            .get(pk=self.product.pk)
+            .current_stock
+        )
+        self.assertEqual(final_stock, 5)
+
+    def test_close_skips_uncounted_lines(self):
+        from .models import InventoryCountSession
+
+        session, lines = self._start_session()
+        counted_line = lines[self.product.pk]
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": counted_line.pk, "counted_qty": "9"},
+        )
+        # other_product n'est pas compté : aucun ajustement ne doit être créé.
+        self.client.force_login(self.manager)
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.CLOSED)
+        self.assertEqual(
+            StockMovement.objects.filter(product=self.product, movement_type=self.adjust_minus).count(),
+            1,
+        )
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product=self.other_product,
+                movement_type__code__startswith="AJUSTEMENT",
+            ).exists()
+        )
+        other_stock = (
+            Product.objects.with_stock_quantity(site=self.site)
+            .get(pk=self.other_product.pk)
+            .current_stock
+        )
+        self.assertEqual(other_stock, 4)
+
+    def test_large_variance_requires_concordant_recount(self):
+        from .models import InventoryCountSession
+
+        session, lines = self._start_session()
+        line = lines[self.product.pk]
+        # Écart de 10 unités (stock 10, compté 0) : au-dessus du seuil.
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "0"},
+        )
+        self.client.force_login(self.manager)
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
+        session.refresh_from_db()
+        # Clôture refusée tant que la ligne n'est pas recomptée.
+        self.assertEqual(session.status, InventoryCountSession.Status.OPEN)
+        # Second comptage concordant : ressaisie de la même quantité.
+        self.client.force_login(self.user)
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "0"},
+        )
+        line.refresh_from_db()
+        self.assertTrue(line.verified)
+        self.client.force_login(self.manager)
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.CLOSED)
+        adjustment = StockMovement.objects.filter(
+            product=self.product, movement_type=self.adjust_minus
+        ).get()
+        self.assertEqual(adjustment.quantity, 10)
+
+    def test_changed_count_resets_verification(self):
+        session, lines = self._start_session()
+        line = lines[self.product.pk]
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "0"},
+        )
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "0"},
+        )
+        line.refresh_from_db()
+        self.assertTrue(line.verified)
+        # Une nouvelle valeur annule la vérification.
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "2"},
+        )
+        line.refresh_from_db()
+        self.assertFalse(line.verified)
+
+    def test_manual_movement_blocked_during_count(self):
+        self._start_session()
+        payload = {
+            "product": self.product.pk,
+            "movement_type": self.entry_type.pk,
+            "quantity": 3,
+            "movement_date": timezone.now().strftime("%Y-%m-%dT%H:%M"),
+            "document_number": "REC-BLOQUE",
+            "comment": "Devrait être refusé",
+            "site": self.site.pk,
+        }
+        before = StockMovement.objects.count()
+        self.client.post(reverse("inventory:record_movement"), data=payload)
+        self.assertEqual(StockMovement.objects.count(), before)
+
+    def test_sale_confirmation_invalidates_count(self):
+        session, lines = self._start_session()
+        line = lines[self.product.pk]
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "10"},
+        )
+        line.refresh_from_db()
+        self.assertEqual(line.counted_qty, 10)
+        customer = Customer.objects.create(name="Client Inventaire")
+        sale = Sale.objects.create(
+            customer=customer,
+            site=self.site,
+            reference="V-INV-1",
+        )
+        SaleItem.objects.create(
+            sale=sale,
+            product=self.product,
+            quantity=2,
+            unit_price=Decimal("2000.00"),
+        )
+        invalidated = sale.confirm(site=self.site)
+        self.assertIn(self.product.name, invalidated)
+        line.refresh_from_db()
+        # Le comptage est caduc : la ligne repasse à « non compté ».
+        self.assertIsNone(line.counted_qty)
+        self.assertFalse(line.verified)
