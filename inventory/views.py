@@ -1482,10 +1482,10 @@ def inventory_physical(request):
     if request.method == "POST" and request.POST.get("action") == "start":
         if not can_manage:
             messages.error(request, "Seul un responsable peut démarrer un inventaire.")
-            return redirect(reverse("inventory:inventory_physical"))
+            return redirect(request.get_full_path())
         if session is not None:
             messages.error(request, "Un inventaire est déjà en cours sur ce site.")
-            return redirect(reverse("inventory:inventory_physical"))
+            return redirect(request.get_full_path())
         category = Category.objects.filter(pk=request.POST.get("category") or None).first()
         brand = Brand.objects.filter(pk=request.POST.get("brand") or None).first()
         scope_parts = [part for part in (category and category.name, brand and brand.name) if part]
@@ -1498,9 +1498,16 @@ def inventory_physical(request):
             created_by=request.user if request.user.is_authenticated else None,
         )
         messages.success(request, f"Inventaire démarré — {session.scope_label}.")
-        return redirect(reverse("inventory:inventory_physical"))
+        return redirect(request.get_full_path())
 
     if session is None:
+        # Le panneau de démarrage repropose le dernier périmètre utilisé
+        # sur ce site au lieu de revenir à l'état initial.
+        last_session = (
+            InventoryCountSession.objects.filter(site=current_site)
+            .order_by("-started_at")
+            .first()
+        )
         context = {
             "session": None,
             "can_manage": can_manage,
@@ -1508,6 +1515,8 @@ def inventory_physical(request):
             "site_locked": site_locked,
             "categories": Category.objects.order_by("name"),
             "brands": Brand.objects.order_by("name"),
+            "last_category_id": last_session.category_id if last_session else None,
+            "last_brand_id": last_session.brand_id if last_session else None,
         }
         context.update(site_context)
         return render(request, "inventory/inventory_physical.html", context)
@@ -1575,7 +1584,7 @@ def inventory_physical(request):
             # périmés) : aucune quantité appliquée, aucun ajustement.
             if not can_manage:
                 messages.error(request, "Seul un responsable peut annuler un inventaire.")
-                return redirect(reverse("inventory:inventory_physical"))
+                return redirect(request.get_full_path())
             session.status = InventoryCountSession.Status.CANCELLED
             session.closed_at = timezone.now()
             session.save(update_fields=["status", "closed_at", "updated_at"])
@@ -1584,7 +1593,7 @@ def inventory_physical(request):
                 "Inventaire annulé : aucun ajustement de stock n'a été généré."
                 " Vous pouvez démarrer une nouvelle session.",
             )
-            return redirect(reverse("inventory:inventory_physical"))
+            return redirect(request.get_full_path())
 
         updated = 0
         with transaction.atomic():
@@ -1613,7 +1622,7 @@ def inventory_physical(request):
                 # les ajustements de stock.
                 if not can_manage:
                     messages.error(request, "Seul un responsable peut clôturer un inventaire.")
-                    return redirect(reverse("inventory:inventory_physical"))
+                    return redirect(request.get_full_path())
                 # Option « inventaire général » : ce qui n'a pas été compté
                 # est considéré comme absent. Décision explicite du
                 # responsable (case cochée + confirmation), donc les lignes
@@ -1652,8 +1661,10 @@ def inventory_physical(request):
                         " important et doivent être recomptées (ressaisissez la quantité pour"
                         " confirmer le comptage).",
                     )
+                    recount_params = request.GET.copy()
+                    recount_params["recount_only"] = "1"
                     return redirect(
-                        reverse("inventory:inventory_physical") + "?recount_only=1"
+                        f"{reverse('inventory:inventory_physical')}?{recount_params.urlencode()}"
                     )
                 adjustments = []
                 skipped_uncounted = 0
@@ -1666,7 +1677,7 @@ def inventory_physical(request):
                     movement_type = _get_adjustment_movement_type(line.difference > 0)
                     if movement_type is None:
                         messages.error(request, "Aucun type de mouvement d'ajustement disponible.")
-                        return redirect(reverse("inventory:inventory_physical"))
+                        return redirect(request.get_full_path())
                     movement = StockMovement(
                         product=line.product,
                         movement_type=movement_type,
@@ -1697,12 +1708,12 @@ def inventory_physical(request):
                         " (aucun ajustement généré pour elles)."
                     )
                 messages.success(request, closing_message)
-                return redirect(reverse("inventory:inventory_physical"))
+                return redirect(request.get_full_path())
         if updated:
             messages.success(request, f"{updated} ligne(s) mises à jour.")
         else:
             messages.info(request, "Aucune ligne mise à jour.")
-        return redirect(reverse("inventory:inventory_physical"))
+        return redirect(request.get_full_path())
 
     totals = lines_qs.aggregate(
         total_difference=Coalesce(Sum("difference"), Value(0)),
@@ -1762,6 +1773,127 @@ def inventory_physical(request):
     }
     context.update(site_context)
     return render(request, "inventory/inventory_physical.html", context)
+
+
+def inventory_sessions_history(request):
+    """Historique des inventaires du site : sessions clôturées, annulées
+    et en cours, avec leurs totaux. Réservé aux responsables."""
+    site_context = _site_context(request)
+    current_site = site_context["action_site"] or site_context["active_site"]
+    if not (request.user.is_staff or request.user.is_superuser):
+        messages.error(request, "Seul un responsable peut consulter l'historique des inventaires.")
+        return redirect(reverse("inventory:inventory_physical"))
+
+    sessions = (
+        InventoryCountSession.objects.select_related("site", "category", "brand", "created_by")
+        .annotate(
+            line_count=Count("lines", distinct=True),
+            counted_lines=Count(
+                "lines", filter=Q(lines__counted_qty__isnull=False), distinct=True
+            ),
+            total_difference=Coalesce(Sum("lines__difference"), Value(0)),
+            total_loss=Coalesce(
+                Sum("lines__value_loss"),
+                Value(Decimal("0.00")),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            ),
+        )
+        .order_by("-started_at")
+    )
+    if current_site is not None:
+        sessions = sessions.filter(site=current_site)
+
+    paginator = Paginator(sessions, 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    context = {
+        "page_obj": page_obj,
+        "sessions": page_obj.object_list,
+        "current_site": current_site,
+    }
+    context.update(site_context)
+    return render(request, "inventory/inventory_sessions.html", context)
+
+
+def inventory_session_detail(request, pk):
+    """Détail en lecture seule d'une session passée : lignes, écarts et
+    ajustements générés. Permet de relancer un comptage du même périmètre
+    pour corriger une erreur (on ne rouvre jamais une session clôturée :
+    ses ajustements sont déjà appliqués au stock)."""
+    site_context = _site_context(request)
+    if not (request.user.is_staff or request.user.is_superuser):
+        messages.error(request, "Seul un responsable peut consulter l'historique des inventaires.")
+        return redirect(reverse("inventory:inventory_physical"))
+
+    session = get_object_or_404(
+        InventoryCountSession.objects.select_related("site", "category", "brand", "created_by"),
+        pk=pk,
+    )
+
+    if request.method == "POST" and request.POST.get("action") == "recount":
+        if session.is_open:
+            messages.info(request, "Cette session est encore ouverte : poursuivez le comptage.")
+            return redirect(reverse("inventory:inventory_physical") + f"?site={session.site_id}")
+        if InventoryCountSession.objects.filter(
+            site=session.site, status=InventoryCountSession.Status.OPEN
+        ).exists():
+            messages.error(
+                request,
+                "Un inventaire est déjà en cours sur ce site : clôturez-le ou annulez-le d'abord.",
+            )
+            return redirect(reverse("inventory:inventory_session_detail", args=[session.pk]))
+        scope_parts = [
+            part
+            for part in (session.category and session.category.name, session.brand and session.brand.name)
+            if part
+        ]
+        scope_suffix = f" ({', '.join(scope_parts)})" if scope_parts else ""
+        InventoryCountSession.objects.create(
+            name=f"Inventaire du {timezone.now().strftime('%d/%m/%Y %H:%M')}{scope_suffix}",
+            site=session.site,
+            category=session.category,
+            brand=session.brand,
+            created_by=request.user if request.user.is_authenticated else None,
+            notes=f"Recomptage correctif du périmètre de « {session.name} »",
+        )
+        messages.success(
+            request,
+            "Nouveau comptage démarré sur le même périmètre : les écarts constatés"
+            " corrigeront les erreurs de la session précédente.",
+        )
+        return redirect(reverse("inventory:inventory_physical") + f"?site={session.site_id}")
+
+    lines = session.lines.select_related("product", "product__brand", "product__category").order_by(
+        "product__name"
+    )
+    totals = lines.aggregate(
+        total_difference=Coalesce(Sum("difference"), Value(0)),
+        total_loss=Coalesce(
+            Sum("value_loss"),
+            Value(Decimal("0.00")),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ),
+        counted_lines=Count("id", filter=Q(counted_qty__isnull=False)),
+        line_count=Count("id"),
+    )
+    adjustments = (
+        StockMovement.objects.filter(comment=f"Inventaire {session.name}")
+        .select_related("product", "movement_type", "performed_by")
+        .order_by("product__name")
+    )
+    open_session_exists = InventoryCountSession.objects.filter(
+        site=session.site, status=InventoryCountSession.Status.OPEN
+    ).exists()
+
+    context = {
+        "session": session,
+        "lines": lines,
+        "totals": totals,
+        "adjustments": adjustments,
+        "can_recount": not session.is_open and not open_session_exists,
+    }
+    context.update(site_context)
+    return render(request, "inventory/inventory_session_detail.html", context)
 
 
 def inventory_physical_line(request):
@@ -3966,11 +4098,24 @@ def _get_assigned_site(request):
 
 def _get_requested_site(request):
     site_id = request.GET.get("site")
-    if site_id:
-        return Site.objects.filter(pk=site_id).first()
-    # Site choisi via le sélecteur du topbar (superutilisateurs) : persiste
-    # en session pour que toutes les pages en tiennent compte.
-    if getattr(request.user, "is_superuser", False):
+    is_superuser = getattr(request.user, "is_superuser", False)
+    if site_id is not None:
+        if site_id == "":
+            # Choix explicite de la vue globale dans un filtre local :
+            # il devient le site actif partout.
+            if is_superuser:
+                request.session.pop("active_site_id", None)
+            return None
+        site = Site.objects.filter(pk=site_id).first()
+        if site is not None and is_superuser:
+            # Un site choisi via ?site= (filtre local, lien) persiste comme
+            # le sélecteur du topbar : plus de retour à l'état initial en
+            # changeant de page.
+            request.session["active_site_id"] = site.pk
+        return site
+    # Site choisi précédemment (topbar ou filtre local) : persiste en
+    # session pour que toutes les pages en tiennent compte.
+    if is_superuser:
         session_site_id = request.session.get("active_site_id")
         if session_site_id:
             return Site.objects.filter(pk=session_site_id).first()
