@@ -2180,3 +2180,132 @@ class InventoryZeroUncountedTests(TestCase):
             .current_stock
         )
         self.assertEqual(stock, 6)
+
+
+class InventorySessionLifecycleTests(TestCase):
+    def setUp(self):
+        self.manager = get_user_model().objects.create_user(
+            username="chef-cycle", password="chef-pass", is_staff=True
+        )
+        self.counter = get_user_model().objects.create_user(
+            username="compteur-cycle", password="compteur-pass"
+        )
+        self.site = Site.objects.create(name="Depot Cycle")
+        SiteAssignment.objects.create(user=self.manager, site=self.site)
+        SiteAssignment.objects.create(user=self.counter, site=self.site)
+        self.brand = Brand.objects.create(name="Marque Cycle")
+        self.category = Category.objects.create(name="Categorie Cycle")
+        self.entry_type, _ = MovementType.objects.get_or_create(
+            code="RECEPTION_CYCLE",
+            defaults={
+                "name": "Réception",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        self.product = Product.objects.create(
+            sku="CYCLE-1",
+            name="Produit cycle",
+            brand=self.brand,
+            category=self.category,
+            purchase_price=Decimal("1000.00"),
+        )
+        StockMovement.objects.create(
+            product=self.product,
+            movement_type=self.entry_type,
+            site=self.site,
+            quantity=10,
+        )
+        self.client.force_login(self.manager)
+
+    def _start(self):
+        from .models import InventoryCountSession
+
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
+        self.client.get(reverse("inventory:inventory_physical"))
+        return InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+
+    def test_cancel_discards_session_without_adjustments(self):
+        from .models import InventoryCountSession
+
+        session = self._start()
+        line = session.lines.get(product=self.product)
+        # Un comptage avec écart est saisi, puis la session est annulée.
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "2"},
+        )
+        response = self.client.post(
+            reverse("inventory:inventory_physical"), {"action": "cancel"}
+        )
+        self.assertEqual(response.status_code, 302)
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.CANCELLED)
+        self.assertIsNotNone(session.closed_at)
+        # Aucun ajustement : le stock reste à 10.
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product=self.product, movement_type__code__startswith="AJUSTEMENT"
+            ).exists()
+        )
+        stock = (
+            Product.objects.with_stock_quantity(site=self.site)
+            .get(pk=self.product.pk)
+            .current_stock
+        )
+        self.assertEqual(stock, 10)
+        # La page repropose le démarrage d'une session fraîche.
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        self.assertContains(response, "Démarrer un inventaire")
+
+    def test_cancel_requires_manager(self):
+        from .models import InventoryCountSession
+
+        session = self._start()
+        self.client.force_login(self.counter)
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "cancel"})
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.OPEN)
+
+    def test_cancel_releases_movement_freeze(self):
+        session = self._start()
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "cancel"})
+        payload = {
+            "product": self.product.pk,
+            "movement_type": self.entry_type.pk,
+            "quantity": 3,
+            "movement_date": timezone.now().strftime("%Y-%m-%dT%H:%M"),
+            "document_number": "REC-APRES-ANNULATION",
+            "comment": "Doit passer",
+            "site": self.site.pk,
+        }
+        before = StockMovement.objects.count()
+        self.client.post(reverse("inventory:record_movement"), data=payload)
+        self.assertEqual(StockMovement.objects.count(), before + 1)
+
+    def test_ajax_rejects_cancelled_session(self):
+        from .models import InventoryCountSession
+
+        session = self._start()
+        line = session.lines.get(product=self.product)
+        session.status = InventoryCountSession.Status.CANCELLED
+        session.save(update_fields=["status"])
+        response = self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "5"},
+        )
+        self.assertEqual(response.status_code, 409)
+
+    def test_stale_session_shows_warning(self):
+        session = self._start()
+        session.started_at = timezone.now() - timedelta(days=10)
+        session.save(update_fields=["started_at"])
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        self.assertContains(response, "ouvert depuis 10 jours")
+        self.assertContains(response, "Annuler l'inventaire")
+
+    def test_fresh_session_has_no_warning(self):
+        self._start()
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        self.assertNotContains(response, "ouvert depuis")

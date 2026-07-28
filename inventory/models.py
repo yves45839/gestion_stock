@@ -678,6 +678,9 @@ class InventoryCountSession(TimeStampedModel):
     class Status(models.TextChoices):
         OPEN = "open", "Ouvert"
         CLOSED = "closed", "Cloture"
+        # Session abandonnée : aucune quantité comptée n'est appliquée,
+        # aucun ajustement de stock n'est généré.
+        CANCELLED = "cancelled", "Annulé"
 
     name = models.CharField(max_length=200)
     site = models.ForeignKey(
@@ -726,6 +729,14 @@ class InventoryCountSession(TimeStampedModel):
     @property
     def is_closed(self) -> bool:
         return self.status == self.Status.CLOSED
+
+    @property
+    def is_open(self) -> bool:
+        return self.status == self.Status.OPEN
+
+    @property
+    def age_days(self) -> int:
+        return max((timezone.now() - self.started_at).days, 0)
 
     @property
     def scope_label(self) -> str:

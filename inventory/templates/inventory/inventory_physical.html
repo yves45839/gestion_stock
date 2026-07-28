@@ -67,6 +67,19 @@
     </div>
 {% else %}
 
+{% if session_is_stale %}
+    <div class="message warning" role="alert">
+        Cet inventaire est ouvert depuis {{ session_age_days }} jour{{ session_age_days|pluralize }} :
+        les quantités comptées ne reflètent probablement plus les rayons.
+        {% if can_manage %}
+            Annulez la session (bouton « Annuler l'inventaire » en bas de page) et redémarrez un comptage frais,
+            ou clôturez-la aujourd'hui si le comptage est réellement terminé.
+        {% else %}
+            Signalez-le à un responsable avant de poursuivre le comptage.
+        {% endif %}
+    </div>
+{% endif %}
+
 <div class="surface" style="margin-bottom:0.75rem;">
     <form method="get" class="toolbar" style="gap:0.75rem; flex-wrap:wrap;">
         <div style="flex:1; min-width:260px;">
@@ -221,6 +234,8 @@
                     {% endif %}
                     <button type="submit" name="action" value="save" class="btn secondary">Enregistrer</button>
                     {% if can_manage %}
+                        <button type="submit" name="action" value="cancel" class="btn secondary"
+                                data-cancel-button>Annuler l'inventaire</button>
                         <button type="submit" name="action" value="close" class="btn"
                                 data-close-button
                                 data-uncounted="{{ uncounted_count }}"
@@ -418,6 +433,15 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-count-input]").forEach((input) => {
         input.addEventListener("change", () => saveLine(input));
     });
+
+    const cancelButton = document.querySelector("[data-cancel-button]");
+    if (cancelButton) {
+        cancelButton.addEventListener("click", (event) => {
+            if (!window.confirm("Annuler cet inventaire ? Les quantités saisies seront abandonnées et AUCUN ajustement de stock ne sera généré.")) {
+                event.preventDefault();
+            }
+        });
+    }
 
     const closeButton = document.querySelector("[data-close-button]");
     if (closeButton) {
