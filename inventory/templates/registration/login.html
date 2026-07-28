@@ -7,10 +7,10 @@
     <title>Connexion</title>
     <style>
         :root {
-            --accent: #0f7c90;
-            --border: #e5e7eb;
-            --text: #1f2933;
-            --muted: #6b7280;
+            --accent: #1f3c88;
+            --border: #d9dee8;
+            --text: #1a2233;
+            --muted: #5a6472;
         }
         * {
             box-sizing: border-box;
@@ -22,7 +22,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #f7f8fa;
+            background: linear-gradient(160deg, #16295e 0%, #1f3c88 55%, #2a4da6 100%);
             color: var(--text);
         }
         .card {
@@ -30,8 +30,8 @@
             border-radius: 16px;
             padding: 2rem;
             width: min(420px, 92vw);
-            box-shadow: 0 12px 30px rgba(15, 124, 144, 0.08);
-            border: 1px solid rgba(15, 124, 144, 0.08);
+            box-shadow: 0 18px 48px rgba(10, 20, 50, 0.35);
+            border: none;
         }
         h1 {
             margin: 0 0 0.5rem;
@@ -61,7 +61,7 @@
             padding: 0.9rem 1rem;
             border: none;
             border-radius: 12px;
-            background: linear-gradient(135deg, #0d6f80, #146f85);
+            background: linear-gradient(135deg, #16295e, #1f3c88);
             color: #fff;
             font-weight: 700;
             font-size: 1rem;
@@ -70,7 +70,7 @@
         }
         button:hover {
             transform: translateY(-1px);
-            box-shadow: 0 10px 20px rgba(15, 124, 144, 0.15);
+            box-shadow: 0 10px 20px rgba(22, 41, 94, 0.3);
         }
         .help {
             margin-top: 1rem;
@@ -91,6 +91,9 @@
 </head>
 <body>
     <div class="card">
+        <p style="margin:0 0 0.25rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase; font-size:0.8rem;">
+            <span style="color:#1f3c88;">Label</span> <span style="color:#a84a15;">Retail</span> · LR Stock
+        </p>
         <h1>Connexion</h1>
         <p>Identifiez-vous pour accéder à l'application.</p>
         {% if form.non_field_errors %}
