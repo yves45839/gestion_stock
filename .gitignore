@@ -1,11 +1,14 @@
-cat > .gitignore <<'EOF'
 # Python
 __pycache__/
 *.py[cod]
 .env
+
 # Django / local
 db.sqlite3
 /media/
 /backups/
+/staticfiles/
 *.log
-EOF
+
+# État d'exécution réécrit par l'application (compteurs de quotas API)
+/var/
