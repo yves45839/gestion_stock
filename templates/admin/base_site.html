@@ -1,0 +1,93 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}Gestion de stock | Administration{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    /* Habillage Label Retail de l'admin Django : on redéfinit les
+       variables CSS officielles de l'admin (base.css) plutôt que de
+       restyler chaque composant. Le mode sombre de Django redéfinit ses
+       propres variables (couleurs de corps, liens...) avec une
+       spécificité supérieure : seuls l'en-tête, les boutons et les
+       accents de marque, sûrs dans les deux modes, sont imposés ici. */
+    /* Sûr dans les deux modes : en-tête, fil d'ariane, boutons (texte
+       blanc sur bleu marque dans les deux cas). */
+    :root {
+        --secondary: #1f3c88;
+        --accent: #f0a06a;
+        --header-color: #e8edf9;
+        --breadcrumbs-bg: #16295e;
+        --breadcrumbs-fg: #c1cdea;
+        --breadcrumbs-link-fg: #ffffff;
+        --button-bg: #1f3c88;
+        --button-hover-bg: #16295e;
+        --default-button-bg: #16295e;
+        --default-button-hover-bg: #1f3c88;
+        --object-tools-bg: #a84a15;
+        --object-tools-hover-bg: #8f3e10;
+    }
+    /* Mode clair uniquement : liens bleu marque sur fond blanc. En mode
+       sombre, Django garde ses liens bleu clair lisibles sur fond noir. */
+    html[data-theme="light"] {
+        --primary: #1f3c88;
+        --link-fg: #1f3c88;
+        --link-hover-color: #16295e;
+        --link-selected-fg: #16295e;
+    }
+    @media (prefers-color-scheme: light) {
+        html:not([data-theme="dark"]) {
+            --primary: #1f3c88;
+            --link-fg: #1f3c88;
+            --link-hover-color: #16295e;
+            --link-selected-fg: #16295e;
+        }
+    }
+    html[data-theme="dark"] {
+        --secondary: #16295e;
+    }
+    #header {
+        border-bottom: 3px solid #c1581e;
+    }
+    #branding .admin-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        text-decoration: none;
+        color: var(--header-link-color);
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+    #branding .admin-brand .dot {
+        display: inline-block;
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+        background: #c1581e;
+    }
+    #branding .admin-brand small {
+        display: block;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: var(--header-color);
+        text-transform: none;
+    }
+    .module h2, .module caption, .inline-group h2 {
+        background: var(--secondary);
+    }
+</style>
+{% endblock %}
+
+{% block branding %}
+<a class="admin-brand" href="{% url 'admin:index' %}">
+    <span class="dot" aria-hidden="true"></span>
+    <span>
+        LR Stock
+        <small>Administration Label Retail</small>
+    </span>
+</a>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
