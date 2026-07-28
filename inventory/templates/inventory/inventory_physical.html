@@ -43,7 +43,7 @@
                     <select id="start-category" name="category">
                         <option value="">Toutes les catégories</option>
                         {% for category in categories %}
-                            <option value="{{ category.pk }}">{{ category.name }}</option>
+                            <option value="{{ category.pk }}" {% if category.pk == last_category_id %}selected{% endif %}>{{ category.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -52,7 +52,7 @@
                     <select id="start-brand" name="brand">
                         <option value="">Toutes les marques</option>
                         {% for brand in brands %}
-                            <option value="{{ brand.pk }}">{{ brand.name }}</option>
+                            <option value="{{ brand.pk }}" {% if brand.pk == last_brand_id %}selected{% endif %}>{{ brand.name }}</option>
                         {% endfor %}
                     </select>
                 </div>

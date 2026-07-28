@@ -2512,3 +2512,83 @@ class InventoryHistoryTests(TestCase):
         self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
         session.refresh_from_db()
         self.assertEqual(session.status, InventoryCountSession.Status.CLOSED)
+
+
+class InventoryStatePersistenceTests(TestCase):
+    """Le site choisi et les filtres de la page d'inventaire ne doivent plus
+    revenir à l'état initial en changeant de page ou en enregistrant."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="vincent-persist", password="pass", email="vp@example.com"
+        )
+        self.manager = get_user_model().objects.create_user(
+            username="chef-persist", password="pass", is_staff=True
+        )
+        self.site = Site.objects.create(name="Depot Persist")
+        SiteAssignment.objects.create(user=self.manager, site=self.site)
+        self.brand = Brand.objects.create(name="Marque Persist")
+        self.category = Category.objects.create(name="Categorie Persist")
+        self.other_category = Category.objects.create(name="Autre Persist")
+        self.product = Product.objects.create(
+            sku="PERSIST-1",
+            name="Produit persist",
+            brand=self.brand,
+            category=self.category,
+        )
+
+    def test_site_from_local_filter_persists_for_superuser(self):
+        self.client.force_login(self.superuser)
+        # Le site est choisi via un ?site= de filtre local...
+        self.client.get(reverse("inventory:dashboard"), {"site": self.site.pk})
+        self.assertEqual(self.client.session["active_site_id"], self.site.pk)
+        # ...et l'inventaire physique s'ouvre sur ce site sans paramètre.
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Depot Persist")
+
+    def test_explicit_global_choice_clears_persisted_site(self):
+        self.client.force_login(self.superuser)
+        self.client.get(reverse("inventory:dashboard"), {"site": self.site.pk})
+        self.client.get(reverse("inventory:dashboard"), {"site": ""})
+        self.assertNotIn("active_site_id", self.client.session)
+
+    def test_save_redirect_preserves_filters_and_site(self):
+        from .models import InventoryCountSession
+
+        self.client.force_login(self.manager)
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
+        self.client.get(reverse("inventory:inventory_physical"))
+        session = InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+        line = session.lines.get(product=self.product)
+        url = reverse("inventory:inventory_physical") + "?uncounted_only=1&q=persist"
+        response = self.client.post(
+            url,
+            {"action": "save", f"counted_{line.pk}": "4", f"orig_{line.pk}": ""},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("uncounted_only=1", response.url)
+        self.assertIn("q=persist", response.url)
+
+    def test_start_panel_preselects_last_scope(self):
+        from .models import InventoryCountSession
+
+        self.client.force_login(self.manager)
+        # Une session sur la catégorie est démarrée puis annulée.
+        self.client.post(
+            reverse("inventory:inventory_physical"),
+            {"action": "start", "category": self.category.pk},
+        )
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "cancel"})
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        content = response.content.decode()
+        self.assertIn(
+            f'<option value="{self.category.pk}" selected>Categorie Persist</option>',
+            content,
+        )
+        self.assertNotIn(
+            f'<option value="{self.other_category.pk}" selected>',
+            content,
+        )
