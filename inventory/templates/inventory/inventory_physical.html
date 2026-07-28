@@ -227,16 +227,22 @@
             {% if not session.is_closed %}
                 <div class="toolbar" style="align-items:center;">
                     {% if can_manage %}
+                        {# Annuler / clôturer passent par le mini-formulaire
+                           #inventory-actions-form (attribut form) : soumettre
+                           le grand formulaire dépasserait la limite de champs
+                           de Django sur les gros catalogues. #}
                         <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.88rem;">
-                            <input type="checkbox" name="zero_uncounted" value="1" data-zero-uncounted />
+                            <input type="checkbox" name="zero_uncounted" value="1" form="inventory-actions-form" data-zero-uncounted />
                             <span>Mettre à zéro les produits non comptés</span>
                         </label>
                     {% endif %}
                     <button type="submit" name="action" value="save" class="btn secondary">Enregistrer</button>
                     {% if can_manage %}
                         <button type="submit" name="action" value="cancel" class="btn secondary"
+                                form="inventory-actions-form"
                                 data-cancel-button>Annuler l'inventaire</button>
                         <button type="submit" name="action" value="close" class="btn"
+                                form="inventory-actions-form"
                                 data-close-button
                                 data-uncounted="{{ uncounted_count }}"
                                 data-recount="{{ recount_pending }}">Clôturer et générer les ajustements</button>
@@ -245,6 +251,13 @@
             {% endif %}
         </div>
     </form>
+    {% if can_manage and not session.is_closed %}
+        {# Formulaire léger des actions de session : quelques champs
+           seulement, quelle que soit la taille du catalogue. #}
+        <form method="post" id="inventory-actions-form">
+            {% csrf_token %}
+        </form>
+    {% endif %}
 </div>
 {{ product_dataset|json_script:"inventory-product-dataset" }}
 <script>
