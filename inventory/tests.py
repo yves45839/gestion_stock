@@ -2027,3 +2027,156 @@ class TopbarNavigationTests(TestCase):
         response = self.client.get(reverse("inventory:dashboard"))
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("login"), response.url)
+
+
+class InventoryZeroUncountedTests(TestCase):
+    def setUp(self):
+        self.manager = get_user_model().objects.create_user(
+            username="chef-zero", password="chef-pass", is_staff=True
+        )
+        self.site = Site.objects.create(name="Depot Zero")
+        SiteAssignment.objects.create(user=self.manager, site=self.site)
+        self.brand = Brand.objects.create(name="Marque Zero")
+        self.category = Category.objects.create(name="Categorie Zero")
+        self.entry_type, _ = MovementType.objects.get_or_create(
+            code="RECEPTION_ZERO",
+            defaults={
+                "name": "Réception",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        self.adjust_minus, _ = MovementType.objects.get_or_create(
+            code="AJUSTEMENT_MOINS",
+            defaults={
+                "name": "Ajustement -",
+                "direction": MovementType.MovementDirection.EXIT,
+            },
+        )
+        MovementType.objects.get_or_create(
+            code="AJUSTEMENT_PLUS",
+            defaults={
+                "name": "Ajustement +",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        self.counted_product = Product.objects.create(
+            sku="ZERO-1",
+            name="Produit compte",
+            brand=self.brand,
+            category=self.category,
+            purchase_price=Decimal("1000.00"),
+        )
+        self.uncounted_product = Product.objects.create(
+            sku="ZERO-2",
+            name="Produit oublie",
+            brand=self.brand,
+            category=self.category,
+            purchase_price=Decimal("2000.00"),
+        )
+        StockMovement.objects.create(
+            product=self.counted_product,
+            movement_type=self.entry_type,
+            site=self.site,
+            quantity=10,
+        )
+        StockMovement.objects.create(
+            product=self.uncounted_product,
+            movement_type=self.entry_type,
+            site=self.site,
+            quantity=8,
+        )
+        self.client.force_login(self.manager)
+
+    def _start_and_get_lines(self):
+        from .models import InventoryCountSession
+
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
+        self.client.get(reverse("inventory:inventory_physical"))
+        session = InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+        return session, {line.product_id: line for line in session.lines.all()}
+
+    def test_close_with_zero_uncounted_zeroes_and_adjusts(self):
+        from .models import InventoryCountSession
+
+        session, lines = self._start_and_get_lines()
+        # Le premier produit est compté (10, conforme) ; le second est oublié.
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": lines[self.counted_product.pk].pk, "counted_qty": "10"},
+        )
+        self.client.post(
+            reverse("inventory:inventory_physical"),
+            {"action": "close", "zero_uncounted": "1"},
+        )
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.CLOSED)
+        forgotten = lines[self.uncounted_product.pk]
+        forgotten.refresh_from_db()
+        # La ligne oubliée est comptée à zéro, vérifiée (décision explicite
+        # du responsable, pas de blocage recomptage), écart -8.
+        self.assertEqual(forgotten.counted_qty, 0)
+        self.assertTrue(forgotten.verified)
+        self.assertEqual(forgotten.difference, -8)
+        adjustment = StockMovement.objects.filter(
+            product=self.uncounted_product, movement_type=self.adjust_minus
+        ).get()
+        self.assertEqual(adjustment.quantity, 8)
+        stock = (
+            Product.objects.with_stock_quantity(site=self.site)
+            .get(pk=self.uncounted_product.pk)
+            .current_stock
+        )
+        self.assertEqual(stock, 0)
+        # Le produit compté conforme n'est pas touché.
+        counted_stock = (
+            Product.objects.with_stock_quantity(site=self.site)
+            .get(pk=self.counted_product.pk)
+            .current_stock
+        )
+        self.assertEqual(counted_stock, 10)
+
+    def test_close_without_option_keeps_uncounted_stock(self):
+        from .models import InventoryCountSession
+
+        session, lines = self._start_and_get_lines()
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": lines[self.counted_product.pk].pk, "counted_qty": "10"},
+        )
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.CLOSED)
+        forgotten = lines[self.uncounted_product.pk]
+        forgotten.refresh_from_db()
+        self.assertIsNone(forgotten.counted_qty)
+        stock = (
+            Product.objects.with_stock_quantity(site=self.site)
+            .get(pk=self.uncounted_product.pk)
+            .current_stock
+        )
+        self.assertEqual(stock, 8)
+
+    def test_zero_uncounted_does_not_override_counted_lines(self):
+        from .models import InventoryCountSession
+
+        session, lines = self._start_and_get_lines()
+        # Compté à 6 (écart -4, sous les seuils de recomptage).
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": lines[self.counted_product.pk].pk, "counted_qty": "6"},
+        )
+        self.client.post(
+            reverse("inventory:inventory_physical"),
+            {"action": "close", "zero_uncounted": "1"},
+        )
+        counted = lines[self.counted_product.pk]
+        counted.refresh_from_db()
+        self.assertEqual(counted.counted_qty, 6)
+        stock = (
+            Product.objects.with_stock_quantity(site=self.site)
+            .get(pk=self.counted_product.pk)
+            .current_stock
+        )
+        self.assertEqual(stock, 6)
