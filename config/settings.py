@@ -94,6 +94,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 LOGIN_REDIRECT_URL = 'inventory:dashboard'
 LOGOUT_REDIRECT_URL = 'login'
 
+# Le formulaire d'inventaire physique porte 2 champs par produit (quantité
+# comptée + témoin anti-écrasement) : la limite par défaut de Django (1000)
+# casse la sauvegarde sans JavaScript dès ~500 produits.
+DATA_UPLOAD_MAX_NUMBER_FIELDS = int(os.getenv('DJANGO_DATA_UPLOAD_MAX_NUMBER_FIELDS', '10000'))
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

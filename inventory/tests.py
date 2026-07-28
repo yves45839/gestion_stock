@@ -2309,3 +2309,59 @@ class InventorySessionLifecycleTests(TestCase):
         self._start()
         response = self.client.get(reverse("inventory:inventory_physical"))
         self.assertNotContains(response, "ouvert depuis")
+
+
+class InventoryLargeCatalogTests(TestCase):
+    """Le formulaire d'inventaire porte 2 champs par produit : sur un gros
+    catalogue, les actions de session ne doivent pas soumettre le grand
+    formulaire (TooManyFieldsSent en production avec 909 produits)."""
+
+    def setUp(self):
+        self.manager = get_user_model().objects.create_user(
+            username="chef-gros", password="chef-pass", is_staff=True
+        )
+        self.site = Site.objects.create(name="Depot Gros Catalogue")
+        SiteAssignment.objects.create(user=self.manager, site=self.site)
+        self.brand = Brand.objects.create(name="Marque Gros")
+        self.category = Category.objects.create(name="Categorie Gros")
+        Product.objects.bulk_create(
+            [
+                Product(
+                    sku=f"GROS-{index:04d}",
+                    name=f"Produit gros catalogue {index}",
+                    brand=self.brand,
+                    category=self.category,
+                )
+                for index in range(60)
+            ]
+        )
+        self.client.force_login(self.manager)
+
+    def test_session_action_buttons_use_light_form(self):
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
+        response = self.client.get(reverse("inventory:inventory_physical"))
+        content = response.content.decode()
+        # Le mini-formulaire d'actions existe et les boutons de session le
+        # ciblent : leur POST ne transporte pas les champs des lignes.
+        self.assertIn('id="inventory-actions-form"', content)
+        self.assertEqual(content.count('form="inventory-actions-form"'), 3)
+
+    def test_close_succeeds_with_strict_field_limit(self):
+        from .models import InventoryCountSession
+
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
+        self.client.get(reverse("inventory:inventory_physical"))
+        session = InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+        self.assertEqual(session.lines.count(), 60)
+        # Avec 60 produits, l'ancien POST global aurait porté 120+ champs.
+        # Le POST de clôture n'en porte qu'une poignée : il doit passer même
+        # sous une limite stricte.
+        with override_settings(DATA_UPLOAD_MAX_NUMBER_FIELDS=20):
+            response = self.client.post(
+                reverse("inventory:inventory_physical"), {"action": "close"}
+            )
+        self.assertEqual(response.status_code, 302)
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.CLOSED)
