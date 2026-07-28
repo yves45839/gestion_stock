@@ -20,6 +20,9 @@
         </div>
     </div>
     <div class="toolbar">
+        {% if can_manage %}
+            <a class="btn secondary" href="{% url 'inventory:inventory_sessions' %}">Historique</a>
+        {% endif %}
         <a class="btn secondary" href="{% url 'inventory:inventory_overview' %}">Retour produits</a>
     </div>
 </section>

@@ -1,0 +1,87 @@
+{% extends "inventory/base.html" %}
+{% block title %}Historique des inventaires{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Inventaire</p>
+        <h1 class="page-title">Historique des inventaires</h1>
+        <p class="lead">
+            Sessions {% if current_site %}du site {{ current_site.name }}{% else %}de tous les sites{% endif %} :
+            consultez les comptages passés et leurs ajustements.
+        </p>
+    </div>
+    <div class="toolbar">
+        <a class="btn secondary" href="{% url 'inventory:inventory_physical' %}">Retour à l'inventaire</a>
+    </div>
+</section>
+
+<div class="surface" style="overflow-x:auto;">
+    {% if sessions %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Session</th>
+                    <th>Périmètre</th>
+                    <th>Site</th>
+                    <th>Statut</th>
+                    <th>Démarrée le</th>
+                    <th>Terminée le</th>
+                    <th>Comptées</th>
+                    <th>Écart</th>
+                    <th>Démarque</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in sessions %}
+                    <tr data-href="{% url 'inventory:inventory_session_detail' s.pk %}">
+                        <td style="font-weight:700;">{{ s.name }}</td>
+                        <td>{{ s.scope_label }}</td>
+                        <td>{{ s.site.name|default:"-" }}</td>
+                        <td>
+                            {% if s.status == 'open' %}
+                                <span class="badge info">Ouvert</span>
+                            {% elif s.status == 'closed' %}
+                                <span class="badge success">Clôturé</span>
+                            {% else %}
+                                <span class="tag">Annulé</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ s.started_at|date:"d/m/Y H:i" }}</td>
+                        <td>{% if s.closed_at %}{{ s.closed_at|date:"d/m/Y H:i" }}{% else %}<span class="muted-text">—</span>{% endif %}</td>
+                        <td>{{ s.counted_lines }} / {{ s.line_count }}</td>
+                        <td>
+                            {% if s.total_difference < 0 %}
+                                <span style="color:var(--danger); font-weight:700;">{{ s.total_difference }}</span>
+                            {% elif s.total_difference > 0 %}
+                                <span style="color:var(--success); font-weight:700;">+{{ s.total_difference }}</span>
+                            {% else %}
+                                <span class="muted-text">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if s.total_loss > 0 %}
+                                <span style="color:var(--danger); font-weight:700;">-{{ s.total_loss }} FCFA</span>
+                            {% else %}
+                                <span class="muted-text">0</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if page_obj.has_other_pages %}
+            <nav class="pagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:0.75rem; gap:0.5rem;">
+                {% if page_obj.has_previous %}
+                    <a class="btn secondary" href="?page={{ page_obj.previous_page_number }}{% if selected_site %}&site={{ selected_site }}{% endif %}">Précédent</a>
+                {% else %}<span></span>{% endif %}
+                <span class="muted-text">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                    <a class="btn secondary" href="?page={{ page_obj.next_page_number }}{% if selected_site %}&site={{ selected_site }}{% endif %}">Suivant</a>
+                {% endif %}
+            </nav>
+        {% endif %}
+    {% else %}
+        <p class="muted-text" style="margin:0;">Aucune session d'inventaire pour l'instant.</p>
+    {% endif %}
+</div>
+{% endblock %}

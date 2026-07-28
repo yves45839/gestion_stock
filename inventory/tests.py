@@ -2365,3 +2365,150 @@ class InventoryLargeCatalogTests(TestCase):
         self.assertEqual(response.status_code, 302)
         session.refresh_from_db()
         self.assertEqual(session.status, InventoryCountSession.Status.CLOSED)
+
+
+class InventoryHistoryTests(TestCase):
+    def setUp(self):
+        self.manager = get_user_model().objects.create_user(
+            username="chef-histo", password="chef-pass", is_staff=True
+        )
+        self.counter = get_user_model().objects.create_user(
+            username="compteur-histo", password="compteur-pass"
+        )
+        self.site = Site.objects.create(name="Depot Histo")
+        SiteAssignment.objects.create(user=self.manager, site=self.site)
+        SiteAssignment.objects.create(user=self.counter, site=self.site)
+        self.brand = Brand.objects.create(name="Marque Histo")
+        self.category = Category.objects.create(name="Categorie Histo")
+        self.entry_type, _ = MovementType.objects.get_or_create(
+            code="RECEPTION_HISTO",
+            defaults={
+                "name": "Réception",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        MovementType.objects.get_or_create(
+            code="AJUSTEMENT_MOINS",
+            defaults={
+                "name": "Ajustement -",
+                "direction": MovementType.MovementDirection.EXIT,
+            },
+        )
+        MovementType.objects.get_or_create(
+            code="AJUSTEMENT_PLUS",
+            defaults={
+                "name": "Ajustement +",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        self.product = Product.objects.create(
+            sku="HISTO-1",
+            name="Produit histo",
+            brand=self.brand,
+            category=self.category,
+            purchase_price=Decimal("1000.00"),
+        )
+        StockMovement.objects.create(
+            product=self.product,
+            movement_type=self.entry_type,
+            site=self.site,
+            quantity=10,
+        )
+        self.client.force_login(self.manager)
+
+    def _start_count_close(self, counted="8"):
+        from .models import InventoryCountSession
+
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start", "category": self.category.pk})
+        self.client.get(reverse("inventory:inventory_physical"))
+        session = InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+        line = session.lines.get(product=self.product)
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": counted},
+        )
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
+        session.refresh_from_db()
+        return session
+
+    def test_history_requires_manager(self):
+        self.client.force_login(self.counter)
+        response = self.client.get(reverse("inventory:inventory_sessions"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_history_lists_closed_sessions(self):
+        session = self._start_count_close()
+        response = self.client.get(reverse("inventory:inventory_sessions"))
+        self.assertContains(response, session.name)
+        self.assertContains(response, "Clôturé")
+        self.assertContains(response, "1 / 1")
+
+    def test_detail_shows_lines_and_adjustments(self):
+        session = self._start_count_close(counted="8")
+        response = self.client.get(
+            reverse("inventory:inventory_session_detail", args=[session.pk])
+        )
+        self.assertContains(response, "Produit histo")
+        self.assertContains(response, "Ajustements de stock générés")
+        self.assertContains(response, "Sortie -2")
+        self.assertContains(response, "Recompter ce périmètre")
+
+    def test_recount_creates_new_session_with_same_scope(self):
+        from .models import InventoryCountSession
+
+        session = self._start_count_close()
+        response = self.client.post(
+            reverse("inventory:inventory_session_detail", args=[session.pk]),
+            {"action": "recount"},
+        )
+        self.assertEqual(response.status_code, 302)
+        new_session = InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+        self.assertEqual(new_session.category, self.category)
+        self.assertIn("Recomptage correctif", new_session.notes)
+
+    def test_recount_blocked_when_session_already_open(self):
+        from .models import InventoryCountSession
+
+        closed_session = self._start_count_close()
+        # une nouvelle session est déjà ouverte
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
+        open_count = InventoryCountSession.objects.filter(
+            status=InventoryCountSession.Status.OPEN
+        ).count()
+        self.client.post(
+            reverse("inventory:inventory_session_detail", args=[closed_session.pk]),
+            {"action": "recount"},
+        )
+        self.assertEqual(
+            InventoryCountSession.objects.filter(
+                status=InventoryCountSession.Status.OPEN
+            ).count(),
+            open_count,
+        )
+
+    def test_multi_day_session_remains_editable_and_closable(self):
+        from .models import InventoryCountSession
+
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
+        self.client.get(reverse("inventory:inventory_physical"))
+        session = InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+        # L'inventaire a été commencé il y a 5 jours : on peut le terminer.
+        session.started_at = timezone.now() - timedelta(days=5)
+        session.save(update_fields=["started_at"])
+        line = session.lines.get(product=self.product)
+        self.client.force_login(self.counter)
+        response = self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": line.pk, "counted_qty": "10"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.client.force_login(self.manager)
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
+        session.refresh_from_db()
+        self.assertEqual(session.status, InventoryCountSession.Status.CLOSED)

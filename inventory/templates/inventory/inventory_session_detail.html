@@ -1,0 +1,135 @@
+{% extends "inventory/base.html" %}
+{% block title %}{{ session.name }}{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Inventaire · historique</p>
+        <h1 class="page-title">{{ session.name }}</h1>
+        <div class="chip-row" style="margin-top:0.5rem;">
+            <span class="pill">Périmètre : {{ session.scope_label }}</span>
+            <span class="pill">Site : {{ session.site.name|default:"-" }}</span>
+            <span class="pill">Statut : {{ session.get_status_display }}</span>
+            <span class="pill">Démarrée le {{ session.started_at|date:"d/m/Y H:i" }}</span>
+            {% if session.closed_at %}<span class="pill">Terminée le {{ session.closed_at|date:"d/m/Y H:i" }}</span>{% endif %}
+            {% if session.created_by %}<span class="pill">Par {{ session.created_by.username }}</span>{% endif %}
+        </div>
+        {% if session.notes %}<p class="muted-text" style="margin:0.5rem 0 0;">{{ session.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+    <div class="toolbar">
+        <a class="btn secondary" href="{% url 'inventory:inventory_sessions' %}">Historique</a>
+        {% if can_recount %}
+            <form method="post" style="margin:0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="recount">
+                <button type="submit" class="btn" data-recount-button>Recompter ce périmètre</button>
+            </form>
+        {% endif %}
+    </div>
+</section>
+
+<div class="surface">
+    <div class="chip-row">
+        <span class="pill">Comptées : {{ totals.counted_lines }} / {{ totals.line_count }}</span>
+        <span class="pill">Écart total : {{ totals.total_difference }}</span>
+        <span class="pill">Démarque : {{ totals.total_loss }} FCFA</span>
+        <span class="pill">Ajustements générés : {{ adjustments|length }}</span>
+    </div>
+    {% if session.status == 'cancelled' %}
+        <p class="muted-text" style="margin:0.5rem 0 0;">
+            Session annulée : aucune quantité n'a été appliquée, aucun ajustement de stock n'a été généré.
+        </p>
+    {% elif can_recount %}
+        <p class="muted-text" style="margin:0.5rem 0 0;">
+            Une erreur dans ce comptage ? On ne rouvre pas une session clôturée (ses ajustements sont déjà
+            appliqués) : « Recompter ce périmètre » démarre un nouveau comptage dont les écarts corrigeront le stock.
+        </p>
+    {% endif %}
+</div>
+
+{% if adjustments %}
+    <div class="surface" style="overflow-x:auto;">
+        <h2 class="surface-title" style="margin-bottom:0.5rem;">Ajustements de stock générés</h2>
+        <table>
+            <thead>
+                <tr><th>Produit</th><th>Type</th><th>Quantité</th><th>Date</th><th>Par</th></tr>
+            </thead>
+            <tbody>
+                {% for m in adjustments %}
+                    <tr>
+                        <td style="font-weight:700;">{{ m.product.name }}</td>
+                        <td>
+                            {% if m.movement_type.direction == 'IN' %}
+                                <span class="badge success">Entrée +{{ m.quantity }}</span>
+                            {% else %}
+                                <span class="badge danger">Sortie -{{ m.quantity }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ m.quantity }}</td>
+                        <td>{{ m.movement_date|date:"d/m/Y H:i" }}</td>
+                        <td>{{ m.performed_by.username|default:"-" }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+
+<div class="surface" style="overflow-x:auto;">
+    <h2 class="surface-title" style="margin-bottom:0.5rem;">Lignes de comptage</h2>
+    <table>
+        <thead>
+            <tr>
+                <th style="min-width:220px;">Produit</th>
+                <th>Attendu</th>
+                <th>Compté</th>
+                <th>Écart</th>
+                <th>Démarque</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for line in lines %}
+                <tr>
+                    <td>
+                        <div style="font-weight:700;">{{ line.product.name }}</div>
+                        <div class="muted-text" style="font-size:0.9rem;">{{ line.product.sku }} · {{ line.product.brand.name }} / {{ line.product.category.name }}</div>
+                    </td>
+                    <td>{{ line.expected_qty }}</td>
+                    <td>{% if line.is_counted %}{{ line.counted_qty }}{% else %}<span class="tag">Non compté</span>{% endif %}</td>
+                    <td>
+                        {% if not line.is_counted %}
+                            <span class="muted-text">—</span>
+                        {% elif line.difference < 0 %}
+                            <span style="color:var(--danger); font-weight:700;">{{ line.difference }}</span>
+                        {% elif line.difference > 0 %}
+                            <span style="color:var(--success); font-weight:700;">+{{ line.difference }}</span>
+                        {% else %}
+                            <span class="muted-text">0</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if line.value_loss and line.value_loss > 0 %}
+                            <span style="color:var(--danger); font-weight:700;">-{{ line.value_loss }} FCFA</span>
+                        {% else %}
+                            <span class="muted-text">0</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5" class="muted-text">Aucune ligne.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const recount = document.querySelector("[data-recount-button]");
+    if (recount) {
+        recount.addEventListener("click", (event) => {
+            if (!window.confirm("Démarrer un nouveau comptage sur le même périmètre ? Les écarts constatés corrigeront le stock actuel.")) {
+                event.preventDefault();
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
