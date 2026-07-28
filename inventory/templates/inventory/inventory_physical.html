@@ -201,9 +201,10 @@
                 </div>
                 <p class="muted-text" style="margin:0.4rem 0 0; font-size:0.85rem;">
                     {% if can_manage %}
-                        À la clôture, les écarts sont recalculés sur le stock réel du moment ; les lignes non
-                        comptées ne génèrent aucun ajustement et les gros écarts exigent un second comptage
-                        concordant (ressaisir la même quantité).
+                        À la clôture, les écarts sont recalculés sur le stock réel du moment ; les gros écarts
+                        exigent un second comptage concordant (ressaisir la même quantité). Les lignes non
+                        comptées sont ignorées, sauf si « Mettre à zéro les produits non comptés » est coché :
+                        elles sont alors comptées à 0 et leur stock est sorti en démarque.
                     {% else %}
                         Comptez chaque produit et saisissez la quantité trouvée. Pour une ligne « À recompter »,
                         recomptez physiquement puis ressaisissez la quantité.
@@ -211,7 +212,13 @@
                 </p>
             </div>
             {% if not session.is_closed %}
-                <div class="toolbar">
+                <div class="toolbar" style="align-items:center;">
+                    {% if can_manage %}
+                        <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.88rem;">
+                            <input type="checkbox" name="zero_uncounted" value="1" data-zero-uncounted />
+                            <span>Mettre à zéro les produits non comptés</span>
+                        </label>
+                    {% endif %}
                     <button type="submit" name="action" value="save" class="btn secondary">Enregistrer</button>
                     {% if can_manage %}
                         <button type="submit" name="action" value="close" class="btn"
@@ -422,8 +429,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 event.preventDefault();
                 return;
             }
+            const zeroBox = document.querySelector("[data-zero-uncounted]");
+            const zeroUncounted = Boolean(zeroBox && zeroBox.checked);
             let message = "Clôturer l'inventaire ? Les ajustements de stock seront générés sur le stock réel du moment.";
-            if (uncounted > 0) {
+            if (uncounted > 0 && zeroUncounted) {
+                message = `ATTENTION : ${uncounted} ligne(s) non comptée(s) seront mises à ZÉRO — tout leur stock système sera sorti en démarque. ` + message;
+            } else if (uncounted > 0) {
                 message = `${uncounted} ligne(s) ne sont pas comptées : elles seront ignorées (aucun ajustement). ` + message;
             }
             if (!window.confirm(message)) {

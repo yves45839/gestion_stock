@@ -1597,6 +1597,21 @@ def inventory_physical(request):
                 if not can_manage:
                     messages.error(request, "Seul un responsable peut clôturer un inventaire.")
                     return redirect(reverse("inventory:inventory_physical"))
+                # Option « inventaire général » : ce qui n'a pas été compté
+                # est considéré comme absent. Décision explicite du
+                # responsable (case cochée + confirmation), donc les lignes
+                # mises à zéro sont marquées vérifiées : l'obligation de
+                # second comptage ne s'applique pas à ce choix assumé.
+                zero_uncounted = request.POST.get("zero_uncounted") == "1"
+                zeroed_count = 0
+                if zero_uncounted:
+                    for line in all_lines_qs:
+                        if line.is_counted:
+                            continue
+                        line.counted_qty = 0
+                        line.verified = True
+                        line.save(update_fields=["counted_qty", "verified", "updated_at"])
+                        zeroed_count += 1
                 # Le stock attendu est refigé sur le stock réel au moment de
                 # la clôture : les mouvements survenus pendant le comptage
                 # (ventes, réceptions) ne faussent plus les ajustements.
@@ -1654,6 +1669,11 @@ def inventory_physical(request):
                 session.closed_at = timezone.now()
                 session.save(update_fields=["status", "closed_at", "updated_at"])
                 closing_message = "Inventaire clôturé et ajustements enregistrés."
+                if zeroed_count:
+                    closing_message += (
+                        f" {zeroed_count} ligne(s) non comptée(s) ont été mises à zéro"
+                        " (stock sorti en démarque)."
+                    )
                 if skipped_uncounted:
                     closing_message += (
                         f" {skipped_uncounted} ligne(s) non comptée(s) ont été ignorées"
