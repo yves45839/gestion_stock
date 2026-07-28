@@ -1567,8 +1567,25 @@ def inventory_physical(request):
     if show_only_uncounted:
         lines_qs = lines_qs.filter(counted_qty__isnull=True)
 
-    if request.method == "POST" and not session.is_closed:
+    if request.method == "POST" and session.is_open:
         action = request.POST.get("action", "save")
+
+        if action == "cancel":
+            # Abandon d'une session (erreur de démarrage, comptages
+            # périmés) : aucune quantité appliquée, aucun ajustement.
+            if not can_manage:
+                messages.error(request, "Seul un responsable peut annuler un inventaire.")
+                return redirect(reverse("inventory:inventory_physical"))
+            session.status = InventoryCountSession.Status.CANCELLED
+            session.closed_at = timezone.now()
+            session.save(update_fields=["status", "closed_at", "updated_at"])
+            messages.success(
+                request,
+                "Inventaire annulé : aucun ajustement de stock n'a été généré."
+                " Vous pouvez démarrer une nouvelle session.",
+            )
+            return redirect(reverse("inventory:inventory_physical"))
+
         updated = 0
         with transaction.atomic():
             for line in all_lines_qs:
@@ -1720,9 +1737,13 @@ def inventory_physical(request):
 
     total_lines = all_lines_qs.count()
     counted_count = all_lines_qs.filter(counted_qty__isnull=False).count()
+    stale_after_days = getattr(settings, "INVENTORY_STALE_SESSION_DAYS", 3)
+    session_is_stale = session.is_open and session.age_days >= stale_after_days
 
     context = {
         "session": session,
+        "session_is_stale": session_is_stale,
+        "session_age_days": session.age_days,
         "lines": lines_display,
         "can_manage": can_manage,
         "site_locked": site_locked,
@@ -1763,8 +1784,8 @@ def inventory_physical_line(request):
     )
     if line is None:
         return JsonResponse({"ok": False, "error": "Ligne introuvable."}, status=404)
-    if line.session.is_closed:
-        return JsonResponse({"ok": False, "error": "Session clôturée."}, status=409)
+    if not line.session.is_open:
+        return JsonResponse({"ok": False, "error": "Session clôturée ou annulée."}, status=409)
 
     counted_value = _parse_counted_qty(request.POST.get("counted_qty", ""), line.counted_qty)
     if counted_value != line.counted_qty:
