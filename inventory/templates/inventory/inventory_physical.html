@@ -238,6 +238,10 @@
                             <input type="checkbox" name="zero_uncounted" value="1" form="inventory-actions-form" data-zero-uncounted />
                             <span>Mettre à zéro les produits non comptés</span>
                         </label>
+                        <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.88rem;">
+                            <input type="checkbox" name="force_recounts" value="1" form="inventory-actions-form" data-force-recounts />
+                            <span>Clôturer malgré les lignes à recompter</span>
+                        </label>
                     {% endif %}
                     <button type="submit" name="action" value="save" class="btn secondary">Enregistrer</button>
                     {% if can_manage %}
@@ -464,10 +468,18 @@ document.addEventListener("DOMContentLoaded", () => {
         closeButton.addEventListener("click", (event) => {
             const uncounted = parseInt(closeButton.dataset.uncounted || "0", 10);
             const recount = parseInt(closeButton.dataset.recount || "0", 10);
-            if (recount > 0) {
-                window.alert(`${recount} ligne(s) doivent être recomptées avant la clôture (écart important). Utilisez le filtre « À recompter ».`);
+            const forceBox = document.querySelector("[data-force-recounts]");
+            const forceRecounts = Boolean(forceBox && forceBox.checked);
+            if (recount > 0 && !forceRecounts) {
+                window.alert(`${recount} ligne(s) doivent être recomptées avant la clôture (écart important). Utilisez le filtre « À recompter », ou cochez « Clôturer malgré les lignes à recompter » pour passer outre.`);
                 event.preventDefault();
                 return;
+            }
+            if (recount > 0 && forceRecounts) {
+                if (!window.confirm(`DÉROGATION : ${recount} ligne(s) à fort écart seront clôturées SANS second comptage. Leurs ajustements de stock seront appliqués tels quels. Continuer ?`)) {
+                    event.preventDefault();
+                    return;
+                }
             }
             const zeroBox = document.querySelector("[data-zero-uncounted]");
             const zeroUncounted = Boolean(zeroBox && zeroBox.checked);

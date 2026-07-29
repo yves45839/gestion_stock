@@ -1652,14 +1652,17 @@ def inventory_physical(request):
                     line.recompute()
                     line.save(update_fields=["expected_qty", "difference", "value_loss", "updated_at"])
                 # Gros écarts : un second comptage concordant (ressaisie de
-                # la même quantité) est exigé avant d'ajuster le stock.
+                # la même quantité) est exigé avant d'ajuster le stock —
+                # sauf dérogation explicite du responsable (case « clôturer
+                # malgré les lignes à recompter »).
+                force_recounts = request.POST.get("force_recounts") == "1"
                 pending_recounts = [line for line in all_lines_qs if line.needs_recount]
-                if pending_recounts:
+                if pending_recounts and not force_recounts:
                     messages.error(
                         request,
                         f"Clôture refusée : {len(pending_recounts)} ligne(s) présentent un écart"
                         " important et doivent être recomptées (ressaisissez la quantité pour"
-                        " confirmer le comptage).",
+                        " confirmer le comptage), ou cochez la dérogation responsable.",
                     )
                     recount_params = request.GET.copy()
                     recount_params["recount_only"] = "1"
@@ -1697,6 +1700,11 @@ def inventory_physical(request):
                 session.closed_at = timezone.now()
                 session.save(update_fields=["status", "closed_at", "updated_at"])
                 closing_message = "Inventaire clôturé et ajustements enregistrés."
+                if pending_recounts and force_recounts:
+                    closing_message += (
+                        f" {len(pending_recounts)} ligne(s) à fort écart ont été clôturées"
+                        " sans second comptage (dérogation responsable)."
+                    )
                 if zeroed_count:
                     closing_message += (
                         f" {zeroed_count} ligne(s) non comptée(s) ont été mises à zéro"

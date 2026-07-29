@@ -2341,10 +2341,11 @@ class InventoryLargeCatalogTests(TestCase):
         self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
         response = self.client.get(reverse("inventory:inventory_physical"))
         content = response.content.decode()
-        # Le mini-formulaire d'actions existe et les boutons de session le
-        # ciblent : leur POST ne transporte pas les champs des lignes.
+        # Le mini-formulaire d'actions existe et les contrôles de session le
+        # ciblent (2 cases + 2 boutons) : leur POST ne transporte pas les
+        # champs des lignes.
         self.assertIn('id="inventory-actions-form"', content)
-        self.assertEqual(content.count('form="inventory-actions-form"'), 3)
+        self.assertEqual(content.count('form="inventory-actions-form"'), 4)
 
     def test_close_succeeds_with_strict_field_limit(self):
         from .models import InventoryCountSession
@@ -2592,3 +2593,88 @@ class InventoryStatePersistenceTests(TestCase):
             f'<option value="{self.other_category.pk}" selected>',
             content,
         )
+
+
+class InventoryForceCloseTests(TestCase):
+    """Dérogation responsable : clôturer malgré des lignes à recompter."""
+
+    def setUp(self):
+        self.manager = get_user_model().objects.create_user(
+            username="chef-force", password="chef-pass", is_staff=True
+        )
+        self.site = Site.objects.create(name="Depot Force")
+        SiteAssignment.objects.create(user=self.manager, site=self.site)
+        self.brand = Brand.objects.create(name="Marque Force")
+        self.category = Category.objects.create(name="Categorie Force")
+        self.entry_type, _ = MovementType.objects.get_or_create(
+            code="RECEPTION_FORCE",
+            defaults={
+                "name": "Réception",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        self.adjust_minus, _ = MovementType.objects.get_or_create(
+            code="AJUSTEMENT_MOINS",
+            defaults={
+                "name": "Ajustement -",
+                "direction": MovementType.MovementDirection.EXIT,
+            },
+        )
+        MovementType.objects.get_or_create(
+            code="AJUSTEMENT_PLUS",
+            defaults={
+                "name": "Ajustement +",
+                "direction": MovementType.MovementDirection.ENTRY,
+            },
+        )
+        self.product = Product.objects.create(
+            sku="FORCE-1",
+            name="Produit force",
+            brand=self.brand,
+            category=self.category,
+            purchase_price=Decimal("200000.00"),
+        )
+        StockMovement.objects.create(
+            product=self.product,
+            movement_type=self.entry_type,
+            site=self.site,
+            quantity=10,
+        )
+        self.client.force_login(self.manager)
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "start"})
+        self.client.get(reverse("inventory:inventory_physical"))
+        from .models import InventoryCountSession
+
+        self.session = InventoryCountSession.objects.get(
+            site=self.site, status=InventoryCountSession.Status.OPEN
+        )
+        self.line = self.session.lines.get(product=self.product)
+        # Écart d'1 unité mais 200 000 FCFA au prix d'achat : au-dessus du
+        # seuil valeur, la ligne exige normalement un second comptage.
+        self.client.post(
+            reverse("inventory:inventory_physical_line"),
+            {"line_id": self.line.pk, "counted_qty": "9"},
+        )
+
+    def test_close_still_blocked_without_derogation(self):
+        from .models import InventoryCountSession
+
+        self.client.post(reverse("inventory:inventory_physical"), {"action": "close"})
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, InventoryCountSession.Status.OPEN)
+
+    def test_derogation_closes_and_applies_adjustments(self):
+        from .models import InventoryCountSession
+
+        response = self.client.post(
+            reverse("inventory:inventory_physical"),
+            {"action": "close", "force_recounts": "1"},
+            follow=True,
+        )
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, InventoryCountSession.Status.CLOSED)
+        adjustment = StockMovement.objects.filter(
+            product=self.product, movement_type=self.adjust_minus
+        ).get()
+        self.assertEqual(adjustment.quantity, 1)
+        self.assertContains(response, "dérogation responsable")
