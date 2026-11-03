@@ -727,6 +727,7 @@ class SalesWorkflowTests(TestCase):
             "items-1-description": "Note de service",
             "items-1-DELETE": "",
         }
+        payload["submission_token"] = self.client.get(reverse("inventory:sale_create")).context["sale_form"]["submission_token"].value()
         response = self.client.post(reverse("inventory:sale_create"), data=payload)
         error_info = None
         if response.context:
@@ -734,7 +735,8 @@ class SalesWorkflowTests(TestCase):
             if formset is not None:
                 error_info = formset.errors
         self.assertEqual(response.status_code, 302, error_info)
-        sale = Sale.objects.get(reference="VENTE-200")
+        sale = Sale.objects.get(customer_name="Client Test")
+        self.assertTrue(sale.reference.startswith("VTE-"))
         self.assertIsNotNone(sale.customer)
         self.assertEqual(sale.customer.name, "Client Test")
         self.assertEqual(sale.amount_paid, Decimal("200"))
@@ -779,15 +781,20 @@ class SalesWorkflowTests(TestCase):
             "items-0-description": "",
             "items-0-DELETE": "",
         }
+        payload["submission_token"] = self.client.get(reverse("inventory:quote_create")).context["sale_form"]["submission_token"].value()
         response = self.client.post(reverse("inventory:quote_create"), data=payload)
-        self.assertEqual(response.status_code, 200)
-        quote = Sale.objects.get(reference="DEVIS-001")
+        self.assertEqual(response.status_code, 302)
+        quote = Sale.objects.get(customer_name="Prospect")
+        self.assertTrue(quote.reference.startswith("DEV-"))
+        original_reference = quote.reference
         self.assertEqual(quote.status, Sale.Status.DRAFT)
         self.assertEqual(quote.items.count(), 1)
         confirm_response = self.client.post(reverse("inventory:quote_confirm", args=[quote.pk]))
         self.assertEqual(confirm_response.status_code, 302)
         quote.refresh_from_db()
         self.assertEqual(quote.status, Sale.Status.CONFIRMED)
+        self.assertTrue(quote.reference.startswith("VTE-"))
+        self.assertEqual(quote.source_quote_reference, original_reference)
         self.assertEqual(quote.items.first().stock_movement.quantity, 2)
 
     def test_document_preview_invoice(self):
@@ -833,10 +840,11 @@ class SalesWorkflowTests(TestCase):
             "items-0-description": "",
             "items-0-DELETE": "",
         }
+        payload["submission_token"] = self.client.get(reverse("inventory:sale_create")).context["sale_form"]["submission_token"].value()
         response = self.client.post(reverse("inventory:sale_create"), data=payload)
         self.assertEqual(response.status_code, 200)
         self.assertIn("amount_paid", response.context["sale_form"].errors)
-        self.assertFalse(Sale.objects.filter(reference="VENTE-OVER").exists())
+        self.assertFalse(Sale.objects.exists())
 
     def test_sales_list_context_shows_totals(self):
         sale = Sale.objects.create(

@@ -1,5 +1,35 @@
 # Gestion Stock
 
+## Numérotation des ventes et devis
+
+Les nouveaux devis reçoivent une référence `DEV-AAAAMMJJ-001` et les ventes
+une référence `VTE-AAAAMMJJ-001`, attribuées côté serveur à l'enregistrement.
+Les compteurs sont distincts, communs à tous les sites et utilisateurs, et
+repartent à 001 chaque jour selon le fuseau horaire Django. Les transactions
+protègent l'attribution lors de saisies simultanées. La référence n'est plus
+saisie manuellement dans le formulaire.
+
+Lorsqu'un devis est confirmé, le même document devient une vente et reçoit
+une nouvelle référence `VTE`. Son numéro d'origine reste conservé, affiché
+dans son détail et sur la facture ; l'export du devis conserve ce numéro.
+Les anciens devis, y compris ceux portant un préfixe `VTE`, suivent cette règle
+lors de leur prochaine confirmation. Les ventes déjà confirmées gardent leur
+référence actuelle.
+
+Chaque formulaire de création possède un jeton signé : répéter sa soumission
+ne crée ni deuxième document ni deuxième sortie de stock. Deux formulaires
+ouverts séparément représentent deux créations distinctes.
+
+Après déploiement, appliquer la migration avant de redémarrer l'application :
+```bash
+python manage.py migrate --noinput
+```
+Rouvrir les formulaires déjà ouverts avant cette mise à jour pour disposer
+du jeton de soumission. Tests ciblés, y compris les requêtes simultanées SQLite :
+```bash
+python manage.py test inventory.test_references inventory.tests.SalesWorkflowTests --noinput
+```
+
 ## Mise a jour des couts produits depuis Excel
 
 1. Installer la dependance si necessaire :

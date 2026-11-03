@@ -14,6 +14,10 @@
 </div>
 <form method="post" id="sale-form">
     {% csrf_token %}
+    {% for field in sale_form.hidden_fields %}
+        {{ field }}
+        {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+    {% endfor %}
     <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));gap:1.5rem;">
         <div class="card">
             <h2 style="margin-top:0;">Informations generales</h2>
@@ -22,7 +26,7 @@
                     {{ sale_form.non_field_errors }}
                 </div>
             {% endif %}
-            {% for field in sale_form %}
+            {% for field in sale_form.visible_fields %}
                 <div style="margin-bottom:1rem;">
                     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                     {% if field.name == "customer" %}

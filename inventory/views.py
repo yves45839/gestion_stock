@@ -53,6 +53,7 @@ from .forms import (
     SaleReturnItemForm,
 )
 from .models import (
+    DocumentReferenceCounter,
     Brand,
     Category,
     Customer,
@@ -2187,7 +2188,7 @@ def quotes_list(request):
 def sale_create(request):
     action_site = _get_action_site(request)
     if request.method == "POST":
-        sale_form = SaleForm(request.POST)
+        sale_form = SaleForm(request.POST, submission_scope=f"{request.user.pk}:VTE")
         formset = SaleItemFormSet(request.POST, prefix="items")
         if sale_form.is_valid() and formset.is_valid():
             cleaned_lines = []
@@ -2237,8 +2238,15 @@ def sale_create(request):
                 )
             if has_product_line and amount_paid <= total_amount:
                 with transaction.atomic():
+                    DocumentReferenceCounter.lock("VTE")
+                    existing = Sale.objects.filter(
+                        submission_key=sale_form.cleaned_data["submission_token"]
+                    ).first()
+                    if existing:
+                        return redirect(reverse("inventory:sales_list"))
                     sale = _save_sale_with_customer(
                         sale_form,
+                        reference_prefix="VTE",
                         history_user=request.user if request.user.is_authenticated else None,
                         site=action_site,
                     )
@@ -2271,7 +2279,7 @@ def sale_create(request):
                     )
                 return redirect(reverse("inventory:sales_list"))
     else:
-        sale_form = SaleForm(initial={"reference": _generate_sale_reference()})
+        sale_form = SaleForm(submission_scope=f"{request.user.pk}:VTE")
         formset = SaleItemFormSet(
             prefix="items",
             initial=[{"line_type": SaleItem.LineType.PRODUCT}],
@@ -2512,7 +2520,7 @@ def sale_adjust(request, pk):
 def quote_create(request):
     active_site = _get_active_site(request)
     if request.method == "POST":
-        sale_form = SaleForm(request.POST)
+        sale_form = SaleForm(request.POST, submission_scope=f"{request.user.pk}:DEV")
         formset = SaleItemFormSet(request.POST, prefix="items")
         if sale_form.is_valid() and formset.is_valid():
             cleaned_lines = []
@@ -2548,8 +2556,15 @@ def quote_create(request):
                 messages.error(request, "Ajoutez au moins un produit au devis.")
             if has_product_line:
                 with transaction.atomic():
+                    DocumentReferenceCounter.lock("DEV")
+                    existing = Sale.objects.filter(
+                        submission_key=sale_form.cleaned_data["submission_token"]
+                    ).first()
+                    if existing:
+                        return redirect(reverse("inventory:quote_detail", args=[existing.pk]))
                     sale = _save_sale_with_customer(
                         sale_form,
+                        reference_prefix="DEV",
                         status=Sale.Status.DRAFT,
                         history_user=request.user if request.user.is_authenticated else None,
                         site=active_site,
@@ -2573,7 +2588,7 @@ def quote_create(request):
                 messages.success(request, "Le devis a été enregistré.")
                 return redirect(reverse("inventory:quote_detail", args=[sale.pk]))
     else:
-        sale_form = SaleForm(initial={"reference": _generate_sale_reference()})
+        sale_form = SaleForm(submission_scope=f"{request.user.pk}:DEV")
         formset = SaleItemFormSet(
             prefix="items",
             initial=[{"line_type": SaleItem.LineType.PRODUCT}],
@@ -2616,6 +2631,7 @@ def _save_sale_with_customer(
     status: str | None = None,
     history_user=None,
     site: Site | None = None,
+    reference_prefix: str | None = None,
 ) -> Sale:
     customer = form.cleaned_data.get("customer")
     customer_name = form.cleaned_data.get("customer_name")
@@ -2624,6 +2640,9 @@ def _save_sale_with_customer(
         customer._history_user = history_user
         customer.save()
     instance = form.save(commit=False)
+    if reference_prefix is not None:
+        instance.reference = DocumentReferenceCounter.next_reference(reference_prefix)
+        instance.submission_key = form.cleaned_data["submission_token"]
     if customer:
         instance.customer = customer
         instance.customer_name = customer_name or customer.display_name
@@ -2786,6 +2805,7 @@ def quote_confirm(request, pk):
         return redirect(reverse("inventory:quote_detail", args=[sale.pk]))
     if sale.status != Sale.Status.CONFIRMED:
         invalidated_counts = sale.confirm(
+            convert_quote=True,
             performed_by=request.user if request.user.is_authenticated else None,
             site=_get_active_site(request),
         )
@@ -2849,7 +2869,7 @@ def _get_document_meta(sale: Sale, doc_type: str) -> dict:
             "title": "DEVIS",
             "subtitle": "Facture proforma",
             "requires_confirmed": False,
-            "filename": f"devis-{sale.reference}",
+            "filename": f"devis-{sale.quote_reference}",
         },
         "invoice": {
             "title": "FACTURE",
@@ -2870,6 +2890,7 @@ def _get_document_meta(sale: Sale, doc_type: str) -> dict:
     if meta["requires_confirmed"] and sale.status != Sale.Status.CONFIRMED:
         raise Http404("Document disponible après confirmation uniquement.")
     meta["doc_type"] = doc_type
+    meta["reference"] = sale.quote_reference if doc_type == "quote" else sale.reference
     return meta
 
 
@@ -4066,16 +4087,6 @@ def _get_or_create_category_by_name(name: str) -> Category:
         return _get_default_category()
     category, _ = Category.objects.get_or_create(name=cleaned)
     return category
-
-
-def _generate_sale_reference() -> str:
-    prefix = timezone.now().strftime("VTE-%Y%m%d")
-    counter = 1
-    while True:
-        candidate = f"{prefix}-{counter:03d}"
-        if not Sale.objects.filter(reference=candidate).exists():
-            return candidate
-        counter += 1
 
 
 def _generate_sku_from_scan(code: str) -> str:

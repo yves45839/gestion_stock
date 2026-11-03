@@ -849,12 +849,44 @@ def invalidate_open_inventory_counts(site, products) -> list[str]:
     return invalidated
 
 
+class DocumentReferenceCounter(models.Model):
+    prefix = models.CharField(max_length=3, primary_key=True)
+    day = models.DateField(null=True)
+    value = models.PositiveBigIntegerField(default=0)
+
+    @classmethod
+    def lock(cls, prefix):
+        # Writing before reading also serializes transactions on SQLite,
+        # where select_for_update() alone does not acquire a row lock.
+        if cls.objects.filter(pk=prefix).update(value=F("value")) != 1:
+            raise RuntimeError("Compteur de références absent : appliquez les migrations.")
+
+    @classmethod
+    def next_reference(cls, prefix):
+        with transaction.atomic():
+            cls.lock(prefix)
+            counter = cls.objects.get(pk=prefix)
+            today = timezone.localdate()
+            value = counter.value if counter.day == today else 0
+            while True:
+                value += 1
+                reference = f"{prefix}-{today:%Y%m%d}-{value:03d}"
+                if not Sale.objects.filter(reference=reference).exists():
+                    break
+            counter.day = today
+            counter.value = value
+            counter.save(update_fields=["day", "value"])
+            return reference
+
+
 class Sale(VersionedModelMixin, TimeStampedModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "Brouillon"
         CONFIRMED = "confirmed", "Confirmée"
 
     reference = models.CharField("Référence", max_length=100, unique=True)
+    source_quote_reference = models.CharField("Référence du devis d'origine", max_length=100, blank=True)
+    submission_key = models.UUIDField(null=True, blank=True, unique=True, editable=False)
     sale_date = models.DateTimeField("Date de vente", default=timezone.now)
     customer = models.ForeignKey(
         Customer,
@@ -893,6 +925,10 @@ class Sale(VersionedModelMixin, TimeStampedModel):
         return f"Vente {self.reference}"
 
     @property
+    def quote_reference(self):
+        return self.source_quote_reference or self.reference
+
+    @property
     def customer_display_name(self) -> str:
         if self.customer:
             return self.customer.display_name
@@ -922,14 +958,21 @@ class Sale(VersionedModelMixin, TimeStampedModel):
             total += item.unit_price * Decimal(item.returned_quantity)
         return total
 
-    def confirm(self, performed_by=None, movement_type=None, site=None):
+    def confirm(self, performed_by=None, movement_type=None, site=None, convert_quote=False):
         """Confirme la vente et retourne les produits dont un comptage
         d'inventaire en cours a été invalidé par cette vente."""
-        if self.status == self.Status.CONFIRMED:
-            return []
-        previous_site = self.site
         moved_products = []
         with transaction.atomic():
+            # Serialize even requests holding two stale draft instances.
+            Sale.objects.filter(pk=self.pk).update(status=F("status"))
+            self.refresh_from_db()
+            if self.status == self.Status.CONFIRMED:
+                return []
+            previous_site = self.site
+            converted = convert_quote or self.reference.startswith("DEV-")
+            if converted:
+                self.source_quote_reference = self.reference
+                self.reference = DocumentReferenceCounter.next_reference("VTE")
             if movement_type is None:
                 movement_type, _ = MovementType.objects.get_or_create(
                     code="VENTE_AUTO",
@@ -980,6 +1023,8 @@ class Sale(VersionedModelMixin, TimeStampedModel):
             if site_changed:
                 self.site = movement_site
             update_fields = ["status"]
+            if converted:
+                update_fields.extend(["reference", "source_quote_reference"])
             if site_changed:
                 update_fields.append("site")
             self.save(update_fields=update_fields)

@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="utf-8">
-    <title>{{ doc_meta.title }} - {{ sale.reference }}</title>
+    <title>{{ doc_meta.title }} - {{ doc_meta.reference }}</title>
     <style>
         :root {
             --blue: #1f3c88;
@@ -241,7 +241,10 @@
 
         <section class="doc-title">
             <div class="small muted">{{ doc_meta.title }}</div>
-            <h1>Commande # {{ sale.reference }}</h1>
+            <h1>Commande # {{ doc_meta.reference }}</h1>
+            {% if sale.source_quote_reference and doc_meta.doc_type != "quote" %}
+                <p>Devis d'origine : {{ sale.source_quote_reference }}</p>
+            {% endif %}
         </section>
 
         <div class="info-grid">

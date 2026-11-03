@@ -1,6 +1,9 @@
 ﻿from decimal import Decimal
 
+import uuid
+
 from django import forms
+from django.core import signing
 from django.utils import timezone
 
 from .models import (
@@ -528,6 +531,7 @@ class CategoryAutoAssignForm(forms.Form):
 
 
 class SaleForm(forms.ModelForm):
+    submission_token = forms.CharField(widget=forms.HiddenInput)
     customer = forms.ModelChoiceField(
         queryset=Customer.objects.none(),
         required=False,
@@ -571,11 +575,34 @@ class SaleForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.submission_scope = kwargs.pop("submission_scope", None)
         super().__init__(*args, **kwargs)
+        self.fields["reference"].disabled = True
+        self.fields["reference"].required = False
+        if not self.instance.pk:
+            self.initial["reference"] = ""
+            self.fields["reference"].widget.attrs["placeholder"] = "Attribuée à l'enregistrement"
+        if self.submission_scope is None:
+            self.fields.pop("submission_token")
+        else:
+            self.initial["submission_token"] = signing.dumps(
+                [self.submission_scope, str(uuid.uuid4())], salt="document-submission"
+            )
         self.fields["customer"].queryset = Customer.objects.order_by("name", "company_name")
         self.fields["customer"].empty_label = "— Aucun client —"
         if not self.data.get("sale_date") and not self.initial.get("sale_date"):
             self.fields["sale_date"].initial = timezone.now().strftime("%Y-%m-%dT%H:%M")
+
+    def clean_submission_token(self):
+        try:
+            scope, key = signing.loads(
+                self.cleaned_data["submission_token"], salt="document-submission"
+            )
+            if scope != self.submission_scope:
+                raise ValueError
+            return uuid.UUID(key)
+        except (signing.BadSignature, ValueError, TypeError):
+            raise forms.ValidationError("Ce formulaire est invalide. Ouvrez un nouveau formulaire.")
 
     def clean_amount_paid(self):
         amount = self.cleaned_data.get("amount_paid")
