@@ -6,6 +6,7 @@ from . import views
 app_name = "inventory"
 
 urlpatterns = [
+    path("documents/apercu/", login_required(views.draft_document_preview), name="draft_document_preview"),
     path("", login_required(views.dashboard), name="dashboard"),
     path("site/actif/", login_required(views.set_active_site), name="set_active_site"),
     path("analyses/", login_required(views.analytics), name="analytics"),

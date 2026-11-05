@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import uuid
 
 from django.conf import settings
@@ -560,6 +560,16 @@ class Customer(VersionedModelMixin, TimeStampedModel):
         )
         return aggregate["total"]
 
+    def unpaid_invoice_balance(self, exclude_sale_id=None) -> Decimal:
+        """Remaining amounts on confirmed invoices only, never draft quotes."""
+        sales = self.sales.filter(status=Sale.Status.CONFIRMED)
+        if exclude_sale_id is not None:
+            sales = sales.exclude(pk=exclude_sale_id)
+        return sum(
+            (sale.remaining_amount for sale in sales.prefetch_related("items")),
+            Decimal("0.00"),
+        )
+
     def get_absolute_url(self) -> str:
         return reverse("inventory:customer_detail", args=[self.pk])
 
@@ -880,6 +890,10 @@ class DocumentReferenceCounter(models.Model):
 
 
 class Sale(VersionedModelMixin, TimeStampedModel):
+    class DiscountType(models.TextChoices):
+        PERCENT = "percent", "%"
+        FIXED = "fixed", "FCFA"
+
     class Status(models.TextChoices):
         DRAFT = "draft", "Brouillon"
         CONFIRMED = "confirmed", "Confirmée"
@@ -897,6 +911,10 @@ class Sale(VersionedModelMixin, TimeStampedModel):
     )
     customer_name = models.CharField("Client", max_length=255, blank=True)
     notes = models.TextField(blank=True)
+    discount_type = models.CharField(max_length=10, choices=DiscountType.choices, default=DiscountType.PERCENT)
+    discount_value = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    show_customer_balance = models.BooleanField("Afficher le solde sur le document", default=False)
+    previous_customer_balance = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
     site = models.ForeignKey(
         Site,
         on_delete=models.PROTECT,
@@ -935,11 +953,41 @@ class Sale(VersionedModelMixin, TimeStampedModel):
         return self.customer_name or "-"
 
     @property
-    def total_amount(self) -> Decimal:
+    def subtotal_amount(self) -> Decimal:
         total = Decimal("0.00")
         for item in self.items.all():
             total += item.total_amount
         return total
+
+    def discount_for(self, subtotal, original_subtotal=None):
+        if self.discount_type == self.DiscountType.PERCENT:
+            amount = subtotal * self.discount_value / Decimal("100")
+        else:
+            original = original_subtotal if original_subtotal is not None else subtotal
+            amount = self.discount_value * subtotal / original if original else Decimal("0")
+        return min(subtotal, max(Decimal("0"), amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @property
+    def discount_amount(self):
+        original = sum(
+            (item.unit_price * item.quantity for item in self.items.all()
+             if item.line_type == SaleItem.LineType.PRODUCT), Decimal("0"),
+        )
+        return self.discount_for(self.subtotal_amount, original)
+
+    @property
+    def total_amount(self):
+        return self.subtotal_amount - self.discount_amount
+
+    @property
+    def remaining_amount(self):
+        return max(Decimal("0.00"), self.total_amount - self.amount_paid)
+
+    @property
+    def document_customer_balance(self):
+        return self.previous_customer_balance + (
+            self.remaining_amount if self.status == self.Status.CONFIRMED else Decimal("0.00")
+        )
 
     @property
     def returned_quantity(self) -> int:
@@ -949,14 +997,11 @@ class Sale(VersionedModelMixin, TimeStampedModel):
 
     @property
     def returned_amount(self) -> Decimal:
-        total = Decimal("0.00")
         if self.status != self.Status.CONFIRMED:
-            return total
-        for item in self.items.all():
-            if item.line_type != SaleItem.LineType.PRODUCT:
-                continue
-            total += item.unit_price * Decimal(item.returned_quantity)
-        return total
+            return Decimal("0.00")
+        original = sum((item.unit_price * item.quantity for item in self.items.all()
+                        if item.line_type == SaleItem.LineType.PRODUCT), Decimal("0"))
+        return original - self.discount_for(original) - self.total_amount
 
     def confirm(self, performed_by=None, movement_type=None, site=None, convert_quote=False):
         """Confirme la vente et retourne les produits dont un comptage
@@ -969,7 +1014,10 @@ class Sale(VersionedModelMixin, TimeStampedModel):
             if self.status == self.Status.CONFIRMED:
                 return []
             previous_site = self.site
+            DocumentReferenceCounter.lock("VTE")
             converted = convert_quote or self.reference.startswith("DEV-")
+            if self.customer:
+                self.previous_customer_balance = self.customer.unpaid_invoice_balance(exclude_sale_id=self.pk)
             if converted:
                 self.source_quote_reference = self.reference
                 self.reference = DocumentReferenceCounter.next_reference("VTE")
@@ -1022,7 +1070,7 @@ class Sale(VersionedModelMixin, TimeStampedModel):
             site_changed = movement_site != previous_site
             if site_changed:
                 self.site = movement_site
-            update_fields = ["status"]
+            update_fields = ["status", "previous_customer_balance"]
             if converted:
                 update_fields.extend(["reference", "source_quote_reference"])
             if site_changed:
@@ -1036,8 +1084,6 @@ class Sale(VersionedModelMixin, TimeStampedModel):
         if not self.customer:
             return
         amount = self.total_amount
-        if amount <= Decimal("0.00"):
-            return
         entry = (
             self.account_entries.filter(
                 entry_type=CustomerAccountEntry.EntryType.DEBIT,
@@ -1046,6 +1092,10 @@ class Sale(VersionedModelMixin, TimeStampedModel):
             .order_by("-occurred_at", "-id")
             .first()
         )
+        if amount <= Decimal("0.00"):
+            if entry:
+                entry.delete()
+            return
         label = f"Vente {self.reference}"
         if entry:
             updated_fields: list[str] = []
@@ -1225,6 +1275,8 @@ class SaleItem(TimeStampedModel):
         invalidate_open_inventory_counts(movement_site, [self.product])
         self.returned_quantity += quantity
         self.save(update_fields=["returned_quantity"])
+        self.sale._prefetched_objects_cache = {}
+        self.sale._sync_customer_account_entry()
         return movement
 
 

@@ -17,13 +17,16 @@ from django.db.models import (
     DecimalField,
     ExpressionWrapper,
     F,
+    FloatField,
+    OuterRef,
+    Subquery,
     IntegerField,
     Q,
     Sum,
     Value,
     When,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Cast, Coalesce, NullIf, Round
 from django.forms import formset_factory
 from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -83,7 +86,7 @@ from .quality_agent import ProductQualityAgent
 
 try:
     from weasyprint import HTML
-except ImportError:  # pragma: no cover
+except (ImportError, OSError):  # pragma: no cover — native PDF libraries may be absent on a demo PC
     HTML = None
 
 PERIOD_CHOICES = [
@@ -309,6 +312,29 @@ def _inline_result_message(result, product):
     )
 
 
+def _discounted_line_amount(prefix=""):
+    """Apply a document-wide discount proportionally in sales reports."""
+    parent = "" if prefix else "sale__"
+    original = SaleItem.objects.filter(
+        sale_id=OuterRef("pk" if prefix else "sale_id"),
+        line_type=SaleItem.LineType.PRODUCT,
+    ).order_by().values("sale_id").annotate(
+        gross=Sum(F("quantity") * F("unit_price"), output_field=DecimalField())
+    ).values("gross")[:1]
+    discount = Cast(F(parent + "discount_value"), FloatField())
+    ratio = Case(
+        When(**{parent + "discount_type": Sale.DiscountType.PERCENT}, then=
+             Round(Cast(Subquery(original), FloatField()) * discount / Value(100.0), 2)
+             / NullIf(Cast(Subquery(original), FloatField()), Value(0.0))),
+        default=Coalesce(discount / NullIf(Cast(Subquery(original), FloatField()), Value(0.0)), Value(0.0)),
+        output_field=FloatField(),
+    )
+    return ExpressionWrapper(
+        F(prefix + "quantity") * F(prefix + "unit_price") * (Value(1.0) - ratio),
+        output_field=DecimalField(max_digits=14, decimal_places=2),
+    )
+
+
 def dashboard(request):
     site_context = _site_context(request)
     active_site = site_context["active_site"]
@@ -342,14 +368,8 @@ def dashboard(request):
         0,
         output_field=DecimalField(max_digits=14, decimal_places=2),
     )
-    sales_amount_expression = ExpressionWrapper(
-        F("quantity") * F("unit_price"),
-        output_field=DecimalField(max_digits=14, decimal_places=2),
-    )
-    sale_item_amount_expression = ExpressionWrapper(
-        F("items__quantity") * F("items__unit_price"),
-        output_field=DecimalField(max_digits=14, decimal_places=2),
-    )
+    sales_amount_expression = _discounted_line_amount("")
+    sale_item_amount_expression = _discounted_line_amount("items__")
     site_breakdown = []
     for site in site_context["sites"]:
         site_products = Product.objects.with_stock_quantity(site=site)
@@ -489,17 +509,12 @@ def dashboard(request):
         if site_name in sales_by_site:
             sales_by_site[site_name] = entry.get("total_amount") or Decimal("0.00")
 
-    payment_totals = confirmed_sales_period.aggregate(
-        total_paid=Coalesce(Sum("amount_paid"), decimal_zero_value),
-        total_invoiced=Coalesce(
-            Sum(sale_item_amount_expression),
-            decimal_zero_value,
-        ),
-    )
-    outstanding_amount = max(
-        payment_totals.get("total_invoiced") - payment_totals.get("total_paid"),
-        Decimal("0.00"),
-    )
+    period_invoices = list(confirmed_sales_period.prefetch_related("items"))
+    payment_totals = {
+        "total_paid": sum((sale.amount_paid for sale in period_invoices), Decimal("0.00")),
+        "total_invoiced": sum((sale.total_amount for sale in period_invoices), Decimal("0.00")),
+    }
+    outstanding_amount = sum((sale.remaining_amount for sale in period_invoices), Decimal("0.00"))
 
     year_start = timezone.make_aware(
         datetime(today.year, 1, 1, 0, 0, 0), tz
@@ -647,10 +662,7 @@ def analytics(request):
     quotes_count = quotes_qs.count()
 
 
-    amount_expression = ExpressionWrapper(
-        F("quantity") * F("unit_price"),
-        output_field=DecimalField(max_digits=14, decimal_places=2),
-    )
+    amount_expression = _discounted_line_amount("")
     decimal_field = DecimalField(max_digits=14, decimal_places=2)
     product_items = SaleItem.objects.filter(
         sale__status=Sale.Status.CONFIRMED,
@@ -667,6 +679,10 @@ def analytics(request):
             Value(Decimal("0.00"), output_field=decimal_field),
         ),
         total_quantity=Coalesce(Sum("quantity"), Value(0)),
+    )
+    # Grand totals use the same per-invoice cent rounding as PDFs and accounts.
+    sales_totals["total_amount"] = sum(
+        (sale.total_amount for sale in confirmed_sales_qs.prefetch_related("items")), Decimal("0.00")
     )
     distinct_products = product_items.values("product_id").distinct().count()
     sold_products = list(
@@ -2101,8 +2117,8 @@ def sales_list(request):
         sale_quantity = 0
         for item in sale.items.all():
             if item.line_type == SaleItem.LineType.PRODUCT and item.product:
-                total_amount += item.total_amount
                 sale_quantity += max(item.quantity - item.returned_quantity, 0)
+        total_amount += sale.total_amount
         sale.total_quantity = sale_quantity
         sale.scan_total = sale.scans.count()
         total_quantity += sale_quantity
@@ -2185,6 +2201,70 @@ def quotes_list(request):
     return render(request, "inventory/quotes_list.html", context)
 
 
+def _sale_editor_data(site):
+    products = [{
+        "id": product.pk, "name": product.name, "sku": product.sku,
+        "reference": product.manufacturer_reference or "", "barcode": product.barcode or "",
+        "sale_price": str(product.sale_price or 0),
+        "stock": product.stock_quantity,
+        "image_url": product.image.url if product.image else "",
+    } for product in Product.objects.with_stock_quantity(site=site).order_by("name")]
+    balances = defaultdict(lambda: Decimal("0.00"))
+    for invoice in Sale.objects.filter(status=Sale.Status.CONFIRMED, customer__isnull=False).prefetch_related("items"):
+        balances[invoice.customer_id] += invoice.remaining_amount
+    customers = [{
+        "id": customer.pk, "display_name": customer.display_name,
+        "reference": customer.reference, "phone": customer.phone,
+        "balance": str(balances[customer.pk]),
+        "url": reverse("inventory:customer_detail", args=[customer.pk]),
+    } for customer in Customer.objects.order_by("name", "company_name")]
+    return products, customers
+
+
+def draft_document_preview(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    kind = request.POST.get("document_kind", "sale")
+    if kind not in ("sale", "quote"):
+        return HttpResponse("Type de document invalide.", status=400)
+    quote_id = request.POST.get("quote_id")
+    instance = get_object_or_404(Sale, pk=quote_id, status=Sale.Status.DRAFT) if quote_id else None
+    scope = None if instance else f"{request.user.pk}:{'DEV' if kind == 'quote' else 'VTE'}"
+    form = SaleForm(request.POST, instance=instance, submission_scope=scope)
+    formset = SaleItemFormSet(request.POST, prefix="items")
+    if not (form.is_valid() and formset.is_valid()):
+        return render(request, "inventory/preview_errors.html", {"form": form, "formset": formset}, status=400)
+    sale = form.save(commit=False)
+    sale.reference = sale.reference or "APERÇU — non enregistré"
+    sale.status = Sale.Status.DRAFT if kind == "quote" else Sale.Status.CONFIRMED
+    sale.site = _get_action_site(request)
+    if kind == "quote":
+        sale.amount_paid = Decimal("0.00")
+        form.cleaned_data["amount_paid"] = Decimal("0.00")
+    if sale.customer:
+        sale.previous_customer_balance = sale.customer.unpaid_invoice_balance(exclude_sale_id=sale.pk)
+    items = []
+    for position, line in enumerate(formset.cleaned_data):
+        if not line or line.get("DELETE"):
+            continue
+        product = line.get("product")
+        items.append(SaleItem(
+            sale=sale, product=product, line_type=line["line_type"], position=position,
+            quantity=line.get("quantity") or 0, returned_quantity=0,
+            unit_price=line.get("unit_price") if line.get("unit_price") is not None else (product.sale_price or 0 if product else 0),
+            description=line.get("description") or "",
+        ))
+    subtotal = sum((item.total_amount for item in items), Decimal("0"))
+    form.validate_totals(subtotal)
+    if not any(item.product for item in items):
+        form.add_error(None, "Ajoutez au moins un produit.")
+    if form.errors:
+        return render(request, "inventory/preview_errors.html", {"form": form, "formset": formset}, status=400)
+    context = _build_document_context(sale, _get_document_meta(sale, "quote" if kind == "quote" else "invoice"), items)
+    context["is_preview"] = True
+    return render(request, "inventory/document_preview.html", context)
+
+
 def sale_create(request):
     action_site = _get_action_site(request)
     if request.method == "POST":
@@ -2231,12 +2311,8 @@ def sale_create(request):
                 Decimal("0.00"),
             )
             amount_paid = sale_form.cleaned_data.get("amount_paid") or Decimal("0.00")
-            if amount_paid > total_amount:
-                sale_form.add_error(
-                    "amount_paid",
-                    "Le paiement ne peut pas dépasser le total de la vente.",
-                )
-            if has_product_line and amount_paid <= total_amount:
+            sale_form.validate_totals(total_amount)
+            if has_product_line and not sale_form.errors:
                 with transaction.atomic():
                     DocumentReferenceCounter.lock("VTE")
                     existing = Sale.objects.filter(
@@ -2284,25 +2360,7 @@ def sale_create(request):
             prefix="items",
             initial=[{"line_type": SaleItem.LineType.PRODUCT}],
         )
-    product_dataset = [
-        {
-            "id": product.id,
-            "name": product.name,
-            "sku": product.sku,
-            "sale_price": float(product.sale_price) if product.sale_price is not None else 0,
-            "image_url": product.image.url if product.image else "",
-        }
-        for product in Product.objects.order_by("name")
-    ]
-    customer_dataset = [
-        {
-            "id": customer.id,
-            "display_name": customer.display_name,
-            "reference": customer.reference,
-            "phone": customer.phone,
-        }
-        for customer in Customer.objects.order_by("name", "company_name")
-    ]
+    product_dataset, customer_dataset = _sale_editor_data(action_site)
     context = {
         "sale_form": sale_form,
         "formset": formset,
@@ -2554,7 +2612,11 @@ def quote_create(request):
             )
             if not has_product_line:
                 messages.error(request, "Ajoutez au moins un produit au devis.")
-            if has_product_line:
+            subtotal = sum((line["unit_price"] * line["quantity"] for line in cleaned_lines
+                            if line["line_type"] == SaleItem.LineType.PRODUCT), Decimal("0"))
+            sale_form.cleaned_data["amount_paid"] = Decimal("0.00")
+            sale_form.validate_totals(subtotal)
+            if has_product_line and not sale_form.errors:
                 with transaction.atomic():
                     DocumentReferenceCounter.lock("DEV")
                     existing = Sale.objects.filter(
@@ -2593,25 +2655,7 @@ def quote_create(request):
             prefix="items",
             initial=[{"line_type": SaleItem.LineType.PRODUCT}],
         )
-    product_dataset = [
-        {
-            "id": product.id,
-            "name": product.name,
-            "sku": product.sku,
-            "sale_price": float(product.sale_price) if product.sale_price is not None else 0,
-            "image_url": product.image.url if product.image else "",
-        }
-        for product in Product.objects.order_by("name")
-    ]
-    customer_dataset = [
-        {
-            "id": customer.id,
-            "display_name": customer.display_name,
-            "reference": customer.reference,
-            "phone": customer.phone,
-        }
-        for customer in Customer.objects.order_by("name", "company_name")
-    ]
+    product_dataset, customer_dataset = _sale_editor_data(active_site)
     context = {
         "sale_form": sale_form,
         "formset": formset,
@@ -2650,6 +2694,10 @@ def _save_sale_with_customer(
         instance.status = status
     if site is not None:
         instance.site = site
+    if instance.customer:
+        instance.previous_customer_balance = instance.customer.unpaid_invoice_balance(exclude_sale_id=instance.pk)
+    if status == Sale.Status.DRAFT:
+        instance.amount_paid = Decimal("0.00")
     instance._history_user = history_user
     instance.save()
     form.save_m2m()
@@ -2720,7 +2768,11 @@ def quote_edit(request, pk):
             )
             if not has_product_line:
                 messages.error(request, "Ajoutez au moins un produit au devis.")
-            if has_product_line:
+            subtotal = sum((line["unit_price"] * line["quantity"] for line in cleaned_lines
+                            if line["line_type"] == SaleItem.LineType.PRODUCT), Decimal("0"))
+            sale_form.cleaned_data["amount_paid"] = Decimal("0.00")
+            sale_form.validate_totals(subtotal)
+            if has_product_line and not sale_form.errors:
                 with transaction.atomic():
                     sale = _save_sale_with_customer(
                         sale_form,
@@ -2765,25 +2817,7 @@ def quote_edit(request, pk):
             initial_items = [{"line_type": SaleItem.LineType.PRODUCT}]
         formset = SaleItemFormSet(prefix="items", initial=initial_items)
 
-    product_dataset = [
-        {
-            "id": product.id,
-            "name": product.name,
-            "sku": product.sku,
-            "sale_price": float(product.sale_price) if product.sale_price is not None else 0,
-            "image_url": product.image.url if product.image else "",
-        }
-        for product in Product.objects.order_by("name")
-    ]
-    customer_dataset = [
-        {
-            "id": customer.id,
-            "display_name": customer.display_name,
-            "reference": customer.reference,
-            "phone": customer.phone,
-        }
-        for customer in Customer.objects.order_by("name", "company_name")
-    ]
+    product_dataset, customer_dataset = _sale_editor_data(active_site)
     context = {
         "sale_form": sale_form,
         "formset": formset,
@@ -2794,6 +2828,7 @@ def quote_edit(request, pk):
         "submit_label": "Mettre à jour le devis",
         "cancel_url": reverse("inventory:quote_detail", args=[sale.pk]),
         "is_quote": True,
+        "quote_id": sale.pk,
     }
     context.update(site_context)
     return render(request, "inventory/sale_form.html", context)
@@ -2894,21 +2929,27 @@ def _get_document_meta(sale: Sale, doc_type: str) -> dict:
     return meta
 
 
-def _build_document_context(sale: Sale, doc_meta: dict) -> dict:
-    items = list(sale.items.select_related("product").order_by("position", "id"))
+def _build_document_context(sale: Sale, doc_meta: dict, preview_items=None) -> dict:
+    items = list(sale.items.select_related("product").order_by("position", "id")) if preview_items is None else preview_items
     product_lines = [
         item for item in items if item.line_type == SaleItem.LineType.PRODUCT
     ]
     for item in product_lines:
         item.net_quantity = max(item.quantity - item.returned_quantity, 0)
         item.net_total_amount = item.unit_price * Decimal(item.net_quantity)
-    total_amount = sum(item.net_total_amount for item in product_lines)
-    balance = total_amount - (sale.amount_paid or Decimal("0.00"))
+    subtotal = sum((item.net_total_amount for item in product_lines), Decimal("0"))
+    original = sum((item.unit_price * item.quantity for item in product_lines), Decimal("0"))
+    discount = sale.discount_for(subtotal, original)
+    total_amount = subtotal - discount
+    balance = max(Decimal("0"), total_amount - (sale.amount_paid or Decimal("0.00")))
     return {
         "sale": sale,
         "items": items,
         "product_lines": product_lines,
         "doc_meta": doc_meta,
+        "subtotal_amount": subtotal,
+        "discount_amount": discount,
+        "customer_document_balance": sale.previous_customer_balance + (balance if sale.status == Sale.Status.CONFIRMED else Decimal("0")),
         "total_amount": total_amount,
         "balance": balance,
     }

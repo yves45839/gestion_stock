@@ -1,5 +1,8 @@
 # Gestion Stock
 
+Pour essayer la nouvelle interface ventes/devis dans une base fictive séparée :
+consulter [le guide de démonstration](DEMONSTRATION.md), puis lancer `python start_demo.py` dans un dossier de test distinct.
+
 ## Numérotation des ventes et devis
 
 Les nouveaux devis reçoivent une référence `DEV-AAAAMMJJ-001` et les ventes

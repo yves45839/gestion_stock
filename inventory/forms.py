@@ -532,6 +532,10 @@ class CategoryAutoAssignForm(forms.Form):
 
 class SaleForm(forms.ModelForm):
     submission_token = forms.CharField(widget=forms.HiddenInput)
+    discount_value = forms.DecimalField(required=False, min_value=0, max_digits=12, decimal_places=2,
+        label="Remise", widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}))
+    discount_type = forms.ChoiceField(required=False, choices=Sale.DiscountType.choices,
+        widget=forms.RadioSelect, initial=Sale.DiscountType.PERCENT)
     customer = forms.ModelChoiceField(
         queryset=Customer.objects.none(),
         required=False,
@@ -554,7 +558,8 @@ class SaleForm(forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["reference", "sale_date", "customer", "customer_name", "amount_paid", "notes"]
+        fields = ["reference", "sale_date", "customer", "customer_name", "amount_paid", "notes",
+                  "discount_type", "discount_value", "show_customer_balance"]
         widgets = {
             "reference": forms.TextInput(attrs={"class": "form-control"}),
             "customer_name": forms.TextInput(
@@ -612,6 +617,10 @@ class SaleForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        cleaned["discount_value"] = cleaned.get("discount_value") or Decimal("0.00")
+        cleaned["discount_type"] = cleaned.get("discount_type") or Sale.DiscountType.PERCENT
+        if cleaned["discount_type"] == Sale.DiscountType.PERCENT and cleaned["discount_value"] > 100:
+            self.add_error("discount_value", "La remise ne peut pas dépasser 100 %.")
         customer = cleaned.get("customer")
         customer_name = (cleaned.get("customer_name") or "").strip()
         cleaned["customer_name"] = customer_name
@@ -620,6 +629,17 @@ class SaleForm(forms.ModelForm):
         if customer and not customer_name:
             cleaned["customer_name"] = customer.display_name
         return cleaned
+
+    def validate_totals(self, subtotal):
+        value = self.cleaned_data.get("discount_value") or Decimal("0")
+        kind = self.cleaned_data.get("discount_type") or Sale.DiscountType.PERCENT
+        if kind == Sale.DiscountType.FIXED and value > subtotal:
+            self.add_error("discount_value", "La remise ne peut pas dépasser le total des articles.")
+        calculator = Sale(discount_type=kind, discount_value=value)
+        net = subtotal - calculator.discount_for(subtotal)
+        if (self.cleaned_data.get("amount_paid") or Decimal("0")) > net:
+            self.add_error("amount_paid", "Le paiement ne peut pas dépasser le net à payer après remise.")
+        return net
 
 
 class SaleItemForm(forms.Form):
@@ -643,6 +663,7 @@ class SaleItemForm(forms.Form):
     unit_price = forms.DecimalField(
         max_digits=10,
         decimal_places=2,
+        min_value=0,
         required=False,
         label="Prix unitaire",
         widget=forms.NumberInput(

@@ -1,0 +1,19 @@
+<tr class="sale-line" data-line-type="{{ line.line_type.value|default:'product' }}" data-form-index="{{ row_index }}">
+<td class="product-cell">{{ line.line_type }}<div class="product-fields">
+<div class="item-info" data-item-info>
+</div>{{ line.product }}{{ line.product.errors }}{{ line.scan_code.as_hidden }}{{ line.scan_code.errors }}</div>
+<div class="note-fields">{{ line.description }}{{ line.description.errors }}</div>{{ line.non_field_errors }}</td>
+<td>
+<span class="stock-badge" data-stock>—</span>
+</td>
+<td class="quantity-cell">
+<div class="quantity-stepper">
+<button type="button" data-quantity="-1" aria-label="Diminuer la quantité">−</button>{{ line.quantity }}<button type="button" data-quantity="1" aria-label="Augmenter la quantité">+</button>
+</div>{{ line.quantity.errors }}</td>
+<td class="price-cell">{{ line.unit_price }}{{ line.unit_price.errors }}</td>
+<td class="line-total">
+<strong data-line-total>0</strong>
+</td>
+<td class="remove-cell">{{ line.DELETE.as_hidden }}<button type="button" data-remove-line aria-label="Supprimer cette ligne">✕</button>
+</td>
+</tr>

@@ -1,583 +1,135 @@
-﻿{% extends "inventory/base.html" %}
-{% block title %}{{ form_title|default:"Nouvelle vente" }} - Gestion de stock{% endblock %}
+{% extends "inventory/base.html" %}
+{% load static %}
+{% block title %}{{ form_title }} — LR STOCK{% endblock %}
 {% block content %}
-<div class="card" style="margin-bottom:1.5rem;">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
-        <div>
-            <h1 style="margin:0;font-size:1.5rem;">{{ form_title|default:"Nouvelle vente" }}</h1>
-            <p style="margin:0.25rem 0 0;color:var(--muted);">
-                {{ form_description|default:"Ajoutez vos lignes puis enregistrez pour mettre à jour le stock." }}
-            </p>
-        </div>
-        <a href="{{ cancel_url|default:request.path }}" class="btn secondary">Retour</a>
-    </div>
+<link rel="stylesheet" href="{% static 'inventory/sale_editor.css' %}">
+<section class="sale-workspace">
+<div class="sale-heading">
+<div>
+<h1>{{ form_title }}</h1>
+<p>Référence attribuée à l’enregistrement · <span id="document-date">
+</span>
+</p>
+</div>{% if not quote_id %}<button type="button" class="btn secondary" id="switch-kind">{% if is_quote %}Passer en vente{% else %}Passer en devis{% endif %}</button>{% endif %}</div>
+<form method="post" id="sale-form" data-is-quote="{{ is_quote|yesno:'true,false' }}" data-switch-url="{% if is_quote %}{% url 'inventory:sale_create' %}{% else %}{% url 'inventory:quote_create' %}{% endif %}">
+{% csrf_token %}<input type="hidden" name="document_kind" value="{% if is_quote %}quote{% else %}sale{% endif %}">{% if quote_id %}<input type="hidden" name="quote_id" value="{{ quote_id }}">{% endif %}
+{% for field in sale_form.hidden_fields %}{{ field }}{{ field.errors }}{% endfor %}
+{% if sale_form.errors or formset.errors or formset.non_form_errors %}<div class="message error" role="alert">
+<strong>Vérifiez les informations ci-dessous.</strong>{{ sale_form.non_field_errors }}{{ formset.non_form_errors }}</div>{% endif %}
+<section class="customer-strip" aria-label="Client et solde">
+<div class="client-choice">
+<span class="customer-icon" aria-hidden="true">♙</span>
+<div>
+<strong id="customer-title">Sélectionnez un client</strong>
+<small id="customer-reference">Client existant ou nouveau client</small>
 </div>
-<form method="post" id="sale-form">
-    {% csrf_token %}
-    {% for field in sale_form.hidden_fields %}
-        {{ field }}
-        {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
-    {% endfor %}
-    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));gap:1.5rem;">
-        <div class="card">
-            <h2 style="margin-top:0;">Informations generales</h2>
-            {% if sale_form.non_field_errors %}
-                <div class="message error">
-                    {{ sale_form.non_field_errors }}
-                </div>
-            {% endif %}
-            {% for field in sale_form.visible_fields %}
-                <div style="margin-bottom:1rem;">
-                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                    {% if field.name == "customer" %}
-                        <div class="customer-picker">
-                            <div class="autocomplete-panel">
-                                <input type="text" class="form-control customer-search" placeholder="Rechercher un client" autocomplete="off">
-                                {{ field }}
-                                <div class="autocomplete-results" data-customer-autocomplete></div>
-                            </div>
-                            <div class="product-preview" data-customer-preview>
-                                <div class="product-thumb fallback">👤</div>
-                                <div>
-                                    <strong>Aucun client sélectionné</strong>
-                                    <small style="color:var(--muted);">Saisissez un nom, une référence ou un numéro.</small>
-                                </div>
-                            </div>
-                        </div>
-                    {% else %}
-                        {{ field }}
-                    {% endif %}
-                    {% if field.help_text %}
-                        <small style="color:var(--muted);">{{ field.help_text }}</small>
-                    {% endif %}
-                    {% for error in field.errors %}
-                        <div class="field-error">{{ error }}</div>
-                    {% endfor %}
-                </div>
-            {% endfor %}
-        </div>
-        <div class="card" style="grid-column: span 2;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:1rem;">
-                <div>
-                    <h2 style="margin:0;">Lignes de vente</h2>
-                    <small style="color:var(--muted);">Une seule ligne apparait d'abord. Ajoutez autant de produits, sections ou notes que necessaire.</small>
-                </div>
-            </div>
-            {% if formset.non_form_errors %}
-                <div class="message error">
-                    {{ formset.non_form_errors }}
-                </div>
-            {% endif %}
-            {{ formset.management_form }}
-            <div class="table-wrapper">
-                <table class="sale-lines-table">
-                    <thead>
-                        <tr>
-                            <th style="width:45%;">Produit / Texte</th>
-                            <th style="width:12%;">Quantite</th>
-                            <th style="width:15%;">Prix unitaire</th>
-                            <th style="width:15%;">Montant</th>
-                            <th style="width:13%;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sale-lines-body">
-                        {% for form in formset.forms %}
-                            {% include "inventory/partials/sale_line_row.html" with form=form row_index=forloop.counter0 %}
-                        {% empty %}
-                            {% include "inventory/partials/sale_line_row.html" with form=formset.empty_form row_index=0 %}
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="line-buttons">
-                <button type="button" class="btn secondary small" data-add-line="product">+ Ajouter un produit</button>
-                <button type="button" class="btn secondary small" data-add-line="section">Ajouter une section</button>
-                <button type="button" class="btn secondary small" data-add-line="note">Ajouter une note</button>
-            </div>
-            <div class="sale-summary">
-                <span>Total</span>
-                <strong id="sale-total-display">0.00</strong>
-            </div>
-        </div>
-    </div>
-    <div style="margin-top:1.5rem;text-align:right;">
-        <a href="{{ cancel_url|default:request.path }}" class="btn secondary" style="margin-right:0.5rem;">Annuler</a>
-        <button type="submit" class="btn">{{ submit_label|default:"Enregistrer" }}</button>
-    </div>
+<button type="button" class="btn secondary" id="choose-customer">Choisir un client</button>
+</div>
+<div class="prior-balance">
+<span>Solde antérieur : <strong data-prior-balance>0 FCFA</strong>
+</span>
+<small>Factures impayées uniquement <a id="customer-details" hidden>Voir le détail</a>
+</small>
+</div>
+</section>
+<section id="customer-panel" class="editor-card" aria-label="Choix du client">
+<label for="customer-search">Rechercher un client</label>
+<input id="customer-search" type="search" placeholder="Nom, référence ou téléphone…" autocomplete="off" aria-controls="customer-results">
+<div id="customer-results" class="search-results">
+</div>
+<label for="{{ sale_form.customer.id_for_label }}">Client existant</label>{{ sale_form.customer }}{{ sale_form.customer.errors }}<label for="{{ sale_form.customer_name.id_for_label }}">Ou nom du nouveau client</label>{{ sale_form.customer_name }}{{ sale_form.customer_name.errors }}<button type="button" class="btn secondary" id="confirm-customer">Utiliser ce client</button>
+</section>
+<div class="editor-columns">
+<section class="editor-card articles-panel">
+<div class="articles-title">
+<h2>Articles</h2>
+<span class="product-count" id="product-count">0 produit</span>
+</div>
+<div class="article-search-panel">
+<label for="article-search" class="visually-hidden">Scanner ou rechercher un produit</label>
+<div class="article-search-box">
+<span aria-hidden="true">⌕</span>
+<input type="search" id="article-search" placeholder="Scanner ou rechercher un produit…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="article-results">
+<span class="barcode" aria-hidden="true">▥</span>
+</div>
+<div id="article-results" class="search-results" role="listbox">
+</div>
+<p id="search-status" class="muted" role="status">
+</p>
+</div>
+{{ formset.management_form }}<div class="sale-table-scroll">
+<table class="sale-editor-table">
+<thead>
+<tr>
+<th>Produit</th>
+<th>Stock</th>
+<th>Qté</th>
+<th>Prix (FCFA)</th>
+<th>Total (FCFA)</th>
+<th>
+<span class="visually-hidden">Supprimer</span>
+</th>
+</tr>
+</thead>
+<tbody id="sale-lines-body">{% for line in formset %}{% include 'inventory/partials/sale_editor_row.html' with line=line row_index=forloop.counter0 %}{% endfor %}</tbody>
+</table>
+</div>
+<div class="article-actions">
+<div>
+<button type="button" data-add-line="product">+ Ajouter un article</button>
+<button type="button" data-add-line="section">+ Ajouter une section</button>
+<button type="button" data-add-line="note">+ Ajouter une note</button>
+</div>
+<strong>Total articles : <span data-subtotal>0 FCFA</span>
+</strong>
+</div>
+<label for="{{ sale_form.notes.id_for_label }}">Notes <span class="muted">(optionnel)</span>
+</label>{{ sale_form.notes }}{{ sale_form.notes.errors }}<details class="document-details">
+<summary>Conditions et informations complémentaires</summary>
+<label for="{{ sale_form.sale_date.id_for_label }}">Date {% if is_quote %}du devis{% else %}de vente{% endif %}</label>{{ sale_form.sale_date }}{{ sale_form.sale_date.errors }}<label for="{{ sale_form.reference.id_for_label }}">Référence</label>{{ sale_form.reference }}{{ sale_form.reference.errors }}<p class="muted">Le site utilisé est celui sélectionné dans l’en-tête.</p>
+</details>
+</section>
+<aside class="editor-card payment-panel" aria-label="Paiement">
+<h2>Paiement</h2>
+<div class="money-row">
+<span>Total articles</span>
+<strong data-subtotal>0 FCFA</strong>
+</div>
+<fieldset class="discount-controls">
+<legend>Remise</legend>
+<div class="discount-inputs">{{ sale_form.discount_type }}<label class="visually-hidden" for="{{ sale_form.discount_value.id_for_label }}">Valeur de la remise</label>{{ sale_form.discount_value }}<strong id="discount-display">−0 FCFA</strong>
+</div>{{ sale_form.discount_type.errors }}{{ sale_form.discount_value.errors }}</fieldset>
+<div class="money-row net-payable">
+<strong>Net à payer</strong>
+<strong id="net-display">0 FCFA</strong>
+</div>
+<div class="paid-controls" {% if is_quote %}hidden{% endif %}>
+<label for="{{ sale_form.amount_paid.id_for_label }}">Montant payé</label>
+<div>{{ sale_form.amount_paid }}<span>FCFA</span>
+<button type="button" id="pay-all">Tout régler</button>
+</div>{{ sale_form.amount_paid.errors }}</div>
+<div class="money-row outstanding">
+<strong>{% if is_quote %}Montant du devis{% else %}Reste à payer{% endif %}</strong>
+<strong id="remaining-display">0 FCFA</strong>
+</div>
+<div class="money-row client-balance">
+<span>{% if is_quote %}Solde client actuel{% else %}Solde client après cette vente{% endif %}</span>
+<strong id="client-balance-display">0 FCFA</strong>
+</div>
+<label class="show-balance-option">{{ sale_form.show_customer_balance }}<span>Afficher le solde sur le document<small>Facture ou devis</small>
+</span>
+</label>{{ sale_form.show_customer_balance.errors }}{% if is_quote %}<p class="muted">Ce devis ne modifie ni le stock ni le solde client avant sa confirmation.</p>{% endif %}<p class="field-error" id="money-error" role="alert">
+</p>
+<button type="submit" class="btn save-document" id="save-document">{{ submit_label }}</button>
+<button type="submit" class="btn secondary preview-document" formtarget="_blank" formaction="{% url 'inventory:draft_document_preview' %}" id="preview-document">◉ &nbsp; Aperçu</button>
+</aside>
+</div>
+<footer class="editor-footer">
+<a href="{{ cancel_url }}">← Annuler et revenir {% if is_quote %}aux devis{% else %}aux ventes{% endif %}</a>
+<span>Les montants sont exprimés en FCFA.</span>
+</footer>
 </form>
-<template id="sale-line-template">
-    {% include "inventory/partials/sale_line_row.html" with form=formset.empty_form row_index="__prefix__" %}
-</template>
-{{ product_dataset|json_script:"product-dataset" }}
-{{ customer_dataset|json_script:"customer-dataset" }}
-<style>
-.sale-lines-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-.sale-lines-table th,
-.sale-lines-table td {
-    border-bottom: 1px solid var(--border);
-    padding: 0.5rem;
-    vertical-align: top;
-}
-.sale-lines-table input,
-.sale-lines-table select {
-    width: 100%;
-}
-.field-error {
-    color: var(--danger);
-    font-size: 0.8rem;
-}
-.sale-line.text-line .quantity-cell,
-.sale-line.text-line .price-cell,
-.sale-line.text-line .amount-cell {
-    display: none;
-}
-.sale-line .note-fields { display: none; }
-.sale-line.text-line .product-fields { display: none; }
-.sale-line.text-line .note-fields { display: block; }
-.line-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    justify-content: flex-end;
-    margin-top: 0.75rem;
-}
-.line-buttons .btn { margin-left: 0; }
-.btn.small { padding: 0.3rem 0.85rem; font-size: 0.85rem; }
-.sale-summary {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 1rem;
-    font-size: 1.1rem;
-}
-.sale-summary strong {
-    font-size: 1.4rem;
-}
-.product-fields {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-}
-.product-search {
-    width: 100%;
-}
-.product-select { display: none; }
-.customer-picker select { display: none; }
-.autocomplete-panel { position: relative; }
-.autocomplete-results {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-    z-index: 25;
-    max-height: 260px;
-    overflow-y: auto;
-}
-.autocomplete-option {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    width: 100%;
-    border: none;
-    background: transparent;
-    padding: 0.65rem 0.85rem;
-    cursor: pointer;
-    text-align: left;
-}
-.autocomplete-option:hover,
-.autocomplete-option:focus {
-    background: #f7f7f7;
-    outline: none;
-}
-.autocomplete-empty {
-    padding: 0.65rem 0.85rem;
-    color: var(--muted);
-}
-.product-thumb {
-    width: 42px;
-    height: 42px;
-    border-radius: 8px;
-    background: #f3f4f6;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    flex-shrink: 0;
-    border: 1px solid var(--border);
-}
-.product-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-.product-thumb.fallback { font-weight: 600; color: var(--muted); }
-.product-preview {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: 0.35rem;
-    color: var(--muted);
-}
-.product-preview strong { color: inherit; display: block; }
-.customer-picker { display: flex; flex-direction: column; gap: 0.35rem; }
-</style>
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-    const body = document.getElementById("sale-lines-body");
-    const template = document.getElementById("sale-line-template").innerHTML.trim();
-    const totalInput = document.getElementById("id_items-TOTAL_FORMS");
-    const totalDisplay = document.getElementById("sale-total-display");
-    const productDataset = JSON.parse(document.getElementById("product-dataset").textContent || "[]");
-    const customerDataset = JSON.parse(document.getElementById("customer-dataset").textContent || "[]");
-    const priceMap = {};
-    const productMap = {};
-
-    const formatProductLabel = (item) => {
-        const ref = item.sku ? ` (${item.sku})` : "";
-        return `${item.name}${ref}`;
-    };
-
-    const createThumb = (item) => {
-        const thumb = document.createElement("div");
-        thumb.className = "product-thumb";
-        if (item && item.image_url) {
-            const img = document.createElement("img");
-            img.src = item.image_url;
-            img.alt = item.name || "Produit";
-            thumb.appendChild(img);
-        } else {
-            thumb.classList.add("fallback");
-            thumb.textContent = (item?.name || "?").slice(0, 1).toUpperCase();
-        }
-        return thumb;
-    };
-
-    const renderProductPreview = (wrapper, product) => {
-        if (!wrapper) return;
-        wrapper.innerHTML = "";
-        const thumb = createThumb(product);
-        const info = document.createElement("div");
-        const title = document.createElement("strong");
-        title.textContent = product ? product.name : "Aucun produit sélectionné";
-        const subtitle = document.createElement("small");
-        subtitle.style.color = "var(--muted)";
-        subtitle.textContent = product ? (product.sku || "Référence manquante") : "Tapez un nom ou une référence pour commencer.";
-        info.append(title, subtitle);
-        wrapper.append(thumb, info);
-    };
-
-    const filterProducts = (value) => {
-        const normalized = (value || "").toLowerCase().trim();
-        if (!normalized) return [];
-        return productDataset
-            .filter((item) =>
-                (item.name || "").toLowerCase().includes(normalized) ||
-                (item.sku || "").toLowerCase().includes(normalized)
-            )
-            .slice(0, 8);
-    };
-
-    const customerSelect = document.getElementById("id_customer");
-    const customerSearch = document.querySelector(".customer-search");
-    const customerResults = document.querySelector("[data-customer-autocomplete]");
-    const customerPreview = document.querySelector("[data-customer-preview]");
-
-    const renderCustomerPreview = (customer) => {
-        if (!customerPreview) return;
-        customerPreview.innerHTML = "";
-        const thumb = document.createElement("div");
-        thumb.className = "product-thumb fallback";
-        thumb.textContent = "👤";
-        const info = document.createElement("div");
-        const title = document.createElement("strong");
-        title.textContent = customer ? customer.display_name : "Aucun client sélectionné";
-        const subtitle = document.createElement("small");
-        subtitle.style.color = "var(--muted)";
-        subtitle.textContent = customer
-            ? `${customer.reference || "Sans référence"} ${(customer.phone || "").trim()}`.trim()
-            : "Recherchez par nom, référence ou téléphone.";
-        info.append(title, subtitle);
-        customerPreview.append(thumb, info);
-    };
-
-    const filterCustomers = (value) => {
-        const normalized = (value || "").toLowerCase().trim();
-        if (!normalized) return [];
-        return customerDataset
-            .filter((customer) =>
-                (customer.display_name || "").toLowerCase().includes(normalized) ||
-                (customer.reference || "").toLowerCase().includes(normalized) ||
-                (customer.phone || "").toLowerCase().includes(normalized)
-            )
-            .slice(0, 8);
-    };
-
-    const selectCustomer = (customer) => {
-        if (customerSelect) {
-            customerSelect.value = customer ? customer.id : "";
-        }
-        if (customerSearch) {
-            customerSearch.value = customer ? customer.display_name : "";
-        }
-        renderCustomerPreview(customer || null);
-        if (customerResults) {
-            customerResults.innerHTML = "";
-        }
-    };
-
-    if (customerSearch) {
-        customerSearch.addEventListener("input", () => {
-            if (!customerResults) return;
-            const matches = filterCustomers(customerSearch.value);
-            customerResults.innerHTML = "";
-            if (!matches.length) {
-                const empty = document.createElement("div");
-                empty.className = "autocomplete-empty";
-                empty.textContent = "Aucun client";
-                customerResults.appendChild(empty);
-                return;
-            }
-            matches.forEach((customer) => {
-                const option = document.createElement("button");
-                option.type = "button";
-                option.className = "autocomplete-option";
-                const meta = document.createElement("div");
-                const title = document.createElement("div");
-                title.textContent = customer.display_name;
-                title.style.fontWeight = "600";
-                const subtitle = document.createElement("div");
-                subtitle.textContent = customer.reference || customer.phone || "Sans référence";
-                subtitle.style.color = "var(--muted)";
-                meta.append(title, subtitle);
-                option.append(meta);
-                option.addEventListener("click", () => selectCustomer(customer));
-                customerResults.append(option);
-            });
-        });
-        customerSearch.addEventListener("focus", () => {
-            if (customerSearch.value) {
-                customerSearch.dispatchEvent(new Event("input"));
-            }
-        });
-        customerSearch.addEventListener("blur", () => {
-            setTimeout(() => customerResults && (customerResults.innerHTML = ""), 150);
-        });
-    }
-
-    const initialCustomer = customerDataset.find((c) => customerSelect && c.id === Number(customerSelect.value)) || null;
-    renderCustomerPreview(initialCustomer);
-    if (initialCustomer && customerSearch) {
-        customerSearch.value = initialCustomer.display_name;
-    }
-
-    productDataset.forEach((item) => {
-        priceMap[item.id.toString()] = parseFloat(item.sale_price) || 0;
-        productMap[item.id.toString()] = item;
-    });
-
-    function updateRowMode(row, type) {
-        row.dataset.lineType = type;
-        row.classList.toggle("text-line", type !== "product");
-        const label = row.querySelector("[data-line-label]");
-        if (label) {
-            label.textContent = type === "section" ? "Section" : (type === "note" ? "Note" : "Produit");
-        }
-        const typeInput = row.querySelector(".line-type-input");
-        if (typeInput) {
-            typeInput.value = type;
-        }
-    }
-
-    function updateLineTotal(row) {
-        let total = 0;
-        if (row.dataset.lineType === "product") {
-            const qty = parseFloat(row.querySelector(".quantity-input").value) || 0;
-            const price = parseFloat(row.querySelector(".unit-price-input").value) || 0;
-            total = qty * price;
-        }
-        const target = row.querySelector("[data-line-total]");
-        if (target) {
-            target.textContent = total.toFixed(2);
-        }
-    }
-
-    function updateSummary() {
-        let total = 0;
-        body.querySelectorAll(".sale-line").forEach((row) => {
-            if (row.dataset.lineType === "product") {
-                const qty = parseFloat(row.querySelector(".quantity-input").value) || 0;
-                const price = parseFloat(row.querySelector(".unit-price-input").value) || 0;
-                total += qty * price;
-            }
-        });
-        totalDisplay.textContent = total.toFixed(2);
-    }
-
-    function attachEvents(row) {
-        const productSelect = row.querySelector(".product-select");
-        const qtyInput = row.querySelector(".quantity-input");
-        const priceInput = row.querySelector(".unit-price-input");
-        const removeBtn = row.querySelector("[data-action='remove-line']");
-        const productSearch = row.querySelector(".product-search");
-        const results = row.querySelector("[data-autocomplete]");
-        const preview = row.querySelector("[data-product-preview]");
-
-        const selectProduct = (product) => {
-            if (!productSelect || !product) return;
-            productSelect.value = product.id;
-            if (productSearch) {
-                productSearch.value = formatProductLabel(product);
-            }
-            renderProductPreview(preview, product);
-            if (priceInput) {
-                const price = priceMap[product.id.toString()] || 0;
-                priceInput.value = price.toFixed(2);
-            }
-            if (qtyInput && (!qtyInput.value || parseFloat(qtyInput.value) <= 0)) {
-                qtyInput.value = "1";
-            }
-            updateLineTotal(row);
-            updateSummary();
-            if (results) {
-                results.innerHTML = "";
-            }
-        };
-
-        const renderOptions = (value) => {
-            if (!results) return;
-            const matches = filterProducts(value);
-            results.innerHTML = "";
-            if (!matches.length) {
-                const empty = document.createElement("div");
-                empty.className = "autocomplete-empty";
-                empty.textContent = "Aucun produit";
-                results.appendChild(empty);
-                return;
-            }
-            matches.forEach((item) => {
-                const btn = document.createElement("button");
-                btn.type = "button";
-                btn.className = "autocomplete-option";
-                btn.appendChild(createThumb(item));
-                const meta = document.createElement("div");
-                const title = document.createElement("div");
-                title.textContent = item.name;
-                title.style.fontWeight = "600";
-                const subtitle = document.createElement("div");
-                subtitle.textContent = item.sku || "Sans référence";
-                subtitle.style.color = "var(--muted)";
-                meta.append(title, subtitle);
-                btn.appendChild(meta);
-                btn.addEventListener("mousedown", (event) => {
-                    event.preventDefault();
-                    selectProduct(item);
-                });
-                btn.addEventListener("click", () => selectProduct(item));
-                results.appendChild(btn);
-            });
-        };
-
-        if (productSelect) {
-            productSelect.addEventListener("change", () => {
-                const product = productMap[productSelect.value];
-                if (product) {
-                    selectProduct(product);
-                } else {
-                    renderProductPreview(preview, null);
-                }
-            });
-        }
-        if (productSearch) {
-            productSearch.addEventListener("input", () => renderOptions(productSearch.value));
-            productSearch.addEventListener("focus", () => renderOptions(productSearch.value));
-            productSearch.addEventListener("blur", () => {
-                setTimeout(() => results && (results.innerHTML = ""), 150);
-            });
-        }
-        const initialProduct = productSelect ? productMap[productSelect.value] : null;
-        renderProductPreview(preview, initialProduct);
-        if (productSearch && initialProduct) {
-            productSearch.value = formatProductLabel(initialProduct);
-        }
-        if (qtyInput) {
-            qtyInput.addEventListener("input", () => {
-                updateLineTotal(row);
-                updateSummary();
-            });
-        }
-        if (priceInput) {
-            priceInput.addEventListener("input", () => {
-                updateLineTotal(row);
-                updateSummary();
-            });
-        }
-        if (removeBtn) {
-            removeBtn.addEventListener("click", () => {
-                row.remove();
-                refreshIndexes();
-            });
-        }
-        updateLineTotal(row);
-    }
-
-    function refreshIndexes() {
-        const rows = Array.from(body.querySelectorAll(".sale-line"));
-        rows.forEach((row, index) => {
-            row.dataset.formIndex = index;
-            row.querySelectorAll("input, select").forEach((input) => {
-                if (!input.name) {
-                    return;
-                }
-                input.name = input.name.replace(/items-\d+-/, `items-${index}-`);
-                if (input.id) {
-                    input.id = input.id.replace(/id_items-\d+-/, `id_items-${index}-`);
-                }
-            });
-        });
-        totalInput.value = rows.length;
-        updateSummary();
-    }
-
-    function addLine(type) {
-        const newIndex = body.querySelectorAll(".sale-line").length;
-        let html = template.replace(/__prefix__/g, newIndex);
-        const wrapper = document.createElement("tbody");
-        wrapper.innerHTML = html.trim();
-        const row = wrapper.querySelector(".sale-line");
-        row.querySelectorAll("input, select").forEach((input) => {
-            if (input.name) {
-                input.name = input.name.replace(/__prefix__/, newIndex);
-            }
-            if (input.id) {
-                input.id = input.id.replace(/__prefix__/, newIndex);
-            }
-        });
-        updateRowMode(row, type);
-        body.appendChild(row);
-        attachEvents(row);
-        refreshIndexes();
-    }
-
-    body.querySelectorAll(".sale-line").forEach((row) => {
-        const typeInput = row.querySelector(".line-type-input");
-        updateRowMode(row, (typeInput && typeInput.value) || "product");
-        attachEvents(row);
-    });
-    refreshIndexes();
-
-    document.querySelectorAll("[data-add-line]").forEach((button) => {
-        button.addEventListener("click", () => {
-            addLine(button.getAttribute("data-add-line") || "product");
-        });
-    });
-});
+</section>
+<template id="sale-line-template">{% include 'inventory/partials/sale_editor_row.html' with line=formset.empty_form row_index='__prefix__' %}</template>{{ product_dataset|json_script:'product-dataset' }}{{ customer_dataset|json_script:'customer-dataset' }}<script src="{% static 'inventory/sale_editor.js' %}" defer>
 </script>
 {% endblock %}

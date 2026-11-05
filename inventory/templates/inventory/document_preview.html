@@ -227,7 +227,7 @@
                         <a class="btn secondary" href="{{ return_url }}">Retour</a>
                     {% endif %}
                     <a class="btn secondary" href="javascript:window.print()">Imprimer</a>
-                    <a class="btn" href="{% url 'inventory:sale_document_pdf' sale.pk doc_meta.doc_type %}">Telecharger PDF</a>
+                    {% if not is_preview %}<a class="btn" href="{% url 'inventory:sale_document_pdf' sale.pk doc_meta.doc_type %}">Telecharger PDF</a>{% endif %}
                 </div>
             </div>
         </div>
@@ -241,6 +241,7 @@
 
         <section class="doc-title">
             <div class="small muted">{{ doc_meta.title }}</div>
+            {% if is_preview %}<p>APERÇU — document non enregistré</p>{% endif %}
             <h1>Commande # {{ doc_meta.reference }}</h1>
             {% if sale.source_quote_reference and doc_meta.doc_type != "quote" %}
                 <p>Devis d'origine : {{ sale.source_quote_reference }}</p>
@@ -309,8 +310,17 @@
 
         {% if doc_meta.doc_type != "delivery" %}
         <div class="totals">
-            <div class="row"><span>Montant hors taxes</span><span>{{ total_amount|floatformat:2 }} FCFA</span></div>
-            <div class="row"><strong>Total</strong><strong>{{ total_amount|floatformat:2 }} FCFA</strong></div>
+            <div class="row"><span>Total articles</span><span>{{ subtotal_amount|floatformat:2 }} FCFA</span></div>
+            {% if discount_amount %}<div class="row"><span>Remise {% if sale.discount_type == 'percent' %}({{ sale.discount_value|floatformat:2 }} %){% endif %}</span><span>−{{ discount_amount|floatformat:2 }} FCFA</span></div>{% endif %}
+            <div class="row"><strong>Net à payer</strong><strong>{{ total_amount|floatformat:2 }} FCFA</strong></div>
+            {% if sale.status == 'confirmed' %}
+            <div class="row"><span>Montant payé</span><span>{{ sale.amount_paid|floatformat:2 }} FCFA</span></div>
+            <div class="row"><span>Reste sur cette facture</span><span>{{ balance|floatformat:2 }} FCFA</span></div>
+            {% endif %}
+            {% if sale.show_customer_balance %}
+            <div class="row"><span>Solde antérieur (factures impayées)</span><span>{{ sale.previous_customer_balance|floatformat:2 }} FCFA</span></div>
+            {% if sale.status == 'confirmed' %}<div class="row"><strong>Solde client après cette facture</strong><strong>{{ customer_document_balance|floatformat:2 }} FCFA</strong></div>{% endif %}
+            {% endif %}
         </div>
         {% endif %}
 

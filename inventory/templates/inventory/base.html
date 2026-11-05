@@ -435,6 +435,7 @@
 </head>
 <body>
     <div class="app-shell">
+        {% if is_sales_demo %}<div class="demo-banner" style="background:#fff0ce;color:#583900;padding:.7rem;text-align:center;font-weight:600">ENVIRONNEMENT DE TEST — données fictives · aucun lien avec la production</div>{% endif %}
         <header class="topbar">
             <div class="topbar-inner">
                 <a class="brand" href="{% url 'inventory:dashboard' %}">
