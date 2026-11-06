@@ -1,10 +1,63 @@
 """Launch the isolated demo on your own computer: python start_demo.py."""
 import argparse
+from datetime import datetime
+import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import venv
+
+
+def check_runtime():
+    if (3, 10) <= sys.version_info[:2] < (3, 14):
+        return
+    # Windows often associates `python` with the newest installed version.
+    # Prefer the tested 3.12 interpreter without changing system associations.
+    launcher = shutil.which("py") if os.name == "nt" else None
+    if launcher:
+        probe = subprocess.run([launcher, "-3.12", "-c", "import sys"], capture_output=True)
+        if probe.returncode == 0:
+            raise SystemExit(subprocess.run(
+                [launcher, "-3.12", str(Path(__file__).resolve()), *sys.argv[1:]],
+            ).returncode)
+    raise SystemExit(
+        f"Python {sys.version_info.major}.{sys.version_info.minor} détecté. "
+        "Ces dépendances nécessitent Python 3.10 à 3.13 ; Python 3.12 est recommandé.\n"
+        "Installez Python 3.12 (64 bits) puis relancez : py -3.12 start_demo.py\n"
+        "Aucune base de données n'a été modifiée."
+    )
+
+
+def prepare_python(root):
+    folder = root / ".venv"
+    python = folder / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if folder.exists():
+        try:
+            probe = subprocess.run(
+                [str(python), "-c", "import json, sys; print(json.dumps(list(sys.version_info[:2])))"],
+                capture_output=True, text=True, check=True,
+            )
+            version = tuple(json.loads(probe.stdout.strip()))
+        except (OSError, subprocess.CalledProcessError, ValueError, TypeError):
+            version = None
+        if version != tuple(sys.version_info[:2]):
+            # Preserve the failed environment. Demo data lives separately in var/.
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+            backup = folder.with_name(f".venv-incompatible-{stamp}")
+            try:
+                folder.rename(backup)
+            except OSError as error:
+                raise SystemExit(
+                    "Fermez les programmes utilisant .venv, puis relancez le script. "
+                    "L'ancien environnement n'a pas pu être renommé."
+                ) from error
+            print(f"Ancien environnement conservé dans {backup.name} ; création avec Python "
+                  f"{sys.version_info.major}.{sys.version_info.minor}.", flush=True)
+    if not python.exists():
+        venv.create(folder, with_pip=True)
+    return python
 
 
 def main():
@@ -13,12 +66,8 @@ def main():
     parser.add_argument("--prepare-only", action="store_true", help="Préparer sans démarrer le serveur")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
-    if sys.version_info < (3, 10):
-        raise SystemExit("Python 3.10 ou plus récent est nécessaire (3.12 recommandé).")
-    folder = root / ".venv"
-    python = folder / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    if not python.exists():
-        venv.create(folder, with_pip=True)
+    check_runtime()
+    python = prepare_python(root)
     environment = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.demo_settings",
                    "PIP_CACHE_DIR": str(root / "var" / "pip-cache")}
     def run(*command):

@@ -1,5 +1,6 @@
 # Python
 .venv/
+.venv-incompatible-*/
 __pycache__/
 *.py[cod]
 .env

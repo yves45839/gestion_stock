@@ -14,7 +14,11 @@ python start_demo.py
 
 Le script prépare un environnement Python, installe les dépendances et crée une base de données fictive. L'adresse locale s'affiche dans le terminal. Laisser ce terminal ouvert pendant vos essais et arrêter avec Ctrl+C.
 
-Sur Windows, si `python` n'est pas reconnu, utiliser `py start_demo.py`. Sur macOS/Linux, utiliser `python3 start_demo.py`. Les dépendances système WeasyPrint nécessaires au téléchargement PDF dépendent de l'ordinateur ; si elles sont absentes, tester les documents avec **Aperçu → Imprimer → Enregistrer au format PDF** dans le navigateur. Le téléchargement PDF WeasyPrint est déjà testé dans l'environnement cloud Linux.
+Sur Windows, utiliser de préférence **`py -3.12 start_demo.py`** pour sélectionner explicitement Python 3.12. Sur macOS/Linux, utiliser `python3.12 start_demo.py`. Le lanceur refuse Python 3.14, incompatible avec les versions de Pillow et de Pydantic du projet. Si un ancien `.venv` utilise une autre version, il est conservé sous un nom `.venv-incompatible-…`, puis recréé ; les données fictives dans `var/sales-demo` restent conservées.
+
+Si l'installation échoue sur `pillow` / `pydantic-core` / `maturin`, vérifier les versions avec `py -0p`, installer **Python 3.12 64 bits** depuis python.org si nécessaire, puis exécuter `py -3.12 start_demo.py`. Il n'est pas nécessaire d'installer Rust ni de contourner la vérification de compatibilité PyO3.
+
+Les dépendances système WeasyPrint nécessaires au téléchargement PDF dépendent de l'ordinateur ; si elles sont absentes, tester les documents avec **Aperçu → Imprimer → Enregistrer au format PDF** dans le navigateur. Le téléchargement PDF WeasyPrint est déjà testé dans l'environnement cloud Linux.
 
 Connexion **uniquement pour cette démonstration locale** : utilisateur `demo`, mot de passe `Demo-Ventes-2026!`.
 
