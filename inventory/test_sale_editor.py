@@ -159,6 +159,32 @@ class SaleEditorTests(DocumentFixtures, TestCase):
         self.assertEqual(sale.remaining_amount, 0)
         self.assertEqual(sale.document_customer_balance, Decimal("82500"))
 
+    def test_invoice_payment_details_only_appear_while_money_is_due(self):
+        for paid, discount, visible in [("0", "10", True), ("20000", "10", True),
+                                         ("33750", "10", False), ("0", "100", False)]:
+            with self.subTest(paid=paid, discount=discount):
+                payload = self.editor_payload(amount_paid=paid, discount_value=discount)
+                preview = self.client.post(reverse("inventory:draft_document_preview"),
+                                           {**payload, "document_kind": "sale"})
+                self.assertEqual(preview.status_code, 200)
+                response = self.client.post(reverse("inventory:sale_create"), payload)
+                self.assertEqual(response.status_code, 302)
+                sale = Sale.objects.filter(submission_key__isnull=False).latest("pk")
+                saved_preview = self.client.get(reverse("inventory:sale_document_preview", args=[sale.pk, "invoice"]))
+                pdf = self.client.get(reverse("inventory:sale_document_pdf", args=[sale.pk, "invoice"]))
+                self.assertEqual(pdf.status_code, 200)
+                pdf_text = ''.join(page.extract_text() for page in PdfReader(BytesIO(pdf.content)).pages)
+                for label in ("Montant payé", "Reste sur cette facture"):
+                    for html in (preview, saved_preview):
+                        if visible:
+                            self.assertContains(html, label)
+                        else:
+                            self.assertNotContains(html, label)
+                    self.assertEqual(label in pdf_text, visible)
+                # Earlier unpaid invoices remain independent of this invoice's payment.
+                self.assertContains(saved_preview, "Solde antérieur")
+                self.assertContains(saved_preview, "Nouveau Solde")
+
     def test_blank_payment_defaults_to_full_but_explicit_zero_is_preserved(self):
         payload = self.editor_payload(amount_paid="")
         sale = self.post_sale(payload)

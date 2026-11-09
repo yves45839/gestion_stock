@@ -313,7 +313,7 @@
             <div class="row"><span>Montant hors taxes</span><span>{{ subtotal_amount|floatformat:2 }} FCFA</span></div>
             {% if discount_amount %}<div class="row"><span>Remise {% if sale.discount_type == 'percent' %}({{ sale.discount_value|floatformat:2 }} %){% endif %}</span><span>−{{ discount_amount|floatformat:2 }} FCFA</span></div>{% endif %}
             <div class="row"><strong>Net à payer</strong><strong>{{ total_amount|floatformat:2 }} FCFA</strong></div>
-            {% if sale.status == 'confirmed' %}
+            {% if sale.status == 'confirmed' and balance > 0 %}
             <div class="row"><span>Montant payé</span><span>{{ sale.amount_paid|floatformat:2 }} FCFA</span></div>
             <div class="row"><span>Reste sur cette facture</span><span>{{ balance|floatformat:2 }} FCFA</span></div>
             {% endif %}
