@@ -1,5 +1,11 @@
 # Vérifications de la branche de démonstration
 
+## Validation pour intégration — 9 novembre 2026
+
+L’utilisateur a autorisé l’intégration des modifications de `test/nouvelle-interface-vente` dans `main`, jusqu’au correctif `791939a` (alertes rouges). Intégration sans conflit depuis `21a9376` ; 53 tests ciblés réussis, vérification Django avec la configuration normale et absence de migrations manquantes vérifiées. Aucun déploiement sur PythonAnywhere ni migration de sa base de production effectués.
+
+## Historique des essais avant cette validation
+
 - Branche séparée : `test/nouvelle-interface-vente`, basée sur `21a9376`.
 - Aucun envoi sur `main` ni déploiement PythonAnywhere.
 - Base de démonstration : `var/sales-demo/db.sqlite3`. La base locale normale `db.sqlite3` n'a pas changé, comparaison SHA256 avant/après les essais.
@@ -12,7 +18,7 @@
 - Ajustements de l'interface : titres réduits, sous-titre de référence et action Ajouter un article retirés, recherche client unique avec proposition de création, libellés Montant hors taxes et Nouveau Solde. Chromium vérifie le paiement automatique, le maintien d'un montant manuel (y compris zéro), l'option de solde dans les aperçus et la recherche client sans seconde barre.
 - Régression du sélecteur client reproduite avec l'ancien JavaScript et le nouveau formulaire : aucune proposition et erreur JavaScript. Les URL CSS/JS sont maintenant liées à une empreinte de leur contenu. Chromium vérifie que l'ancienne ressource en cache est évitée, et que la sélection/création au clic et avec Entrée fonctionne pour ventes et devis, jusque dans l'aperçu du document.
 
-Les essais utilisateurs restent à effectuer. Cette branche n'est pas approuvée pour un déploiement de production ; le guide prévoit une validation avant toute fusion et migration de production.
+À ce stade des essais, la branche attendait la validation utilisateur. L’autorisation d’intégration dans `main` est consignée ci-dessus ; le déploiement de production reste une étape distincte.
 
 ## Notifications des fiches clients — 9 novembre 2026
 

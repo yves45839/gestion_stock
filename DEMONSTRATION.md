@@ -1,6 +1,6 @@
 # Tester la nouvelle interface sans toucher à PythonAnywhere
 
-Cette version reste sur la branche `test/nouvelle-interface-vente`. Aucun déploiement ni fusion dans `main` n'est nécessaire pour essayer la démonstration.
+La nouvelle interface et ses ajustements ont été validés pour intégration dans `main` le 9 novembre 2026. La branche `test/nouvelle-interface-vente` reste disponible pour les essais. Le lanceur de démonstration utilise toujours une base isolée ; le déploiement sur PythonAnywhere est une étape distincte.
 
 ## Sur votre ordinateur
 
@@ -73,4 +73,4 @@ Tests automatisés :
 python manage.py test inventory.test_sale_editor inventory.test_references inventory.tests.SalesWorkflowTests --noinput
 ```
 
-La migration 0032 est préparée pour cette branche et appliquée à la base de démonstration uniquement. La fusion, la sauvegarde de production et le déploiement seront traités après votre validation. Ne pas fusionner ni déployer cette branche automatiquement.
+Les migrations 0032 et 0033 ont été appliquées à la base de démonstration uniquement pendant les essais. Avant un déploiement PythonAnywhere, sauvegarder la base de production, récupérer `main`, appliquer les migrations avec la configuration de production et actualiser les fichiers statiques, puis recharger l’application web. L’intégration dans `main` ne réalise pas ces opérations.
