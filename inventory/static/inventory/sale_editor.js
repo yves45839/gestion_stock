@@ -191,7 +191,9 @@
   customerSearch.addEventListener('keydown', e => {
     if (e.key === 'Enter' || e.key === 'ArrowDown') {
       e.preventDefault(); if (!customerResults.childElementCount) renderCustomers();
-      customerResults.querySelector('button')?.focus();
+      const first = customerResults.querySelector('button');
+      if (e.key === 'Enter') first?.click();
+      else first?.focus();
     }
     if (e.key === 'Escape') closeCustomerResults();
   });

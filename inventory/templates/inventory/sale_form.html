@@ -1,8 +1,8 @@
 {% extends "inventory/base.html" %}
-{% load static %}
+{% load inventory_assets %}
 {% block title %}{{ form_title }} — LR STOCK{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'inventory/sale_editor.css' %}">
+<link rel="stylesheet" href="{% versioned_static 'inventory/sale_editor.css' %}">
 <section class="sale-workspace">
 <div class="sale-heading">
 <div>
@@ -121,6 +121,6 @@
 </footer>
 </form>
 </section>
-<template id="sale-line-template">{% include 'inventory/partials/sale_editor_row.html' with line=formset.empty_form row_index='__prefix__' %}</template>{{ product_dataset|json_script:'product-dataset' }}{{ customer_dataset|json_script:'customer-dataset' }}<script src="{% static 'inventory/sale_editor.js' %}" defer>
+<template id="sale-line-template">{% include 'inventory/partials/sale_editor_row.html' with line=formset.empty_form row_index='__prefix__' %}</template>{{ product_dataset|json_script:'product-dataset' }}{{ customer_dataset|json_script:'customer-dataset' }}<script src="{% versioned_static 'inventory/sale_editor.js' %}" defer>
 </script>
 {% endblock %}

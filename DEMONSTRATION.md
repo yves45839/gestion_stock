@@ -22,6 +22,12 @@ Les dépendances système WeasyPrint nécessaires au téléchargement PDF dépen
 
 Connexion **uniquement pour cette démonstration locale** : utilisateur `demo`, mot de passe `Demo-Ventes-2026!`.
 
+### Mettre à jour une démonstration déjà lancée
+
+Arrêter l'ancien serveur avec **Ctrl+C** dans son terminal avant de lancer une nouvelle version. Télécharger l'archive complète de la branche de test, l'extraire dans un nouveau dossier, puis lancer `py -3.12 start_demo.py` depuis ce dossier. Recharger ensuite la page du navigateur avec **Ctrl+F5**. Les fichiers de l'éditeur portent maintenant une version liée à leur contenu pour éviter de mélanger un ancien script en cache avec le nouveau formulaire.
+
+Dans la recherche client, cliquer sur une proposition ou appuyer sur **Entrée** pour la choisir. Pour un nom absent, choisir **Créer le client** : la fiche sera créée lors de l'enregistrement de la vente ou du devis, jamais au simple aperçu.
+
 Les données et les fichiers médias sont dans `var/sales-demo/`, séparés de `db.sqlite3` et de `media/`. Les clés IA sont neutralisées, le panneau IA est désactivé et aucun worker externe n'est lancé. Le serveur écoute uniquement sur votre ordinateur. Ne pas publier cette configuration de développement sur Internet.
 
 ## Parcours de validation

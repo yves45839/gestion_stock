@@ -1,15 +1,38 @@
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
+import tempfile
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from pypdf import PdfReader
 
 from .models import Customer, CustomerAccountEntry, DocumentReferenceCounter, Sale, SaleItem, StockMovement, Version
 from .test_references import DocumentFixtures
 from .views import _build_document_context, _get_document_meta
+from .templatetags.inventory_assets import versioned_static
+
+
+@override_settings(STATIC_URL="/static/")
+class EditorAssetTests(SimpleTestCase):
+    def test_asset_url_changes_when_script_content_changes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "editor.js"
+            source.write_text("old script")
+            with patch("inventory.templatetags.inventory_assets.finders.find", return_value=str(source)):
+                before = versioned_static("inventory/sale_editor.js")
+                self.assertEqual(before, versioned_static("inventory/sale_editor.js"))
+                source.write_text("new script")
+                after = versioned_static("inventory/sale_editor.js")
+            self.assertNotEqual(before, after)
+            self.assertTrue(after.startswith("/static/inventory/sale_editor.js?v="))
+
+    def test_missing_asset_keeps_normal_static_url(self):
+        with patch("inventory.templatetags.inventory_assets.finders.find", return_value=None):
+            self.assertEqual(versioned_static("missing.js"), "/static/missing.js")
 
 
 class SaleEditorTests(DocumentFixtures, TestCase):
@@ -185,6 +208,8 @@ class SaleEditorTests(DocumentFixtures, TestCase):
             self.assertNotContains(response, "Ajouter un article")
             self.assertNotContains(response, "Total articles")
             self.assertContains(response, "Montant hors taxes")
+            self.assertContains(response, "/static/inventory/sale_editor.js?v=")
+            self.assertContains(response, "/static/inventory/sale_editor.css?v=")
 
     def test_legacy_documents_keep_unchanged_totals_and_hidden_balance(self):
         sale = Sale.objects.get(reference="OLD-1")
