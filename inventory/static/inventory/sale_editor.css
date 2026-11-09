@@ -6,7 +6,7 @@ body:has(.sale-workspace) .user-actions{justify-content:flex-end}
 
 .sale-workspace{color:#152344;font-size:.96rem}
 .sale-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:0 0 1.4rem}
-.sale-heading h1{font-size:2rem;line-height:1.2;margin:.2rem 0 .5rem;letter-spacing:-.04em}
+.sale-heading h1{font-size:1.45rem;line-height:1.2;margin:.2rem 0 .5rem;letter-spacing:-.04em}
 .sale-heading p,.muted{color:#58667d}
 .sale-heading p{margin:0}
 
@@ -114,11 +114,11 @@ body:has(.sale-workspace) .user-actions{justify-content:flex-end}
 .payment-panel{position:static}
 .customer-strip{align-items:flex-start;flex-direction:column}
 .prior-balance{border-left:0;padding-left:0}
-.sale-heading h1{font-size:1.7rem}
+.sale-heading h1{font-size:1.45rem}
 }
 @media(max-width:600px){.editor-card,.customer-strip{padding:.85rem}
 .sale-heading{align-items:flex-start}
-.sale-heading h1{font-size:1.5rem}
+.sale-heading h1{font-size:1.35rem}
 .sale-heading p{font-size:.8rem}
 .editor-footer{flex-direction:column}
 .client-choice{gap:.6rem}
@@ -138,3 +138,10 @@ body:has(.sale-workspace){overflow-x:clip}
 @media(max-width:1050px){body:has(.sale-workspace) .app-shell{overflow:hidden;max-width:100%}}
 /* Anchor absolute accessibility labels inside their own scrolling section. */
 .sale-workspace,.sale-table-scroll{position:relative}
+
+.client-search{position:relative;flex:1;min-width:0}
+.client-search>label{margin:0 0 .4rem;font-weight:600}
+.client-search>small{display:block;color:#58667d;margin-top:.4rem}
+.client-search .search-results:not(:empty){top:74px}
+.client-search .create-customer{color:#244d99;background:#f3f6fc;font-weight:600}
+@media(max-width:1050px){.client-search{width:100%}}

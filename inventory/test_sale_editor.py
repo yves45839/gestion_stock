@@ -114,14 +114,77 @@ class SaleEditorTests(DocumentFixtures, TestCase):
         text = ''.join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
         self.assertIn("Remise", text)
         self.assertIn("Solde antérieur", text)
+        self.assertIn("Nouveau Solde", text)
+        self.assertIn("Montant hors taxes", text)
         self.assertIn("96250", text.replace(" ", "").replace("\u202f", "").replace("\xa0", ""))
         sale.show_customer_balance = False
         sale.save(update_fields=["show_customer_balance"])
         response = self.client.get(url)
         text = ''.join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
         self.assertNotIn("Solde antérieur", text)
-        self.assertNotIn("Solde client", text)
+        self.assertNotIn("Nouveau Solde", text)
         self.assertIn("Reste sur cette facture", text)
+
+    def test_automatic_payment_uses_discounted_net_in_preview_and_saved_invoice(self):
+        payload = self.editor_payload(payment_mode="auto", amount_paid="0")
+        preview = self.client.post(reverse("inventory:draft_document_preview"), {**payload, "document_kind": "sale"})
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.context["sale"].amount_paid, Decimal("33750"))
+        self.assertEqual(preview.context["balance"], 0)
+        sale = self.post_sale(payload)
+        self.assertEqual(sale.amount_paid, Decimal("33750"))
+        self.assertEqual(sale.remaining_amount, 0)
+        self.assertEqual(sale.document_customer_balance, Decimal("82500"))
+
+    def test_blank_payment_defaults_to_full_but_explicit_zero_is_preserved(self):
+        payload = self.editor_payload(amount_paid="")
+        sale = self.post_sale(payload)
+        self.assertEqual(sale.amount_paid, Decimal("33750"))
+        payload = self.editor_payload(amount_paid="0", payment_mode="manual")
+        response = self.client.post(reverse("inventory:sale_create"), payload)
+        self.assertEqual(response.status_code, 302)
+        manual = Sale.objects.filter(submission_key__isnull=False).exclude(pk=sale.pk).get()
+        self.assertEqual(manual.amount_paid, 0)
+        self.assertEqual(manual.remaining_amount, Decimal("33750"))
+
+    def test_customer_creation_waits_until_save_and_duplicate_submission_creates_once(self):
+        payload = self.editor_payload(customer="", customer_name="Nouveau client de test", payment_mode="auto")
+        before = Customer.objects.count()
+        response = self.client.post(reverse("inventory:draft_document_preview"), {**payload, "document_kind": "sale"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Customer.objects.count(), before)
+        self.post_sale(payload)
+        self.client.post(reverse("inventory:sale_create"), payload)
+        self.assertEqual(Customer.objects.filter(name="Nouveau client de test").count(), 1)
+
+    def test_quotes_never_collect_automatic_payment_and_balance_printing_is_optional(self):
+        payload = self.editor_payload("quote", document_kind="quote", payment_mode="auto")
+        before = Sale.objects.count()
+        for enabled in (False, True):
+            values = {key: value for key, value in payload.items() if key != "show_customer_balance"}
+            if enabled:
+                values["show_customer_balance"] = "on"
+            response = self.client.post(reverse("inventory:draft_document_preview"), values)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context["sale"].amount_paid, 0)
+            if enabled:
+                self.assertContains(response, "Solde antérieur")
+            else:
+                self.assertNotContains(response, "Solde antérieur")
+            self.assertNotContains(response, "Nouveau Solde")
+        self.assertEqual(Sale.objects.count(), before)
+
+    def test_editor_has_one_customer_search_and_shorter_labels(self):
+        for name in ("sale_create", "quote_create"):
+            response = self.client.get(reverse(f"inventory:{name}"))
+            self.assertContains(response, 'id="customer-search"', count=1)
+            self.assertNotContains(response, 'id="customer-panel"')
+            self.assertNotContains(response, 'id="choose-customer"')
+            self.assertNotContains(response, 'id="confirm-customer"')
+            self.assertNotContains(response, "Référence attribuée à l’enregistrement")
+            self.assertNotContains(response, "Ajouter un article")
+            self.assertNotContains(response, "Total articles")
+            self.assertContains(response, "Montant hors taxes")
 
     def test_legacy_documents_keep_unchanged_totals_and_hidden_balance(self):
         sale = Sale.objects.get(reference="OLD-1")

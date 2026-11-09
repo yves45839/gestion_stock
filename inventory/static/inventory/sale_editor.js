@@ -11,7 +11,8 @@
   const productMap = new Map(products.map(p => [String(p.id), p]));
   const customerMap = new Map(customers.map(c => [String(c.id), c]));
   const body = $('#sale-lines-body'), search = $('#article-search'), results = $('#article-results');
-  const customerPanel = $('#customer-panel'), customerSelect = $('#id_customer');
+  const customerSelect = $('#id_customer'), customerSearch = $('#customer-search'), customerResults = $('#customer-results');
+  const paymentMode = $('#id_payment_mode'), paidInput = $('#id_amount_paid');
   const isQuote = form.dataset.isQuote === 'true';
   const money = cents => new Intl.NumberFormat('fr-FR', {maximumFractionDigits: 2}).format(cents / 100) + ' FCFA';
   const number = n => new Intl.NumberFormat('fr-FR', {maximumFractionDigits: 2}).format(n);
@@ -19,6 +20,7 @@
   const normalized = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const rows = () => $$('.sale-line', body);
   let net = 0, hasMoneyError = false;
+  let paymentManual = paymentMode.value === 'manual' || (paymentMode.value !== 'auto' && paidInput.value !== '');
   function update() {
     let subtotal = 0, count = 0;
     const selectedQuantities = new Map();
@@ -36,7 +38,9 @@
     const kind = $('[name="discount_type"]:checked')?.value || 'percent';
     const discount = kind === 'percent' ? Math.round(subtotal * value / 10000) : value;
     net = Math.max(0, subtotal - discount);
-    const paid = isQuote ? 0 : cents($('#id_amount_paid').value);
+    if (!isQuote && !paymentManual) paidInput.value = (net / 100).toFixed(2);
+    paymentMode.value = paymentManual ? 'manual' : 'auto';
+    const paid = isQuote ? 0 : paidInput.value.trim() === '' ? net : cents(paidInput.value);
     const remaining = Math.max(0, net - paid);
     const customer = customerMap.get(customerSelect.value);
     const prior = cents(customer?.balance);
@@ -136,35 +140,71 @@
     if (e.key === 'Escape') { results.replaceChildren(); search.setAttribute('aria-expanded', 'false'); }
   });
   document.addEventListener('click', e => { if (!e.target.closest('.article-search-panel')) { results.replaceChildren(); search.setAttribute('aria-expanded', 'false'); } });
-  function selectCustomer() {
+  function syncCustomer() {
     const customer = customerMap.get(customerSelect.value);
     const name = $('#id_customer_name').value.trim();
-    $('#customer-title').textContent = customer?.display_name || name || 'Sélectionnez un client';
-    $('#customer-reference').textContent = customer?.reference || (name ? 'Nouveau client' : 'Client existant ou nouveau client');
-    $('#choose-customer').textContent = customer || name ? 'Changer de client' : 'Choisir un client';
+    $('#customer-reference').textContent = customer
+      ? [customer.reference, customer.phone].filter(Boolean).join(' · ')
+      : name ? 'Nouveau client — sera créé à l’enregistrement.' : 'Sélectionnez un client ou recherchez son nom pour le créer.';
     const details = $('#customer-details'); details.hidden = !customer;
     if (customer) details.href = customer.url;
     update();
   }
-  $('#choose-customer').addEventListener('click', () => { customerPanel.hidden = !customerPanel.hidden; if (!customerPanel.hidden) $('#customer-search').focus(); });
-  $('#confirm-customer').addEventListener('click', () => { if ($('#id_customer_name').value.trim()) customerSelect.value = ''; selectCustomer(); customerPanel.hidden = true; });
-  customerSelect.addEventListener('change', () => { $('#id_customer_name').value = ''; selectCustomer(); });
-  $('#id_customer_name').addEventListener('input', () => { customerSelect.value = ''; selectCustomer(); });
-  $('#customer-search').addEventListener('input', e => {
-    const target = $('#customer-results'); target.replaceChildren(); const term = normalized(e.target.value); if (!term) return;
-    customers.filter(c => [c.display_name, c.reference, c.phone].some(v => normalized(v).includes(term))).slice(0, 8).forEach(c => {
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = `${c.display_name} · ${c.reference}`;
-      button.addEventListener('click', () => { customerSelect.value = c.id; $('#id_customer_name').value = ''; target.replaceChildren(); selectCustomer(); customerPanel.hidden = true; }); target.append(button);
+  function closeCustomerResults() {
+    customerResults.replaceChildren(); customerSearch.setAttribute('aria-expanded', 'false');
+  }
+  function chooseCustomer(customer, newName = '') {
+    customerSelect.value = customer ? customer.id : '';
+    $('#id_customer_name').value = customer ? '' : newName;
+    customerSearch.value = customer ? customer.display_name : newName;
+    closeCustomerResults(); syncCustomer(); customerSearch.focus();
+  }
+  function customerOption(text, action, create = false) {
+    const button = document.createElement('button'); button.type = 'button';
+    button.setAttribute('role', 'option'); button.textContent = text;
+    if (create) button.className = 'create-customer';
+    button.addEventListener('click', action);
+    button.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); button.nextElementSibling?.focus(); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); (button.previousElementSibling || customerSearch).focus(); }
+      if (e.key === 'Escape') { closeCustomerResults(); customerSearch.focus(); }
     });
+    customerResults.append(button);
+  }
+  function renderCustomers() {
+    closeCustomerResults();
+    const text = customerSearch.value.trim(), term = normalized(text);
+    if (!term) return;
+    const found = customers.filter(c => [c.display_name, c.reference, c.phone].some(v => normalized(v).includes(term)));
+    found.slice(0, 8).forEach(c => customerOption(`${c.display_name} · ${c.reference}`, () => chooseCustomer(c)));
+    const exact = found.some(c => [c.display_name, c.reference, c.phone].some(v => v && normalized(v) === term));
+    if (!exact) customerOption(`+ Créer le client « ${text} »`, () => chooseCustomer(null, text), true);
+    customerSearch.setAttribute('aria-expanded', 'true');
+  }
+  customerSearch.addEventListener('input', () => {
+    // Never keep billing the old selection when the visible name is edited.
+    customerSelect.value = ''; $('#id_customer_name').value = ''; syncCustomer(); renderCustomers();
   });
+  customerSearch.addEventListener('focus', () => {
+    if (!customerSelect.value && !$('#id_customer_name').value) renderCustomers();
+  });
+  customerSearch.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      e.preventDefault(); if (!customerResults.childElementCount) renderCustomers();
+      customerResults.querySelector('button')?.focus();
+    }
+    if (e.key === 'Escape') closeCustomerResults();
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.client-search')) closeCustomerResults(); });
   $$('[data-add-line]').forEach(button => button.addEventListener('click', () => {
-    if (button.dataset.addLine === 'product') { search.focus(); return; }
     const row = newRow(button.dataset.addLine); $('.description-input', row).focus();
   }));
-  $('#pay-all').addEventListener('click', () => { $('#id_amount_paid').value = (net / 100).toFixed(2); update(); });
-  ['#id_discount_value', '#id_amount_paid'].forEach(selector => $(selector).addEventListener('input', update));
+  $('#pay-all').addEventListener('click', () => { paymentManual = false; update(); });
+  $('#id_discount_value').addEventListener('input', update);
+  paidInput.placeholder = 'Paiement intégral par défaut';
+  paidInput.addEventListener('input', () => { paymentManual = true; update(); });
+  paidInput.addEventListener('blur', () => { if (paidInput.value.trim() === '') { paymentManual = false; update(); } });
   $$('[name="discount_type"]').forEach(input => input.addEventListener('change', update));
-  $('#id_sale_date').addEventListener('input', () => $('#document-date').textContent = $('#id_sale_date').value.replace('T', ' '));
   form.addEventListener('submit', e => {
     update();
     if (hasMoneyError) { e.preventDefault(); $('#money-error').scrollIntoView({block:'center'}); return; }
@@ -186,7 +226,8 @@
         else if (input instanceof Element) input.value = value;
       });
       rows().forEach(row => { row.dataset.lineType = $('.line-type-input', row).value; renderProduct(row, productMap.get($('.product-select', row).value)); });
-      if (isQuote) $('#id_amount_paid').value = '0';
+      if (isQuote) { paidInput.value = '0'; paymentMode.value = 'auto'; }
+      paymentManual = paymentMode.value === 'manual';
     }
   } catch (_) { /* Storage may be unavailable; normal navigation still works. */ }
   $('#switch-kind')?.addEventListener('click', () => {
@@ -194,6 +235,6 @@
     try { sessionStorage.setItem(draftKey, JSON.stringify({target:form.dataset.switchUrl,count:rows().length,values:Array.from(new FormData(form)).filter(([name]) => !skip.has(name))})); } catch (_) {}
     location.href = form.dataset.switchUrl;
   });
-  reindex(); selectCustomer(); customerPanel.hidden = !$('.errorlist', customerPanel);
-  $('#document-date').textContent = $('#id_sale_date').value.replace('T', ' ');
+  reindex(); syncCustomer();
+  customerSearch.value = customerMap.get(customerSelect.value)?.display_name || $('#id_customer_name').value;
 })();

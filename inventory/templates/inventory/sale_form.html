@@ -7,9 +7,7 @@
 <div class="sale-heading">
 <div>
 <h1>{{ form_title }}</h1>
-<p>Référence attribuée à l’enregistrement · <span id="document-date">
-</span>
-</p>
+
 </div>{% if not quote_id %}<button type="button" class="btn secondary" id="switch-kind">{% if is_quote %}Passer en vente{% else %}Passer en devis{% endif %}</button>{% endif %}</div>
 <form method="post" id="sale-form" data-is-quote="{{ is_quote|yesno:'true,false' }}" data-switch-url="{% if is_quote %}{% url 'inventory:sale_create' %}{% else %}{% url 'inventory:quote_create' %}{% endif %}">
 {% csrf_token %}<input type="hidden" name="document_kind" value="{% if is_quote %}quote{% else %}sale{% endif %}">{% if quote_id %}<input type="hidden" name="quote_id" value="{{ quote_id }}">{% endif %}
@@ -17,13 +15,13 @@
 {% if sale_form.errors or formset.errors or formset.non_form_errors %}<div class="message error" role="alert">
 <strong>Vérifiez les informations ci-dessous.</strong>{{ sale_form.non_field_errors }}{{ formset.non_form_errors }}</div>{% endif %}
 <section class="customer-strip" aria-label="Client et solde">
-<div class="client-choice">
-<span class="customer-icon" aria-hidden="true">♙</span>
-<div>
-<strong id="customer-title">Sélectionnez un client</strong>
-<small id="customer-reference">Client existant ou nouveau client</small>
-</div>
-<button type="button" class="btn secondary" id="choose-customer">Choisir un client</button>
+<div class="client-search">
+<label for="customer-search">Client</label>
+<input id="customer-search" type="search" placeholder="Rechercher un client par nom, référence ou téléphone…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="customer-results">
+{{ sale_form.customer.as_hidden }}{{ sale_form.customer_name.as_hidden }}
+<div id="customer-results" class="search-results" role="listbox"></div>
+<small id="customer-reference">Sélectionnez un client ou recherchez son nom pour le créer.</small>
+{{ sale_form.customer.errors }}{{ sale_form.customer_name.errors }}
 </div>
 <div class="prior-balance">
 <span>Solde antérieur : <strong data-prior-balance>0 FCFA</strong>
@@ -32,13 +30,7 @@
 </small>
 </div>
 </section>
-<section id="customer-panel" class="editor-card" aria-label="Choix du client">
-<label for="customer-search">Rechercher un client</label>
-<input id="customer-search" type="search" placeholder="Nom, référence ou téléphone…" autocomplete="off" aria-controls="customer-results">
-<div id="customer-results" class="search-results">
-</div>
-<label for="{{ sale_form.customer.id_for_label }}">Client existant</label>{{ sale_form.customer }}{{ sale_form.customer.errors }}<label for="{{ sale_form.customer_name.id_for_label }}">Ou nom du nouveau client</label>{{ sale_form.customer_name }}{{ sale_form.customer_name.errors }}<button type="button" class="btn secondary" id="confirm-customer">Utiliser ce client</button>
-</section>
+
 <div class="editor-columns">
 <section class="editor-card articles-panel">
 <div class="articles-title">
@@ -76,11 +68,10 @@
 </div>
 <div class="article-actions">
 <div>
-<button type="button" data-add-line="product">+ Ajouter un article</button>
 <button type="button" data-add-line="section">+ Ajouter une section</button>
 <button type="button" data-add-line="note">+ Ajouter une note</button>
 </div>
-<strong>Total articles : <span data-subtotal>0 FCFA</span>
+<strong>Montant hors taxes : <span data-subtotal>0 FCFA</span>
 </strong>
 </div>
 <label for="{{ sale_form.notes.id_for_label }}">Notes <span class="muted">(optionnel)</span>
@@ -92,7 +83,7 @@
 <aside class="editor-card payment-panel" aria-label="Paiement">
 <h2>Paiement</h2>
 <div class="money-row">
-<span>Total articles</span>
+<span>Montant hors taxes</span>
 <strong data-subtotal>0 FCFA</strong>
 </div>
 <fieldset class="discount-controls">
@@ -113,7 +104,7 @@
 <strong id="remaining-display">0 FCFA</strong>
 </div>
 <div class="money-row client-balance">
-<span>{% if is_quote %}Solde client actuel{% else %}Solde client après cette vente{% endif %}</span>
+<span>{% if is_quote %}Solde client actuel{% else %}Nouveau Solde{% endif %}</span>
 <strong id="client-balance-display">0 FCFA</strong>
 </div>
 <label class="show-balance-option">{{ sale_form.show_customer_balance }}<span>Afficher le solde sur le document<small>Facture ou devis</small>

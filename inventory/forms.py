@@ -532,6 +532,10 @@ class CategoryAutoAssignForm(forms.Form):
 
 class SaleForm(forms.ModelForm):
     submission_token = forms.CharField(widget=forms.HiddenInput)
+    payment_mode = forms.ChoiceField(
+        choices=[("auto", "Intégral"), ("manual", "Saisi")], required=False,
+        initial="auto", widget=forms.HiddenInput,
+    )
     discount_value = forms.DecimalField(required=False, min_value=0, max_digits=12, decimal_places=2,
         label="Remise", widget=forms.NumberInput(attrs={"min": "0", "step": "0.01"}))
     discount_type = forms.ChoiceField(required=False, choices=Sale.DiscountType.choices,
@@ -630,13 +634,19 @@ class SaleForm(forms.ModelForm):
             cleaned["customer_name"] = customer.display_name
         return cleaned
 
-    def validate_totals(self, subtotal):
+    def validate_totals(self, subtotal, *, is_quote=False):
         value = self.cleaned_data.get("discount_value") or Decimal("0")
         kind = self.cleaned_data.get("discount_type") or Sale.DiscountType.PERCENT
         if kind == Sale.DiscountType.FIXED and value > subtotal:
             self.add_error("discount_value", "La remise ne peut pas dépasser le total des articles.")
         calculator = Sale(discount_type=kind, discount_value=value)
         net = subtotal - calculator.discount_for(subtotal)
+        if is_quote:
+            self.cleaned_data["amount_paid"] = Decimal("0.00")
+            self.instance.amount_paid = Decimal("0.00")
+        elif self.cleaned_data.get("payment_mode") == "auto" or not str(self.data.get("amount_paid", "")).strip():
+            self.cleaned_data["amount_paid"] = net
+            self.instance.amount_paid = net
         if (self.cleaned_data.get("amount_paid") or Decimal("0")) > net:
             self.add_error("amount_paid", "Le paiement ne peut pas dépasser le net à payer après remise.")
         return net

@@ -2255,7 +2255,7 @@ def draft_document_preview(request):
             description=line.get("description") or "",
         ))
     subtotal = sum((item.total_amount for item in items), Decimal("0"))
-    form.validate_totals(subtotal)
+    form.validate_totals(subtotal, is_quote=kind == "quote")
     if not any(item.product for item in items):
         form.add_error(None, "Ajoutez au moins un produit.")
     if form.errors:
@@ -2614,8 +2614,7 @@ def quote_create(request):
                 messages.error(request, "Ajoutez au moins un produit au devis.")
             subtotal = sum((line["unit_price"] * line["quantity"] for line in cleaned_lines
                             if line["line_type"] == SaleItem.LineType.PRODUCT), Decimal("0"))
-            sale_form.cleaned_data["amount_paid"] = Decimal("0.00")
-            sale_form.validate_totals(subtotal)
+            sale_form.validate_totals(subtotal, is_quote=True)
             if has_product_line and not sale_form.errors:
                 with transaction.atomic():
                     DocumentReferenceCounter.lock("DEV")
@@ -2770,8 +2769,7 @@ def quote_edit(request, pk):
                 messages.error(request, "Ajoutez au moins un produit au devis.")
             subtotal = sum((line["unit_price"] * line["quantity"] for line in cleaned_lines
                             if line["line_type"] == SaleItem.LineType.PRODUCT), Decimal("0"))
-            sale_form.cleaned_data["amount_paid"] = Decimal("0.00")
-            sale_form.validate_totals(subtotal)
+            sale_form.validate_totals(subtotal, is_quote=True)
             if has_product_line and not sale_form.errors:
                 with transaction.atomic():
                     sale = _save_sale_with_customer(

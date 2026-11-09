@@ -310,7 +310,7 @@
 
         {% if doc_meta.doc_type != "delivery" %}
         <div class="totals">
-            <div class="row"><span>Total articles</span><span>{{ subtotal_amount|floatformat:2 }} FCFA</span></div>
+            <div class="row"><span>Montant hors taxes</span><span>{{ subtotal_amount|floatformat:2 }} FCFA</span></div>
             {% if discount_amount %}<div class="row"><span>Remise {% if sale.discount_type == 'percent' %}({{ sale.discount_value|floatformat:2 }} %){% endif %}</span><span>−{{ discount_amount|floatformat:2 }} FCFA</span></div>{% endif %}
             <div class="row"><strong>Net à payer</strong><strong>{{ total_amount|floatformat:2 }} FCFA</strong></div>
             {% if sale.status == 'confirmed' %}
@@ -319,7 +319,7 @@
             {% endif %}
             {% if sale.show_customer_balance %}
             <div class="row"><span>Solde antérieur (factures impayées)</span><span>{{ sale.previous_customer_balance|floatformat:2 }} FCFA</span></div>
-            {% if sale.status == 'confirmed' %}<div class="row"><strong>Solde client après cette facture</strong><strong>{{ customer_document_balance|floatformat:2 }} FCFA</strong></div>{% endif %}
+            {% if sale.status == 'confirmed' %}<div class="row"><strong>Nouveau Solde</strong><strong>{{ customer_document_balance|floatformat:2 }} FCFA</strong></div>{% endif %}
             {% endif %}
         </div>
         {% endif %}

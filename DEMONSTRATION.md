@@ -27,16 +27,16 @@ Les données et les fichiers médias sont dans `var/sales-demo/`, séparés de `
 ## Parcours de validation
 
 1. Sélectionner le site **Treichville — DÉMO** dans l'en-tête.
-2. Ouvrir Nouvelle vente et sélectionner **ETS KONÉ DISTRIBUTION**. Son solde initial est de **82 500 FCFA** : deux factures partiellement payées, indépendantes du devis d'exemple.
+2. Ouvrir Nouvelle vente et rechercher **ETS KONÉ DISTRIBUTION** dans l'unique barre client, puis sélectionner le résultat. Son solde initial est de **82 500 FCFA** : deux factures partiellement payées, indépendantes du devis d'exemple. Pour un client absent, saisir son nom puis choisir **Créer le client** ; sa fiche n'est créée qu'à l'enregistrement.
 3. Ajouter `DS-2CD1043` (1), `RJ45-1029` (10) et `CAT6-1M` (2) avec la recherche ou en saisissant leur code puis Entrée.
-4. Le total doit être **37 500 FCFA**. Une remise de **10 %** ou **3 750 FCFA** donne un net de **33 750 FCFA**.
-5. Saisir un paiement de **20 000 FCFA**. Le reste de cette vente est **13 750 FCFA**, le solde client projeté est **96 250 FCFA**.
+4. Le **Montant hors taxes** doit être **37 500 FCFA**. Une remise de **10 %** ou **3 750 FCFA** donne un net de **33 750 FCFA**. Le paiement est intégral par défaut et suit les modifications du net à payer.
+5. Remplacer le paiement par **20 000 FCFA**. Le reste de cette vente est **13 750 FCFA**, le nouveau solde est **96 250 FCFA**. Ce montant saisi manuellement, y compris zéro, est conservé lorsque les articles ou la remise changent. **Tout régler** réactive le paiement intégral automatique. Un devis n'encaisse rien avant sa confirmation.
 6. Activer puis désactiver **Afficher le solde sur le document** et cliquer sur **Aperçu**. L'aperçu s'ouvre dans un autre onglet, sans enregistrer de vente ni modifier le stock. L'impression du navigateur permet d'enregistrer cet aperçu en PDF.
 7. Enregistrer une vente, examiner sa facture et télécharger son PDF. Le double enregistrement du même formulaire ne doit pas créer un doublon.
 8. Dans Devis, modifier le devis **DEV-DEMO-EXEMPLE**. Vérifier la remise et le solde, puis confirmer : un nouveau numéro VTE remplace le DEV, conservé comme référence d'origine. Un devis non confirmé ne modifie pas le stock ni les impayés.
 9. Tester les erreurs : remise supérieure à 100 %, remise fixe dépassant le total, paiement supérieur au net. Aucun document ne doit être créé.
 
-Le solde antérieur imprimé est mémorisé lors de l'enregistrement du document et recalculé lors de la conversion du devis. Cela conserve le contexte financier d'une facture déjà émise. Décocher l'option masque uniquement ce solde sur le document ; les calculs du compte client restent actifs.
+Le solde antérieur imprimé est mémorisé lors de l'enregistrement du document et recalculé lors de la conversion du devis. Cela conserve le contexte financier d'une facture déjà émise. Décocher l'option masque le solde antérieur et le **Nouveau Solde** sur le document ; les calculs du compte client restent actifs. Le reste de la facture courante est une information distincte.
 
 Les essais restent enregistrés dans la base de démonstration entre deux démarrages. Pour retrouver les données initiales, arrêter le serveur, renommer **uniquement** `var/sales-demo` en `var/sales-demo-sauvegarde`, puis relancer le script. Ne jamais copier la base de démonstration vers la production.
 
