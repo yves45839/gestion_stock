@@ -67,7 +67,7 @@
     element.hidden = !visible;
     if (!visible) { element.textContent = ''; return; }
     const state = outstanding > limit ? 'dépassé' : outstanding === limit ? 'atteint' : 'bientôt atteint';
-    element.className = 'message ' + (outstanding >= limit ? 'error' : 'warning');
+    element.className = 'message credit-alert ' + (outstanding >= limit ? 'error' : 'warning');
     element.textContent = `${context} : plafond de crédit ${state}. Impayés : ${money(outstanding)} ; plafond : ${money(limit)}. ` +
       (outstanding > limit ? `Dépassement : ${money(outstanding - limit)}.` : `Crédit disponible : ${money(limit - outstanding)}.`);
   }
