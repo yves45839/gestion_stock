@@ -30,6 +30,7 @@
     .metric-label { color: var(--muted); font-size: 0.8rem; margin: 0; }
     .metric-value { font-weight: 800; margin: 0; }
     .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; gap: 0.5rem; flex-wrap: wrap; }
+    .customer-review-toolbar { display:flex; flex-wrap:wrap; gap:.5rem; margin:.8rem 0; }
 </style>
 
 <section class="page-header reveal">
@@ -42,7 +43,18 @@
 </section>
 
 <section class="surface reveal" data-delay="100">
+    {% if nav_customers_to_review %}
+    <div class="message warning" role="status">
+        {{ nav_customers_to_review }} fiche{{ nav_customers_to_review|pluralize }} client{{ nav_customers_to_review|pluralize }} créée{{ nav_customers_to_review|pluralize }} depuis une vente ou un devis à compléter et vérifier.
+        <a href="{% url 'inventory:customer_list' %}?review=1">Voir mes clients à vérifier</a>
+    </div>
+    {% endif %}
+    <div class="customer-review-toolbar">
+        <a href="{% url 'inventory:customer_list' %}" class="btn secondary">Tous les clients</a>
+        <a href="{% url 'inventory:customer_list' %}?review=1" class="btn secondary">Mes clients à vérifier ({{ nav_customers_to_review|default:0 }})</a>
+    </div>
     <form method="get" class="stack">
+        {% if review_only %}<input type="hidden" name="review" value="1">{% endif %}
         <input type="text"
                name="q"
                placeholder="Rechercher un client, email ou référence..."
@@ -68,11 +80,12 @@
     {% if customers %}
         <div class="customer-grid">
             {% for customer in customers %}
-                <a class="customer-card" href="{% url 'inventory:customer_detail' customer.pk %}">
+                <a class="customer-card" href="{% if customer.needs_review %}{% url 'inventory:customer_update' customer.pk %}{% else %}{% url 'inventory:customer_detail' customer.pk %}{% endif %}">
                     <div class="customer-header">
                         <div>
                             <p class="customer-name">{{ customer.display_name }}</p>
                             <p class="customer-meta">Réf. {{ customer.reference }}</p>
+                            {% if customer.needs_review %}<span class="badge warn">À compléter et vérifier</span>{% endif %}
                         </div>
                         {% if customer.balance > 0 %}
                             <span class="badge warn">{{ customer.balance|floatformat:2 }} FCFA dus</span>
@@ -114,7 +127,7 @@
             </nav>
         {% endif %}
     {% else %}
-        <p class="muted-text" style="margin:0;">Aucun client pour l'instant.</p>
+        <p class="muted-text" style="margin:0;">{% if review_only %}Aucun client à vérifier dans cette sélection.{% else %}Aucun client dans cette sélection.{% endif %}</p>
     {% endif %}
 </section>
 {% endblock %}

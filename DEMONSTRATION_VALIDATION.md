@@ -13,3 +13,12 @@
 - Régression du sélecteur client reproduite avec l'ancien JavaScript et le nouveau formulaire : aucune proposition et erreur JavaScript. Les URL CSS/JS sont maintenant liées à une empreinte de leur contenu. Chromium vérifie que l'ancienne ressource en cache est évitée, et que la sélection/création au clic et avec Entrée fonctionne pour ventes et devis, jusque dans l'aperçu du document.
 
 Les essais utilisateurs restent à effectuer. Cette branche n'est pas approuvée pour un déploiement de production ; le guide prévoit une validation avant toute fusion et migration de production.
+
+## Notifications des fiches clients — 9 novembre 2026
+
+- Migration `0033_customer_review_notifications` appliquée uniquement à la base de démonstration. Les anciennes fiches ne sont pas marquées à vérifier.
+- Badge vert personnel dans **Clients** et filtre **Mes clients à vérifier**. Les créations depuis une vente ou un devis sont signalées après enregistrement ; l'aperçu et les doubles soumissions ne créent pas de notification supplémentaire.
+- Confirmation explicite dans les deux formulaires de modification client. Une simple consultation, une sauvegarde sans confirmation ou un formulaire invalide conservent le rappel.
+- **41 tests ciblés réussis** (`inventory.test_customer_reviews`, `inventory.test_sale_editor`, `inventory.test_references`). Absence de migration manquante et `git diff --check` vérifiés.
+- Chromium : création réelle depuis vente puis devis, compteur **1 → 2 → 1 → 0**, filtrage, sauvegarde sans confirmation, complément et vérification des deux fiches. Affichage vérifié à 1440 px et 390 px, sans débordement horizontal sur mobile ni erreur JavaScript.
+- Aucune fusion dans `main`, aucun déploiement de production.

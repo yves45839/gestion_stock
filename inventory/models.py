@@ -507,6 +507,11 @@ class Customer(VersionedModelMixin, TimeStampedModel):
         default=generate_customer_reference,
     )
     name = models.CharField("Nom du contact", max_length=255)
+    needs_review = models.BooleanField("Fiche à compléter et vérifier", default=False)
+    review_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="customers_to_review", verbose_name="Utilisateur à notifier",
+    )
     company_name = models.CharField("Entreprise", max_length=255, blank=True)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=50, blank=True)

@@ -895,7 +895,10 @@ def analytics_sales_pdf(request):
 
 def customers_list(request):
     search = (request.GET.get("q") or "").strip()
+    review_only = request.GET.get("review") == "1"
     customers = Customer.objects.with_balance()
+    if review_only:
+        customers = customers.filter(needs_review=True, review_requested_by=request.user)
     if search:
         customers = customers.filter(
             Q(name__icontains=search)
@@ -927,6 +930,7 @@ def customers_list(request):
         "page_obj": page_obj,
         "pagination_query": pagination_query,
         "search": search,
+        "review_only": review_only,
         "total_customers": paginator.count,
         "outstanding_total": outstanding_total,
         "credit_total": credit_total,
@@ -2679,7 +2683,7 @@ def _save_sale_with_customer(
     customer = form.cleaned_data.get("customer")
     customer_name = form.cleaned_data.get("customer_name")
     if not customer and customer_name:
-        customer = Customer(name=customer_name)
+        customer = Customer(name=customer_name, needs_review=True, review_requested_by=history_user)
         customer._history_user = history_user
         customer.save()
     instance = form.save(commit=False)

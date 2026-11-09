@@ -1,6 +1,15 @@
 """Processeurs de contexte pour la barre de navigation."""
 
-from .models import Site
+from .models import Customer, Site
+
+
+def customer_review_notifications(request):
+    user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
+        return {}
+    return {"nav_customers_to_review": Customer.objects.filter(
+        needs_review=True, review_requested_by=user,
+    ).count()}
 
 
 def site_switcher(request):

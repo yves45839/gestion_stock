@@ -11,6 +11,7 @@
 </section>
 
 <section class="surface reveal" data-delay="120">
+    {% if customer.needs_review %}<p class="message warning">Ce client a été créé depuis une vente ou un devis. Complétez sa fiche puis cochez la confirmation de vérification avant d’enregistrer.</p>{% endif %}
     <form method="post" class="stack">
         {% csrf_token %}
         {% if form.non_field_errors %}

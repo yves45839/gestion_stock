@@ -14,6 +14,7 @@
 </section>
 
 <section class="surface reveal" data-delay="100">
+    {% if customer.needs_review %}<p class="message warning">Fiche client à compléter et vérifier. <a href="{% url 'inventory:customer_update' customer.pk %}">Compléter la fiche</a></p>{% endif %}
     <div class="grid auto-3">
         <div>
             <p class="muted-text" style="margin:0;">Solde actuel</p>
@@ -111,6 +112,7 @@
                     <div class="field">
                         {{ field.label_tag }}
                         {{ field }}
+                        {% if field.help_text %}<small class="muted-text">{{ field.help_text }}</small>{% endif %}
                         {% for error in field.errors %}
                             <div class="field-error">{{ error }}</div>
                         {% endfor %}

@@ -28,6 +28,8 @@ Arrêter l'ancien serveur avec **Ctrl+C** dans son terminal avant de lancer une 
 
 Dans la recherche client, cliquer sur une proposition ou appuyer sur **Entrée** pour la choisir. Pour un nom absent, choisir **Créer le client** : la fiche sera créée lors de l'enregistrement de la vente ou du devis, jamais au simple aperçu.
 
+Après cet enregistrement, un badge vert sur **Clients** indique le nombre de fiches que vous avez créées depuis une vente ou un devis et qui restent à vérifier. Dans **Clients → Mes clients à vérifier**, ouvrir une fiche, compléter les informations disponibles puis cocher **J’ai complété et vérifié les informations du client** et enregistrer. Le compteur diminue après cette confirmation ; consulter la fiche ou enregistrer sans cocher conserve le rappel. Les clients déjà existants et les créations directement depuis **Nouveau client** ne sont pas ajoutés à ce compteur. La migration `0033_customer_review_notifications` est appliquée automatiquement par le lanceur à la base de démonstration.
+
 Les données et les fichiers médias sont dans `var/sales-demo/`, séparés de `db.sqlite3` et de `media/`. Les clés IA sont neutralisées, le panneau IA est désactivé et aucun worker externe n'est lancé. Le serveur écoute uniquement sur votre ordinateur. Ne pas publier cette configuration de développement sur Internet.
 
 ## Parcours de validation

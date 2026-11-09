@@ -769,6 +769,12 @@ class SaleAdjustmentItemForm(forms.Form):
         return value if value is not None else 0
 
 class CustomerForm(forms.ModelForm):
+    information_verified = forms.BooleanField(
+        required=False, label="J’ai complété et vérifié les informations du client",
+        help_text="Cochez après vérification pour retirer cette fiche des clients à vérifier.",
+        widget=forms.CheckboxInput(attrs={"class": "review-confirmation"}),
+    )
+
     class Meta:
         model = Customer
         fields = [
@@ -804,8 +810,15 @@ class CustomerForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not self.instance.needs_review:
+            self.fields.pop("information_verified")
         if not self.instance.pk and not self.data.get("reference") and not self.initial.get("reference"):
             self.fields["reference"].initial = generate_customer_reference()
+
+    def save(self, commit=True):
+        if self.cleaned_data.get("information_verified"):
+            self.instance.needs_review = False
+        return super().save(commit=commit)
 
     def clean_credit_limit(self):
         credit_limit = self.cleaned_data.get("credit_limit") or Decimal("0.00")

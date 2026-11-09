@@ -83,6 +83,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'inventory.context_processors.site_switcher',
+                'inventory.context_processors.customer_review_notifications',
             ],
         },
     },
