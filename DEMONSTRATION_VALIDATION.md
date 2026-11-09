@@ -22,3 +22,11 @@ Les essais utilisateurs restent à effectuer. Cette branche n'est pas approuvée
 - **41 tests ciblés réussis** (`inventory.test_customer_reviews`, `inventory.test_sale_editor`, `inventory.test_references`). Absence de migration manquante et `git diff --check` vérifiés.
 - Chromium : création réelle depuis vente puis devis, compteur **1 → 2 → 1 → 0**, filtrage, sauvegarde sans confirmation, complément et vérification des deux fiches. Affichage vérifié à 1440 px et 390 px, sans débordement horizontal sur mobile ni erreur JavaScript.
 - Aucune fusion dans `main`, aucun déploiement de production.
+
+## Alertes de crédit — 9 novembre 2026
+
+- Préavis dès 80 %, états distincts atteint/dépassé et plafond nul sans crédit autorisé. Information sans blocage, sur les écrans internes uniquement.
+- Dette calculée sur les restes dus des factures confirmées après remises, règlements et retours. Projection distincte pour les ventes et les devis, avertissement avant et après conversion d’un devis.
+- **49 tests ciblés réussis** (`inventory.test_credit_limits`, `inventory.test_customer_reviews`, `inventory.test_sale_editor`, `inventory.test_references`). Seuils exacts, plafond nul, exclusion des devis, factures payées, retours, remises, absence de blocage, notifications serveur et limitation des requêtes sur la liste clients vérifiés. Aucune nouvelle migration nécessaire.
+- Chromium : plafond 100 000 FCFA, impayés 82 500 FCFA, état proche puis atteint et dépassé selon le paiement. Recalcul après remise, paiement automatique, changement de client et simulation de devis vérifiés. Liste et fiche client, affichages 1440 px et 390 px, aucune erreur JavaScript ni débordement horizontal sur mobile.
+- Modifications réservées à `test/nouvelle-interface-vente`, aucun déploiement de production.

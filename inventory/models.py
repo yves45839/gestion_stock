@@ -6,7 +6,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
-from django.db.models import Case, DecimalField, F, IntegerField, Q, SET_NULL, Sum, Value, When
+from django.db.models import Case, DecimalField, F, IntegerField, Prefetch, Q, SET_NULL, Sum, Value, When
 from django.db.models.fields.files import FieldFile
 from django.db.models.functions import Coalesce
 from django.forms.models import model_to_dict
@@ -478,6 +478,12 @@ class ProductAsset(TimeStampedModel):
 
 
 class CustomerQuerySet(models.QuerySet):
+    def with_credit_invoices(self):
+        return self.prefetch_related(Prefetch(
+            "sales", queryset=Sale.objects.filter(status=Sale.Status.CONFIRMED).prefetch_related("items"),
+            to_attr="credit_invoices",
+        ))
+
     def with_balance(self):
         signed_amount = Case(
             When(
@@ -500,6 +506,7 @@ class CustomerQuerySet(models.QuerySet):
 
 
 class Customer(VersionedModelMixin, TimeStampedModel):
+    CREDIT_WARNING_PERCENT = 80
     reference = models.CharField(
         "Référence client",
         max_length=20,
@@ -567,6 +574,9 @@ class Customer(VersionedModelMixin, TimeStampedModel):
 
     def unpaid_invoice_balance(self, exclude_sale_id=None) -> Decimal:
         """Remaining amounts on confirmed invoices only, never draft quotes."""
+        if hasattr(self, "credit_invoices"):
+            return sum((sale.remaining_amount for sale in self.credit_invoices
+                        if sale.pk != exclude_sale_id), Decimal("0.00"))
         sales = self.sales.filter(status=Sale.Status.CONFIRMED)
         if exclude_sale_id is not None:
             sales = sales.exclude(pk=exclude_sale_id)
@@ -574,6 +584,27 @@ class Customer(VersionedModelMixin, TimeStampedModel):
             (sale.remaining_amount for sale in sales.prefetch_related("items")),
             Decimal("0.00"),
         )
+
+    def credit_alert_for(self, outstanding):
+        """Zero authorizes no credit; a positive limit warns from 80 percent."""
+        limit = self.credit_limit
+        if outstanding <= 0:
+            return None
+        if outstanding > limit:
+            state, label = "exceeded", "Plafond de crédit dépassé"
+        elif outstanding == limit:
+            state, label = "reached", "Plafond de crédit atteint"
+        elif outstanding * 100 >= limit * self.CREDIT_WARNING_PERCENT:
+            state, label = "near", "Plafond de crédit bientôt atteint"
+        else:
+            return None
+        return {"state": state, "label": label, "limit": limit, "outstanding": outstanding,
+                "available": max(Decimal("0"), limit - outstanding),
+                "excess": max(Decimal("0"), outstanding - limit)}
+
+    @property
+    def credit_alert(self):
+        return self.credit_alert_for(self.unpaid_invoice_balance())
 
     def get_absolute_url(self) -> str:
         return reverse("inventory:customer_detail", args=[self.pk])

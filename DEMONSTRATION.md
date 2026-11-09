@@ -30,6 +30,14 @@ Dans la recherche client, cliquer sur une proposition ou appuyer sur **Entrée**
 
 Après cet enregistrement, un badge vert sur **Clients** indique le nombre de fiches que vous avez créées depuis une vente ou un devis et qui restent à vérifier. Dans **Clients → Mes clients à vérifier**, ouvrir une fiche, compléter les informations disponibles puis cocher **J’ai complété et vérifié les informations du client** et enregistrer. Le compteur diminue après cette confirmation ; consulter la fiche ou enregistrer sans cocher conserve le rappel. Les clients déjà existants et les créations directement depuis **Nouveau client** ne sont pas ajoutés à ce compteur. La migration `0033_customer_review_notifications` est appliquée automatiquement par le lanceur à la base de démonstration.
 
+### Alertes de plafond de crédit
+
+Le plafond défini dans la fiche client déclenche une alerte à **80 %**, puis un avertissement distinct quand il est **atteint** ou **dépassé**. **0 FCFA signifie qu’aucun crédit n’est autorisé** : toute dette positive déclenche l’alerte. Les alertes informent sans bloquer la vente.
+
+Le calcul utilise les restes dus des factures confirmées, avec remises, règlements et retours ; les devis sont exclus de la dette actuelle. L’alerte apparaît dans la liste et la fiche client, dans l’éditeur vente/devis et après enregistrement ou conversion. L’éditeur distingue la situation actuelle du solde projeté après la vente ; pour un devis, la projection suppose une confirmation sans règlement. Le paiement et la remise mettent la projection à jour immédiatement. L’alerte est destinée à l’utilisateur de l’application et ne figure pas sur les documents imprimés.
+
+Exemple d’essai : attribuer **100 000 FCFA** au client fictif ETS KONÉ DISTRIBUTION, dont les impayés sont de **82 500 FCFA**. L’alerte « bientôt atteint » apparaît. Ajouter **35 000 FCFA** à une vente : paiement intégral, aucun crédit supplémentaire ; paiement de **17 500 FCFA**, plafond atteint ; paiement zéro, plafond dépassé de **17 500 FCFA**.
+
 Les données et les fichiers médias sont dans `var/sales-demo/`, séparés de `db.sqlite3` et de `media/`. Les clés IA sont neutralisées, le panneau IA est désactivé et aucun worker externe n'est lancé. Le serveur écoute uniquement sur votre ordinateur. Ne pas publier cette configuration de développement sur Internet.
 
 ## Parcours de validation

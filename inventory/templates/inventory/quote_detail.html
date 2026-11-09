@@ -1,6 +1,10 @@
 {% extends "inventory/base.html" %}
 {% block title %}Devis {{ sale.quote_reference }}{% endblock %}
 {% block content %}
+{% if sale.customer %}
+    {% include 'inventory/partials/customer_credit_alert.html' with alert=sale.customer.credit_alert credit_context='Situation actuelle' %}
+    {% include 'inventory/partials/customer_credit_alert.html' with alert=credit_projection credit_context='Si ce devis est confirmé sans règlement' %}
+{% endif %}
 <div class="card" style="margin-bottom:1.5rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
         <div>

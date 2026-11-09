@@ -1,0 +1,8 @@
+{% if alert %}
+<div class="message {% if alert.state == 'near' %}warning{% else %}error{% endif %}" role="status" data-credit-state="{{ alert.state }}">
+    {% if credit_context %}<span>{{ credit_context }} :</span>{% endif %}
+    <strong>{{ alert.label }}</strong>
+    <span>Factures impayées : {{ alert.outstanding|floatformat:2 }} FCFA · Plafond : {{ alert.limit|floatformat:2 }} FCFA.</span>
+    {% if alert.excess %}<span>Dépassement : {{ alert.excess|floatformat:2 }} FCFA.</span>{% else %}<span>Crédit disponible : {{ alert.available|floatformat:2 }} FCFA.</span>{% endif %}
+</div>
+{% endif %}

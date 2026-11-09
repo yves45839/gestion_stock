@@ -807,6 +807,9 @@ class CustomerForm(forms.ModelForm):
             "credit_limit": "Plafond de crédit",
             "notes": "Notes",
         }
+        help_texts = {
+            "credit_limit": "Alerte dès 80 % du plafond. 0 FCFA signifie qu’aucun crédit n’est autorisé.",
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

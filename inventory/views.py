@@ -896,7 +896,7 @@ def analytics_sales_pdf(request):
 def customers_list(request):
     search = (request.GET.get("q") or "").strip()
     review_only = request.GET.get("review") == "1"
-    customers = Customer.objects.with_balance()
+    customers = Customer.objects.with_balance().with_credit_invoices()
     if review_only:
         customers = customers.filter(needs_review=True, review_requested_by=request.user)
     if search:
@@ -2220,9 +2220,20 @@ def _sale_editor_data(site):
         "id": customer.pk, "display_name": customer.display_name,
         "reference": customer.reference, "phone": customer.phone,
         "balance": str(balances[customer.pk]),
+        "credit_limit": str(customer.credit_limit),
+        "credit_warning_percent": customer.CREDIT_WARNING_PERCENT,
         "url": reverse("inventory:customer_detail", args=[customer.pk]),
     } for customer in Customer.objects.order_by("name", "company_name")]
     return products, customers
+
+
+def _notify_customer_credit(request, customer):
+    if customer and (alert := customer.credit_alert):
+        messages.warning(request, (
+            f"{customer.display_name} : {alert['label']}. "
+            f"Factures impayées : {alert['outstanding']:.2f} FCFA ; "
+            f"plafond : {alert['limit']:.2f} FCFA."
+        ))
 
 
 def draft_document_preview(request):
@@ -2351,6 +2362,7 @@ def sale_create(request):
                         site=action_site,
                     )
                 messages.success(request, "La vente a été enregistrée et le stock mis à jour.")
+                _notify_customer_credit(request, sale.customer)
                 if invalidated_counts:
                     messages.warning(
                         request,
@@ -2651,6 +2663,7 @@ def quote_create(request):
                         items_to_create.append(item)
                     SaleItem.objects.bulk_create(items_to_create)
                 messages.success(request, "Le devis a été enregistré.")
+                _notify_customer_credit(request, sale.customer)
                 return redirect(reverse("inventory:quote_detail", args=[sale.pk]))
     else:
         sale_form = SaleForm(submission_scope=f"{request.user.pk}:DEV")
@@ -2721,6 +2734,9 @@ def quote_detail(request, pk):
         "can_confirm": sale.status != Sale.Status.CONFIRMED,
         "return_url": return_url,
     }
+    if sale.customer and sale.status == Sale.Status.DRAFT:
+        outstanding = sale.customer.unpaid_invoice_balance()
+        context["credit_projection"] = sale.customer.credit_alert_for(outstanding + sale.total_amount)
     context.update(site_context)
     return render(request, "inventory/quote_detail.html", context)
 
@@ -2800,6 +2816,7 @@ def quote_edit(request, pk):
                         items_to_create.append(item)
                     SaleItem.objects.bulk_create(items_to_create)
                 messages.success(request, "Le devis a été mis à jour.")
+                _notify_customer_credit(request, sale.customer)
                 return redirect(reverse("inventory:quote_detail", args=[sale.pk]))
     else:
         sale_form = SaleForm(instance=sale)
@@ -2847,6 +2864,7 @@ def quote_confirm(request, pk):
             site=_get_active_site(request),
         )
         messages.success(request, "Devis converti en vente.")
+        _notify_customer_credit(request, sale.customer)
         if invalidated_counts:
             messages.warning(
                 request,

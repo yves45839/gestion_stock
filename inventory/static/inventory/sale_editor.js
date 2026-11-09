@@ -50,12 +50,26 @@
     $('#net-display').textContent = money(net);
     $('#remaining-display').textContent = money(remaining);
     $('#client-balance-display').textContent = money(prior + (isQuote ? 0 : remaining));
+    updateCreditAlert($('#credit-current-alert'), customer, prior, 'Situation actuelle');
+    updateCreditAlert($('#credit-projected-alert'), customer, prior + remaining,
+      isQuote ? 'Si ce devis est confirmé sans règlement' : 'Après cette vente', remaining <= 0);
     $('#product-count').textContent = `${count} produit${count > 1 ? 's' : ''}`;
     const invalidDiscount = value < 0 || (kind === 'percent' ? value > 10000 : value > subtotal);
     hasMoneyError = invalidDiscount || paid > net;
     $('#money-error').textContent = invalidDiscount ? 'Vérifiez la remise : elle dépasse le montant autorisé.' : paid > net ? 'Le paiement dépasse le net à payer.' : '';
     const stockWarnings = products.filter(p => selectedQuantities.get(p.id) > Number(p.stock));
     $('#search-status').textContent = stockWarnings.length ? 'Attention : quantité supérieure au stock disponible pour ' + stockWarnings.map(p => p.name).join(', ') + '.' : '';
+  }
+  function updateCreditAlert(element, customer, outstanding, context, suppress = false) {
+    const limit = cents(customer?.credit_limit);
+    const percent = customer?.credit_warning_percent || 80;
+    const visible = !suppress && customer && outstanding > 0 && outstanding * 100 >= limit * percent;
+    element.hidden = !visible;
+    if (!visible) { element.textContent = ''; return; }
+    const state = outstanding > limit ? 'dépassé' : outstanding === limit ? 'atteint' : 'bientôt atteint';
+    element.className = 'message ' + (outstanding >= limit ? 'error' : 'warning');
+    element.textContent = `${context} : plafond de crédit ${state}. Impayés : ${money(outstanding)} ; plafond : ${money(limit)}. ` +
+      (outstanding > limit ? `Dépassement : ${money(outstanding - limit)}.` : `Crédit disponible : ${money(limit - outstanding)}.`);
   }
   function reindex() {
     rows().forEach((row, i) => {

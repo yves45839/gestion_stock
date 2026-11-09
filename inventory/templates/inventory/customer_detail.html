@@ -14,6 +14,7 @@
 </section>
 
 <section class="surface reveal" data-delay="100">
+    {% include 'inventory/partials/customer_credit_alert.html' with alert=customer.credit_alert %}
     {% if customer.needs_review %}<p class="message warning">Fiche client à compléter et vérifier. <a href="{% url 'inventory:customer_update' customer.pk %}">Compléter la fiche</a></p>{% endif %}
     <div class="grid auto-3">
         <div>
