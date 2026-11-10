@@ -1,0 +1,2 @@
+# Installed only when the isolated demo cannot load native WeasyPrint.
+playwright==1.62.0

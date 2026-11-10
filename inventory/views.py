@@ -880,7 +880,7 @@ def analytics_sales_pdf(request):
         "generated_at": timezone.now(),
     }
     html = render_to_string("inventory/analytics_confirmed_sales_pdf.html", context, request=request)
-    if HTML is None:
+    if HTML is None and not getattr(settings, "IS_SALES_DEMO", False):
         messages.error(
             request,
             "WeasyPrint n'est pas installé. Installez-le avec 'pip install weasyprint' pour l'export PDF.",
@@ -889,7 +889,15 @@ def analytics_sales_pdf(request):
 
     response = HttpResponse(content_type="application/pdf")
     response["Content-Disposition"] = 'attachment; filename="ventes-confirmees.pdf"'
-    HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf(response)
+    from .demo_pdf import should_use_demo_pdf
+    if should_use_demo_pdf(HTML):
+        from .demo_pdf import DemoPDFError, render_demo_pdf
+        try:
+            response.write(render_demo_pdf(html))
+        except DemoPDFError as error:
+            return HttpResponse(str(error), status=503, content_type="text/plain; charset=utf-8")
+    else:
+        HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf(response)
     return response
 
 
@@ -2905,7 +2913,7 @@ def sale_document_pdf(request, pk, doc_type):
         "return_url": return_url,
     }
     html = render_to_string("inventory/document_preview.html", context, request=request)
-    if HTML is None:  # pragma: no cover
+    if HTML is None and not getattr(settings, "IS_SALES_DEMO", False):  # pragma: no cover
         return HttpResponse(
             "WeasyPrint n'est pas installé. Installez-le avec 'pip install weasyprint' pour l'export PDF.",
             status=500,
@@ -2913,7 +2921,15 @@ def sale_document_pdf(request, pk, doc_type):
     response = HttpResponse(content_type="application/pdf")
     filename = f"{doc_meta['filename']}.pdf"
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf(response)
+    from .demo_pdf import should_use_demo_pdf
+    if should_use_demo_pdf(HTML):
+        from .demo_pdf import DemoPDFError, render_demo_pdf
+        try:
+            response.write(render_demo_pdf(html))
+        except DemoPDFError as error:
+            return HttpResponse(str(error), status=503, content_type="text/plain; charset=utf-8")
+    else:
+        HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf(response)
     return response
 
 

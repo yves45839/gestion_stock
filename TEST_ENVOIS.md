@@ -10,6 +10,12 @@ Télécharger et décompresser la [branche de test](https://github.com/yves45839
 py -3.12 start_demo.py
 ```
 
+**Windows et moteur PDF :** le lanceur vérifie d’abord WeasyPrint en générant un petit PDF. Si ses bibliothèques natives ne se chargent pas, il prépare automatiquement Playwright et Chromium dans l’environnement de démonstration, puis vérifie un PDF avant le démarrage. Le premier lancement peut donc télécharger un navigateur et prendre quelques minutes. Aucun outil système Windows n’est à installer manuellement pour ce mode de secours.
+
+Si vous avez téléchargé une ancienne archive et voyez « Le moteur PDF WeasyPrint doit être installé », arrêter le serveur avec **Ctrl+C**, télécharger à nouveau cette branche, décompresser dans un **nouveau dossier** et relancer `py -3.12 start_demo.py`. L’ancien dossier et ses données restent conservés. Avec une copie Git de cette branche, récupérer les changements puis relancer le même lanceur.
+
+Le rendu de secours utilise Chromium : contrôler visuellement la mise en page des documents d’essai. Il est réservé à la démonstration ; la production conserve WeasyPrint. Si le téléchargement ne se termine pas, vérifier l’accès Internet et relancer le lanceur avant de reprendre l’essai.
+
 Ouvrir `http://127.0.0.1:8001/`. Connexion fictive : `demo` / `Demo-Ventes-2026!`. Les données se trouvent exclusivement dans `var/sales-demo/`. Ce serveur de développement est local ; aucune deuxième application PythonAnywhere n’est nécessaire.
 
 1. Choisir le site **Treichville — DÉMO**.

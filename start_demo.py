@@ -60,6 +60,31 @@ def prepare_python(root):
     return python
 
 
+def prepare_demo_pdf(python, root, environment):
+    probe = subprocess.run(
+        [str(python), "-c", "from weasyprint import HTML; assert HTML(string='<p>PDF</p>').write_pdf().startswith(b'%PDF-')"],
+        cwd=root, env=environment, capture_output=True, text=True,
+    )
+    if probe.returncode == 0 and environment.get("LRSTOCK_DEMO_PDF_ENGINE") != "chromium":
+        return
+    environment["LRSTOCK_DEMO_PDF_ENGINE"] = "chromium"
+    print("WeasyPrint ne se charge pas sur cet ordinateur. Préparation du moteur PDF de démonstration…", flush=True)
+    commands = [
+        ["-m", "pip", "install", "-r", "requirements-demo-pdf.txt", "--disable-pip-version-check"],
+        ["-m", "playwright", "install", "chromium"],
+        ["-c", "from inventory.demo_pdf import render_demo_pdf; assert render_demo_pdf('<p>PDF</p>').startswith(b'%PDF-')"],
+    ]
+    try:
+        for command in commands:
+            subprocess.run([str(python), *command], cwd=root, env=environment, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        raise SystemExit(
+            "Le moteur PDF n’a pas pu être préparé. Vérifiez la connexion Internet, "
+            "fermez le serveur et relancez : py -3.12 start_demo.py\n"
+            "La base de démonstration existante est conservée."
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Démonstration LR STOCK, sans connexion à la production.")
     parser.add_argument("--port", type=int, default=8001)
@@ -75,6 +100,7 @@ def main():
     def run(*command):
         subprocess.run([str(python), *command], cwd=root, env=environment, check=True)
     run("-m", "pip", "install", "-r", "requirements.txt", "--disable-pip-version-check")
+    prepare_demo_pdf(python, root, environment)
     run("manage.py", "prepare_sales_demo", f"--settings={demo_settings}")
     if not args.prepare_only:
         print(f"Ouvrez l’adresse locale http://127.0.0.1:{args.port}/ventes/nouvelle/", flush=True)

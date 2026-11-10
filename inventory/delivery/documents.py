@@ -54,8 +54,8 @@ def report_snapshot(request):
 
 def render_pdf(request, batch):
     from inventory.views import HTML, _build_document_context, _get_document_meta
-    if HTML is None:
-        raise DocumentError("Le moteur PDF WeasyPrint doit être installé pour préparer le document.")
+    if HTML is None and not getattr(settings, "IS_SALES_DEMO", False):
+        raise DocumentError("Le moteur PDF WeasyPrint ne peut pas être chargé. Vérifiez son installation et ses bibliothèques système.")
     if batch.document_type == "report":
         from datetime import datetime
         filters = batch.report_filters
@@ -80,6 +80,13 @@ def render_pdf(request, batch):
             from weasyprint import default_url_fetcher
             return default_url_fetcher(url, *args, **kwargs)
         raise ValueError("External resources are disabled for delivery documents")
+    from inventory.demo_pdf import should_use_demo_pdf
+    if should_use_demo_pdf(HTML):
+        from inventory.demo_pdf import DemoPDFError, render_demo_pdf
+        try:
+            return render_demo_pdf(html)
+        except DemoPDFError as error:
+            raise DocumentError(str(error))
     return HTML(string=html, url_fetcher=local_assets_only).write_pdf()
 
 

@@ -68,3 +68,11 @@ Validation : 88 tests ciblés réussis, puis 21 tests spécifiques aux envois r�
 Migration `0035_documentdelivery` appliquée exclusivement à la démonstration. Dépendance de conversion d’image : `pypdfium2==4.30.0`. Guide détaillé et configuration sans secrets : `TEST_ENVOIS.md`, `config/delivery.env.example`. Le lanceur conserve la simulation sans option ; `--delivery-test` permet des essais réels sur données fictives uniquement après configuration explicite.
 
 La configuration Microsoft Entra, les modèles/identifiants Meta et les destinataires de test restent à renseigner chez l’utilisateur. Le nom d’affichage LrStock et la réception réelle ne sont pas validés. Aucun changement sur PythonAnywhere ni publication de ces essais sur `main`.
+
+## Correction du moteur PDF sur Windows — 10 novembre 2026
+
+L’utilisateur a signalé le message « Le moteur PDF WeasyPrint doit être installé » pendant la démonstration Windows. Le contrôle initial confondait un paquet Python absent et des bibliothèques natives impossibles à charger. Le lanceur teste désormais une génération réelle ; en cas d’échec, il installe les dépendances de `requirements-demo-pdf.txt`, prépare Chromium et vérifie un PDF avant le démarrage. Un environnement de démonstration avec moteur forcé utilise également ce secours si l’import WeasyPrint fonctionne mais que son rendu échoue.
+
+Le secours est strictement limité à `IS_SALES_DEMO`. Il traite les pièces jointes d’envoi, les exports PDF habituels des documents et le rapport PDF. Les modèles restent identiques ; le contenu n’est envoyé à aucun service de conversion, JavaScript et les chargements externes sont désactivés dans le navigateur. Les erreurs de préparation indiquent de relancer `start_demo.py` au lieu d’exiger simplement une installation pip.
+
+Validation : 97 tests ciblés réussis, plus le test existant de l’export PDF natif du rapport ; contrôle Django et `git diff --check` réussis. Tests avec WeasyPrint remplacé par `None`, rendu réel Chromium d’un devis PDF et d’un rapport PNG, exports habituels, cas d’import natif réussi avec secours forcé, garde interdisant ce secours en production et tests du lanceur. Les parcours automatisés simulent le défaut de bibliothèques natives sur l’exécuteur Linux ; un essai sur la machine Windows de l’utilisateur reste nécessaire.

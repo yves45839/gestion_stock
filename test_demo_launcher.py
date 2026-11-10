@@ -57,3 +57,27 @@ class DemoLauncherTests(TestCase):
                     start_demo.prepare_python(root)
                     create.assert_called_once()
             self.assertEqual(len(list(root.glob('.venv-incompatible-*'))), 1)
+
+    def test_native_pdf_engine_does_not_download_a_browser(self):
+        environment = {"DJANGO_SETTINGS_MODULE": "config.demo_settings"}
+        with patch.object(start_demo.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            start_demo.prepare_demo_pdf(Path("python"), Path("."), environment)
+        run.assert_called_once()
+        self.assertNotIn("LRSTOCK_DEMO_PDF_ENGINE", environment)
+
+    def test_missing_native_library_prepares_and_checks_demo_pdf_before_server(self):
+        environment = {"DJANGO_SETTINGS_MODULE": "config.demo_settings"}
+        results = [subprocess.CompletedProcess([], 1), *[subprocess.CompletedProcess([], 0)] * 3]
+        with patch.object(start_demo.subprocess, "run", side_effect=results) as run:
+            start_demo.prepare_demo_pdf(Path("python"), Path("."), environment)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn("requirements-demo-pdf.txt", commands[1])
+        self.assertEqual(commands[2][1:], ["-m", "playwright", "install", "chromium"])
+        self.assertIn("render_demo_pdf", commands[3][2])
+        self.assertEqual(environment["LRSTOCK_DEMO_PDF_ENGINE"], "chromium")
+
+    def test_pdf_browser_download_failure_stops_before_starting_server(self):
+        environment = {"DJANGO_SETTINGS_MODULE": "config.demo_settings"}
+        with patch.object(start_demo.subprocess, "run", side_effect=[subprocess.CompletedProcess([], 1), subprocess.CalledProcessError(1, "pip")]):
+            with self.assertRaisesRegex(SystemExit, "connexion Internet"):
+                start_demo.prepare_demo_pdf(Path("python"), Path("."), environment)
