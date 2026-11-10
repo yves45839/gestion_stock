@@ -1,0 +1,82 @@
+<header class="topbar">
+    <div class="topbar-inner">
+        <a class="brand" href="{% url 'inventory:dashboard' %}">{% include "inventory/partials/header_icon.html" with icon="cube" %}<span>Gestion Stock</span></a>
+        <div class="user-actions">
+            {% if nav_sites %}
+                <form method="post" action="{% url 'inventory:set_active_site' %}" class="site-switcher">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    {% include "inventory/partials/header_icon.html" with icon="location" %}
+                    <label for="nav-site-select" class="visually-hidden">Site actif</label>
+                    <select id="nav-site-select" name="site" onchange="this.form.submit()">
+                        <option value="" {% if not nav_active_site_id %}selected{% endif %}>Vue globale</option>
+                        {% for site in nav_sites %}
+                            <option value="{{ site.pk }}" {% if nav_active_site_id == site.pk|stringformat:"s" %}selected{% endif %}>{{ site.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% include "inventory/partials/header_icon.html" with icon="chevron" %}
+                    <noscript><button type="submit">OK</button></noscript>
+                </form>
+            {% else %}
+                <span class="site-context" aria-label="Site actif">{% include "inventory/partials/header_icon.html" with icon="location" %}<span>{{ active_site.name|default:"Vue globale" }}</span></span>
+            {% endif %}
+            {% if request.user.is_authenticated %}
+                <details class="header-menu notification-menu">
+                    <summary class="notification-toggle" aria-label="Notifications{% if nav_customers_to_review %} : {{ nav_customers_to_review }} fiche{{ nav_customers_to_review|pluralize }} client{{ nav_customers_to_review|pluralize }} à vérifier{% endif %}">
+                        {% include "inventory/partials/header_icon.html" with icon="bell" %}{% if nav_customers_to_review %}<span class="notification-dot" aria-hidden="true"></span>{% endif %}
+                    </summary>
+                    <div class="header-dropdown">
+                        <p class="header-dropdown-title">Notifications</p>
+                        {% if nav_customers_to_review %}
+                            <a href="{% url 'inventory:customer_list' %}?review=1">{{ nav_customers_to_review }} fiche{{ nav_customers_to_review|pluralize }} client{{ nav_customers_to_review|pluralize }} à compléter et vérifier</a>
+                        {% else %}
+                            <p>Aucune fiche client à vérifier.</p>
+                        {% endif %}
+                    </div>
+                </details>
+            {% endif %}
+            <details class="header-menu profile-menu">
+                <summary class="profile-toggle" aria-label="Menu utilisateur : {{ request.user.get_full_name|default:request.user.username|default:'Invité' }}">
+                    <span class="user-avatar">{% include "inventory/partials/header_icon.html" with icon="user" %}</span>
+                    <span class="profile-name">{{ request.user.get_full_name|default:request.user.username|default:"Invité" }}</span>
+                    {% include "inventory/partials/header_icon.html" with icon="chevron" %}
+                </summary>
+                <div class="header-dropdown">
+                    <a href="{% url 'inventory:sale_create' %}">{% include "inventory/partials/header_icon.html" with icon="cart" %} Nouvelle vente</a>
+                    <a href="{% url 'inventory:record_movement' %}">{% include "inventory/partials/header_icon.html" with icon="movement" %} Mouvement</a>
+                    {% if request.user.is_authenticated %}
+                        <form method="post" action="{% url 'logout' %}" class="logout-form">
+                            {% csrf_token %}<button type="submit">{% include "inventory/partials/header_icon.html" with icon="logout" %} Déconnexion</button>
+                        </form>
+                    {% else %}
+                        <a href="{% url 'login' %}?next={{ request.path|urlencode }}">Connexion</a>
+                    {% endif %}
+                </div>
+            </details>
+        </div>
+    </div>
+    <nav class="nav" aria-label="Navigation principale">
+        <div class="nav-inner">
+        {% with current=request.resolver_match.url_name %}
+            <a href="{% url 'inventory:dashboard' %}" class="nav-tab {% if current == 'dashboard' %}active{% endif %}" {% if current == 'dashboard' %}aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="home" %}<span>Tableau de bord</span></a>
+            <a href="{% url 'inventory:inventory_overview' %}" class="nav-tab {% if current == 'inventory_overview' or current == 'product_detail' or current == 'product_create' %}active{% endif %}" {% if current == 'inventory_overview' or current == 'product_detail' or current == 'product_create' %}aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="products" %}<span>Produits</span></a>
+            <a href="{% url 'inventory:sales_list' %}" class="nav-tab {% if current == 'sales_list' or current == 'sale_create' or current == 'sale_return' or current == 'sale_adjust' or current == 'sale_document_preview' %}active{% endif %}" {% if current == 'sales_list' or current == 'sale_create' or current == 'sale_return' or current == 'sale_adjust' or current == 'sale_document_preview' %}aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="cart" %}<span>Ventes</span></a>
+            <a href="{% url 'inventory:quotes_list' %}" class="nav-tab {% if current == 'quotes_list' or current == 'quote_create' or current == 'quote_detail' or current == 'quote_edit' %}active{% endif %}" {% if current == 'quotes_list' or current == 'quote_create' or current == 'quote_detail' or current == 'quote_edit' %}aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="document" %}<span>Devis</span></a>
+            <a href="{% url 'inventory:customer_list' %}" class="nav-tab {% if current == 'customer_list' or current == 'customer_create' or current == 'customer_detail' or current == 'customer_update' %}active{% endif %}" {% if current == 'customer_list' or current == 'customer_create' or current == 'customer_detail' or current == 'customer_update' %}aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="users" %}<span>Clients</span>{% if nav_customers_to_review %}<span class="customer-notification" aria-label="{{ nav_customers_to_review }} fiche{{ nav_customers_to_review|pluralize }} client{{ nav_customers_to_review|pluralize }} à compléter et vérifier">{{ nav_customers_to_review }}</span>{% endif %}</a>
+            <a href="{% url 'inventory:record_movement' %}" class="nav-tab {% if current == 'record_movement' %}active{% endif %}" {% if current == 'record_movement' %}aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="movement" %}<span>Mouvements</span></a>
+            <details class="header-menu nav-more">
+                <summary class="nav-tab {% if current == 'analytics' or current == 'inventory_physical' or current == 'stock_valuation' or current == 'product_bot' or current == 'import_products' %}active{% endif %}">{% include "inventory/partials/header_icon.html" with icon="more" %}<span>Plus</span>{% include "inventory/partials/header_icon.html" with icon="chevron" %}</summary>
+                <div class="header-dropdown">
+                    <a href="{% url 'inventory:analytics' %}" {% if current == 'analytics' %}class="active" aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="chart" %} Analyses</a>
+                    <a href="{% url 'inventory:inventory_physical' %}" {% if current == 'inventory_physical' %}class="active" aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="check" %} Inventaire physique</a>
+                    <a href="{% url 'inventory:stock_valuation' %}" {% if current == 'stock_valuation' %}class="active" aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="value" %} Valorisation</a>
+                    {% if request.user.is_staff %}
+                    <a href="{% url 'inventory:product_bot' %}" {% if current == 'product_bot' %}class="active" aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="spark" %} IA</a>
+                    {% endif %}
+                    <a href="{% url 'inventory:import_products' %}" {% if current == 'import_products' %}class="active" aria-current="page"{% endif %}>{% include "inventory/partials/header_icon.html" with icon="import" %} Import</a>
+                </div>
+            </details>
+        {% endwith %}
+        </div>
+    </nav>
+</header>

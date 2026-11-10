@@ -36,3 +36,13 @@ L’utilisateur a autorisé l’intégration des modifications de `test/nouvelle
 - **49 tests ciblés réussis** (`inventory.test_credit_limits`, `inventory.test_customer_reviews`, `inventory.test_sale_editor`, `inventory.test_references`). Seuils exacts, plafond nul, exclusion des devis, factures payées, retours, remises, absence de blocage, notifications serveur et limitation des requêtes sur la liste clients vérifiés. Aucune nouvelle migration nécessaire.
 - Chromium : plafond 100 000 FCFA, impayés 82 500 FCFA, état proche puis atteint et dépassé selon le paiement. Recalcul après remise, paiement automatique, changement de client et simulation de devis vérifiés. Liste et fiche client, affichages 1440 px et 390 px, aucune erreur JavaScript ni débordement horizontal sur mobile.
 - Modifications réservées à `test/nouvelle-interface-vente`, aucun déploiement de production.
+
+## Bandeau de navigation validé — 10 novembre 2026
+
+L’utilisateur a demandé d’appliquer la maquette validée : bandeau bleu existant à deux niveaux, onglets avec icônes et onglet actif blanc, nom du site avec localisation, cloche dans un bouton assorti, puis séparateur et avatar générique avec nom de l’utilisateur. Les noms affichés proviennent du site actif et du compte connecté, sans imposer « Treichville » ou « Yves ».
+
+Tous les accès existants restent disponibles ; Analyses, Inventaire physique, Valorisation, IA (personnel autorisé) et Import sont regroupés dans « Plus ». Le menu utilisateur conserve Nouvelle vente, Mouvement et la déconnexion par POST avec CSRF. La cloche renvoie aux fiches clients personnelles à vérifier via le filtre existant `?review=1` ; elle ne supprime pas les rappels. Les employés gardent un site fixe et seuls les superutilisateurs disposent du sélecteur.
+
+Validation : 61 tests ciblés réussis (navigation, plafonds de crédit, fiches clients, éditeur, références et lanceur), `manage.py check`, absence de migrations manquantes et `git diff --check`. Chromium : sélection du site, onglet actif, menus, fermeture par Échap et clic extérieur, absence d’erreurs JavaScript et de débordement du bandeau et des menus aux largeurs 320, 375, 390, 600, 768, 960 et 1440 pixels. Les essais utilisent exclusivement la base de démonstration isolée.
+
+Aucune migration supplémentaire. Sur PythonAnywhere : récupérer `main`, exécuter `python manage.py collectstatic --noinput` dans l’environnement virtuel de l’application, puis **Web → Reload** et actualiser le navigateur. Le rechargement est nécessaire pour charger les modèles HTML. Le déploiement PythonAnywhere reste distinct de l’envoi GitHub ; il n’a pas été réalisé depuis cet environnement.

@@ -38,62 +38,94 @@
         a { color: var(--accent); }
         .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
         .topbar {
-            position: static;
             background: linear-gradient(90deg, var(--brand-dark), var(--brand));
-            border-bottom: 3px solid var(--orange-vif);
+            color: #fff;
         }
+        .topbar-inner, .nav-inner { max-width: 1180px; margin: 0 auto; padding: 0 1rem; }
         .topbar-inner {
-            max-width: 1180px;
-            margin: 0 auto;
-            padding: 0.75rem 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            justify-content: space-between;
+            min-height: 90px; display: flex; align-items: center;
+            justify-content: space-between; gap: 1rem; padding-top: 1rem; padding-bottom: 1rem;
         }
+        .header-icon { width: 22px; height: 22px; flex: 0 0 auto; }
         .brand {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            font-weight: 800;
-            color: #ffffff;
-            font-size: 1.05rem;
-            letter-spacing: 0.02em;
-            text-decoration: none;
-            text-transform: uppercase;
+            display: inline-flex; align-items: center; gap: .75rem;
+            color: #fff; font-weight: 750; font-size: 1.65rem;
+            text-decoration: none; white-space: nowrap; letter-spacing: -.025em;
         }
-        .brand .dot {
-            display: inline-block;
-            width: 11px;
-            height: 11px;
-            border-radius: 3px;
-            background: var(--orange-vif);
+        .brand .header-icon { width: 40px; height: 40px; }
+        .user-actions { display: flex; align-items: center; gap: .85rem; min-width: 0; }
+        .site-switcher, .site-context {
+            display: inline-flex; align-items: center; gap: .55rem; margin: 0;
+            min-height: 44px; padding: 0 .8rem; border-radius: 12px;
+            background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.22);
+            color: #fff; font-size: .95rem; font-weight: 600;
         }
-        .nav { display: flex; gap: 0.25rem; flex-wrap: wrap; }
-        .nav a {
-            padding: 0.4rem 0.6rem;
-            text-decoration: none;
-            color: #ffffff;
-            font-weight: 600;
-            font-size: 0.92rem;
-            border-radius: var(--radius-sm);
-            border: 1px solid transparent;
-        }
-        .nav a.active { background: #ffffff; color: var(--brand); }
-        .nav a:hover:not(.active) { background: rgba(255, 255, 255, 0.14); }
-        .user-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-        .site-switcher { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; }
+        .site-switcher { position: relative; }
         .site-switcher select {
-            width: auto;
-            padding: 0.32rem 0.5rem;
-            font-size: 0.85rem;
-            font-weight: 600;
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            border-radius: var(--radius-sm);
-            background: #ffffff;
-            color: var(--text);
+            appearance: none; width: auto; max-width: 220px; min-height: 42px;
+            margin: 0; padding: .4rem 1.4rem .4rem 0; border: 0;
+            border-radius: 0; background: transparent; color: #fff;
+            font: inherit; cursor: pointer;
         }
-        .logout-form { display: inline-flex; margin: 0; }
+        .site-switcher select option { color: var(--text); background: #fff; }
+        .site-switcher > .chevron { position: absolute; right: .65rem; pointer-events: none; }
+        .chevron { width: 15px; height: 15px; }
+        .site-context span { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .header-menu { position: relative; }
+        .header-menu > summary {
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: .6rem; cursor: pointer; list-style: none; color: #fff;
+        }
+        .header-menu > summary::-webkit-details-marker { display: none; }
+        .notification-toggle {
+            width: 44px; height: 44px; border-radius: 12px;
+            border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08);
+            position: relative;
+        }
+        .notification-dot {
+            position: absolute; top: 7px; right: 8px; width: 7px; height: 7px;
+            background: #15803d; border-radius: 50%; outline: 2px solid var(--brand);
+        }
+        .profile-menu { border-left: 1px solid rgba(255,255,255,.4); padding-left: 1rem; }
+        .profile-toggle { min-height: 44px; font-weight: 650; }
+        .profile-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .user-avatar {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 38px; height: 38px; border-radius: 50%; background: #fff; color: var(--brand);
+        }
+        .user-avatar .header-icon { width: 27px; height: 27px; }
+        .header-dropdown {
+            position: absolute; z-index: 50; top: calc(100% + .6rem); right: 0;
+            width: 270px; max-width: calc(100vw - 2rem); padding: .5rem;
+            color: var(--text); background: #fff; border: 1px solid var(--border);
+            border-radius: 12px; box-shadow: 0 12px 32px rgba(22,41,94,.18);
+        }
+        .header-dropdown a, .header-dropdown button {
+            display: flex; align-items: center; gap: .65rem; width: 100%;
+            padding: .7rem .75rem; border: 0; border-radius: 6px;
+            background: transparent; color: var(--brand); text-align: left;
+            text-decoration: none; font: inherit; font-weight: 600; cursor: pointer;
+        }
+        .header-dropdown a:hover, .header-dropdown button:hover { background: var(--surface-muted); }
+        .header-dropdown a.active { background: var(--surface-muted); }
+        .header-dropdown p { margin: .5rem .75rem; font-size: .9rem; }
+        .header-dropdown-title { font-weight: 700; color: var(--brand); }
+        .logout-form { margin: 0; border-top: 1px solid var(--divider); }
+        .nav { border-top: 1px solid rgba(255,255,255,.22); }
+        .nav-inner { display: flex; align-items: stretch; gap: .25rem; padding-top: .65rem; }
+        .nav-tab {
+            display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+            min-height: 52px; padding: .7rem .9rem; color: #fff;
+            font-weight: 600; font-size: .94rem; text-decoration: none;
+            white-space: nowrap; border-radius: 10px 10px 0 0;
+        }
+        .nav-tab.active { color: var(--brand); background: #fff; }
+        .nav-tab:hover:not(.active), .header-menu > summary:hover:not(.active) { background: rgba(255,255,255,.12); }
+        .nav-more { margin-left: auto; }
+        .nav-more > summary { height: 100%; }
+        .nav-more .header-dropdown { top: calc(100% + .25rem); }
+        .topbar a:focus-visible, .topbar summary:focus-visible, .topbar select:focus-visible,
+        .header-dropdown button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
         .visually-hidden {
             position: absolute;
             width: 1px;
@@ -105,33 +137,6 @@
             white-space: nowrap;
             border: 0;
         }
-        .context-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            padding: 0.3rem 0.55rem;
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
-            font-weight: 600;
-            font-size: 0.85rem;
-        }
-        /* Boutons du topbar : lisibles sur fond bleu marque */
-        .topbar .btn {
-            background: var(--accent-orange);
-            border: 1px solid transparent;
-            color: #ffffff;
-        }
-        .topbar .btn:hover { background: #8f3e10; }
-        .topbar .btn.secondary,
-        .topbar .btn.ghost {
-            background: transparent;
-            border-color: rgba(255, 255, 255, 0.45);
-            color: #ffffff;
-        }
-        .topbar .btn.secondary:hover,
-        .topbar .btn.ghost:hover { background: rgba(255, 255, 255, 0.14); }
         .container {
             max-width: 1180px;
             width: 100%;
@@ -389,7 +394,7 @@
         .float-soft,
         .pulse-border { animation: none; }
         @media (max-width: 960px) {
-            .topbar-inner { padding: 0.7rem 0.9rem; }
+
             .surface-header { flex-direction: column; align-items: flex-start; }
             .page-header { flex-direction: column; }
             .split-70 { grid-template-columns: 1fr; }
@@ -414,23 +419,31 @@
             }
             .ia-actions { width: 100%; }
         }
-        @media (max-width: 720px) {
-            .topbar-inner { flex-direction: column; align-items: flex-start; gap: 0.6rem; padding: 0.7rem 0.9rem; }
-            .nav,
-            .user-actions {
-                width: 100%;
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-                padding-bottom: 0.2rem;
-                gap: 0.45rem;
-            }
-            .nav::-webkit-scrollbar,
-            .user-actions::-webkit-scrollbar { display: none; }
-            .nav a,
-            .user-actions > * { flex: 0 0 auto; white-space: nowrap; }
-            .nav a { padding: 0.4rem 0.6rem; }
-            .user-actions .btn { padding: 0.4rem 0.65rem; }
+        @media (max-width: 960px) {
+            .topbar-inner { flex-wrap: wrap; gap: .85rem; }
+            .nav-inner { flex-wrap: wrap; }
+            .nav-tab { font-size: .88rem; padding: .65rem .7rem; }
+        }
+        @media (max-width: 600px) {
+            .topbar-inner { padding: .9rem; }
+            .brand { font-size: 1.35rem; }
+            .brand .header-icon { width: 32px; height: 32px; }
+            .user-actions { width: 100%; gap: .6rem; justify-content: space-between; }
+            .site-switcher, .site-context { min-width: 0; padding: 0 .55rem; gap: .35rem; }
+            .site-switcher select { min-width: 0; max-width: 135px; font-size: .85rem; }
+            .site-context span { max-width: 125px; font-size: .85rem; }
+            .profile-menu { padding-left: .6rem; }
+            .profile-name { max-width: 72px; font-size: .85rem; }
+            .profile-toggle { gap: .35rem !important; }
+            .profile-toggle .chevron { display: none; }
+            .user-avatar { width: 32px; height: 32px; }
+            .nav-inner { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: .5rem .75rem 0; gap: .15rem; }
+            .nav-inner > a, .nav-more { min-width: 0; margin: 0; }
+            .nav-tab { white-space: normal; width: 100%; font-size: .8rem; min-height: 44px; padding: .55rem .35rem; gap: .3rem; }
+            .nav-tab .header-icon { width: 18px; height: 18px; }
+            .nav-more { flex-grow: 0; }
+            .nav-more .header-dropdown { left: 0; right: auto; }
+            .notification-menu .header-dropdown { right: -80px; }
         }
         .customer-notification { display:inline-flex; align-items:center; justify-content:center; min-width:1.4rem; height:1.4rem; padding:0 .3rem; margin-left:.3rem; border-radius:999px; background:#15803d; color:#fff; font-size:.75rem; font-weight:800; line-height:1; }
         input.review-confirmation { width:1.2rem; height:1.2rem; padding:0; accent-color:#15803d; }
@@ -439,61 +452,7 @@
 <body>
     <div class="app-shell">
         {% if is_sales_demo %}<div class="demo-banner" style="background:#fff0ce;color:#583900;padding:.7rem;text-align:center;font-weight:600">ENVIRONNEMENT DE TEST — données fictives · aucun lien avec la production</div>{% endif %}
-        <header class="topbar">
-            <div class="topbar-inner">
-                <a class="brand" href="{% url 'inventory:dashboard' %}">
-                    <span class="dot" aria-hidden="true"></span>
-                     LR Stock
-                </a>
-                <nav class="nav">
-                    {% with current=request.resolver_match.url_name %}
-                        <a href="{% url 'inventory:dashboard' %}" class="{% if current == 'dashboard' %}active{% endif %}">Tableau de bord</a>
-                        <a href="{% url 'inventory:analytics' %}" class="{% if current == 'analytics' %}active{% endif %}">Analyses</a>
-                        <a href="{% url 'inventory:customer_list' %}" class="{% if current == 'customer_list' or current == 'customer_create' or current == 'customer_detail' or current == 'customer_update' %}active{% endif %}">Clients{% if nav_customers_to_review %}<span class="customer-notification" aria-label="{{ nav_customers_to_review }} fiche{{ nav_customers_to_review|pluralize }} client{{ nav_customers_to_review|pluralize }} à compléter et vérifier">{{ nav_customers_to_review }}</span>{% endif %}</a>
-                        <a href="{% url 'inventory:quotes_list' %}" class="{% if current == 'quotes_list' or current == 'quote_create' or current == 'quote_detail' %}active{% endif %}">Devis</a>
-                        <a href="{% url 'inventory:record_movement' %}" class="{% if current == 'record_movement' %}active{% endif %}">Mouvements</a>
-                        <a href="{% url 'inventory:inventory_overview' %}" class="{% if current == 'inventory_overview' %}active{% endif %}">Produits</a>
-                        <a href="{% url 'inventory:inventory_physical' %}" class="{% if current == 'inventory_physical' %}active{% endif %}">Inventaire physique</a>
-                        <a href="{% url 'inventory:stock_valuation' %}" class="{% if current == 'stock_valuation' %}active{% endif %}">Valorisation</a>
-                        <a href="{% url 'inventory:sales_list' %}" class="{% if current == 'sales_list' or current == 'sale_create' %}active{% endif %}">Ventes</a>
-                        {% if request.user.is_staff %}
-                            <a href="{% url 'inventory:product_bot' %}" class="{% if current == 'product_bot' %}active{% endif %}">IA</a>
-                        {% endif %}
-                        <a href="{% url 'inventory:import_products' %}" class="{% if current == 'import_products' %}active{% endif %}">Import</a>
-                    {% endwith %}
-                </nav>
-                <div class="user-actions">
-                    {% if nav_sites %}
-                        <form method="post" action="{% url 'inventory:set_active_site' %}" class="site-switcher">
-                            {% csrf_token %}
-                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                            <label for="nav-site-select" class="visually-hidden">Site actif</label>
-                            <select id="nav-site-select" name="site" onchange="this.form.submit()">
-                                <option value="" {% if not nav_active_site_id %}selected{% endif %}>Site : Vue globale</option>
-                                {% for site in nav_sites %}
-                                    <option value="{{ site.pk }}" {% if nav_active_site_id == site.pk|stringformat:"s" %}selected{% endif %}>Site : {{ site.name }}</option>
-                                {% endfor %}
-                            </select>
-                            <noscript><button type="submit" class="btn secondary">OK</button></noscript>
-                        </form>
-                    {% else %}
-                        <span class="context-chip">Site: {{ active_site.name|default:"Vue globale" }}</span>
-                    {% endif %}
-                    <span class="context-chip">Utilisateur: {{ request.user.username|default:"Invite" }}</span>
-                    {% if not request.user.is_authenticated %}
-                        <a class="btn secondary" href="{% url 'login' %}?next={{ request.path }}">Connexion</a>
-                    {% endif %}
-                    <a class="btn ghost" href="{% url 'inventory:record_movement' %}">Mouvement</a>
-                    <a class="btn" href="{% url 'inventory:sale_create' %}">Nouvelle vente</a>
-                    {% if request.user.is_authenticated %}
-                        <form method="post" action="{% url 'logout' %}" class="logout-form">
-                            {% csrf_token %}
-                            <button type="submit" class="btn secondary">Déconnexion</button>
-                        </form>
-                    {% endif %}
-                </div>
-            </div>
-        </header>
+        {% include "inventory/partials/header.html" %}
         <main class="container">
             {% if messages %}
                 <div class="messages">
@@ -509,6 +468,20 @@
     </div>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
+            const headerMenus = [...document.querySelectorAll(".header-menu")];
+            headerMenus.forEach((menu) => {
+                menu.addEventListener("toggle", () => {
+                    if (menu.open) headerMenus.forEach((other) => { if (other !== menu) other.open = false; });
+                });
+            });
+            document.addEventListener("click", (event) => {
+                headerMenus.forEach((menu) => { if (!menu.contains(event.target)) menu.open = false; });
+            });
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape") headerMenus.forEach((menu) => {
+                    if (menu.open) { menu.open = false; menu.querySelector("summary").focus(); }
+                });
+            });
             document.querySelectorAll("tr[data-href]").forEach((row) => {
                 if (!row.hasAttribute("tabindex")) {
                     row.tabIndex = 0;

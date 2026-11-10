@@ -1,0 +1,20 @@
+<svg class="header-icon{% if icon == 'chevron' %} chevron{% endif %}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+{% if icon == "cube" %}<path d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10"/>
+{% elif icon == "home" %}<path d="m3 10 9-8 9 8v11h-7v-7h-4v7H3z"/>
+{% elif icon == "products" %}<path d="m12 2 8 4v12l-8 4-8-4V6zM4 6l8 4 8-4M12 10v12M8 4l8 4"/>
+{% elif icon == "cart" %}<path d="M2 3h3l3 13h11l3-10H6"/><circle cx="9" cy="21" r="1"/><circle cx="19" cy="21" r="1"/>
+{% elif icon == "document" %}<path d="M6 2h8l4 4v16H6zM14 2v5h4M9 12h6M9 16h6"/>
+{% elif icon == "users" %}<circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 4 5v2"/>
+{% elif icon == "movement" %}<path d="M3 7h17l-4-4M21 17H4l4 4M20 7l-4 4M4 17l4-4"/>
+{% elif icon == "chart" %}<path d="M4 21V11M10 21V3M16 21v-7M22 21H2"/>
+{% elif icon == "check" %}<path d="M9 4H5v18h14V4h-4M9 2h6v5H9zM8 14l3 3 5-6"/>
+{% elif icon == "value" %}<circle cx="12" cy="12" r="9"/><path d="M15 7h-4a3 3 0 0 0 0 6h2a2 2 0 0 1 0 4H9M12 5v14"/>
+{% elif icon == "spark" %}<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>
+{% elif icon == "import" %}<path d="M12 2v13m-5-5 5 5 5-5M3 16v6h18v-6"/>
+{% elif icon == "more" %}<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>
+{% elif icon == "location" %}<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+{% elif icon == "bell" %}<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>
+{% elif icon == "user" %}<circle cx="12" cy="7" r="4"/><path d="M3 22a9 9 0 0 1 18 0"/>
+{% elif icon == "chevron" %}<path d="m6 9 6 6 6-6"/>
+{% elif icon == "logout" %}<path d="M9 3H3v18h6M9 12h13m-5-5 5 5-5 5"/>
+{% endif %}</svg>

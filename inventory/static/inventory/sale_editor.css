@@ -1,8 +1,4 @@
-body:has(.sale-workspace) .container,body:has(.sale-workspace) .topbar-inner{max-width:1560px}
-body:has(.sale-workspace) .topbar-inner{align-items:center;flex-wrap:wrap}
-body:has(.sale-workspace) .brand{font-size:1.4rem;white-space:nowrap}
-body:has(.sale-workspace) .nav{flex:1}
-body:has(.sale-workspace) .user-actions{justify-content:flex-end}
+body:has(.sale-workspace) .container,body:has(.sale-workspace) .topbar-inner,body:has(.sale-workspace) .nav-inner{max-width:1560px}
 
 .sale-workspace{color:#152344;font-size:.96rem}
 .sale-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:0 0 1.4rem}
@@ -108,8 +104,6 @@ body:has(.sale-workspace) .user-actions{justify-content:flex-end}
 .field-error{color:#a72b15}
 .demo-banner{background:#fff0ce;color:#583900;padding:.7rem 1rem;text-align:center;font-weight:600;border-bottom:1px solid #d0af68}
 
-@media(min-width:1250px){body:has(.sale-workspace) .nav a{font-size:.82rem;padding:.4rem}
-}
 @media(max-width:1050px){.editor-columns{grid-template-columns:1fr}
 .payment-panel{position:static}
 .customer-strip{align-items:flex-start;flex-direction:column}

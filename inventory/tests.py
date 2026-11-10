@@ -1980,13 +1980,30 @@ class TopbarNavigationTests(TestCase):
         self.client.force_login(self.superuser)
         response = self.client.get(reverse("inventory:dashboard"))
         self.assertContains(response, 'id="nav-site-select"')
-        self.assertContains(response, "Site : Riviera 2")
+        self.assertContains(response, ">Riviera 2</option>")
 
     def test_employee_sees_chip_not_switcher(self):
         self.client.force_login(self.employee)
         response = self.client.get(reverse("inventory:dashboard"))
         self.assertNotContains(response, 'id="nav-site-select"')
-        self.assertContains(response, "Site: Riviera 2")
+        self.assertContains(response, "<span>Riviera 2</span>", html=True)
+
+    def test_header_shows_current_user_and_personal_review_link(self):
+        self.employee.first_name = "Alice"
+        self.employee.last_name = "Koné"
+        self.employee.save(update_fields=["first_name", "last_name"])
+        Customer.objects.create(name="Client à vérifier", needs_review=True,
+                                review_requested_by=self.employee)
+        self.client.force_login(self.employee)
+        response = self.client.get(reverse("inventory:dashboard"))
+        self.assertContains(response, "Alice Koné")
+        self.assertContains(response, reverse("inventory:customer_list") + "?review=1")
+        self.assertContains(response, "1 fiche client à compléter et vérifier")
+        self.assertNotContains(response, reverse("inventory:product_bot"))
+        # The bell points to the existing personal filter, without clearing reminders.
+        response = self.client.get(reverse("inventory:customer_list"), {"review": "1"})
+        self.assertEqual([customer.name for customer in response.context["customers"]],
+                         ["Client à vérifier"])
 
     def test_switch_site_persists_in_session(self):
         self.client.force_login(self.superuser)
