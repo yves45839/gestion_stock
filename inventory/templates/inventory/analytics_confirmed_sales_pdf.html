@@ -43,7 +43,9 @@
     </style>
 </head>
 <body>
+    {% if delivery_demo %}<p class="meta">DOCUMENT DE TEST — données fictives</p>{% endif %}
     <h1>Ventes confirmées</h1>
+    {% if delivery_report %}<p class="meta">Site : {{ report_site.name|default:"Tous les sites" }}</p>{% endif %}
     <p class="meta">Période : {{ period_label }} — {{ range_label }}</p>
     <p class="meta">Généré le {{ generated_at|date:"d/m/Y H:i" }}</p>
 

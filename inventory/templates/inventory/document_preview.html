@@ -211,6 +211,7 @@
     </style>
 </head>
 <body>
+    {% if delivery_demo %}<p style="text-align:center;font-weight:bold;color:#8a4d00">DOCUMENT DE TEST — données fictives</p>{% endif %}
     <div class="page">
         <div class="top-row">
             <div class="brand">
@@ -223,6 +224,7 @@
                 <div>Abidjan, Cote d'Ivoire</div>
                 <div class="muted">+2252721585677 - info@label-ci.com</div>
                 <div class="toolbar">
+                    {% if document_delivery_enabled and not pdf_export and not is_preview %}{% if doc_meta.doc_type == 'quote' or doc_meta.doc_type == 'invoice' %}<a class="btn secondary" href="{% url 'inventory:delivery_compose' sale.pk doc_meta.doc_type %}">Préparer un envoi</a>{% endif %}{% endif %}
                     {% if return_url %}
                         <a class="btn secondary" href="{{ return_url }}">Retour</a>
                     {% endif %}

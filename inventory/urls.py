@@ -3,10 +3,17 @@ from django.urls import path
 
 from . import views
 from .profile import user_profile
+from .delivery import views as delivery_views
 
 app_name = "inventory"
 
 urlpatterns = [
+    path("envois/", login_required(delivery_views.history), name="delivery_history"),
+    path("envois/documents/<int:pk>/<str:doc_type>/", login_required(delivery_views.compose), name="delivery_compose"),
+    path("envois/rapport/", login_required(delivery_views.compose), name="delivery_report"),
+    path("envois/<uuid:pk>/", login_required(delivery_views.detail), name="delivery_detail"),
+    path("envois/<uuid:pk>/pieces/<int:index>/", login_required(delivery_views.attachment), name="delivery_attachment"),
+    path("envois/<uuid:pk>/envoyer/", login_required(delivery_views.send), name="delivery_send"),
     path("mon-profil/", login_required(user_profile), name="user_profile"),
     path("documents/apercu/", login_required(views.draft_document_preview), name="draft_document_preview"),
     path("", login_required(views.dashboard), name="dashboard"),

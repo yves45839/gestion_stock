@@ -1,5 +1,7 @@
 # Tester la nouvelle interface sans toucher à PythonAnywhere
 
+Pour les essais email et WhatsApp de la branche `test/envoi-documents`, suivre [TEST_ENVOIS.md](TEST_ENVOIS.md). Aucun envoi réel n’est activé par défaut.
+
 La nouvelle interface et ses ajustements ont été validés pour intégration dans `main` le 9 novembre 2026. La branche `test/nouvelle-interface-vente` reste disponible pour les essais. Le lanceur de démonstration utilise toujours une base isolée ; le déploiement sur PythonAnywhere est une étape distincte.
 
 ## Sur votre ordinateur

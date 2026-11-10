@@ -64,19 +64,21 @@ def main():
     parser = argparse.ArgumentParser(description="Démonstration LR STOCK, sans connexion à la production.")
     parser.add_argument("--port", type=int, default=8001)
     parser.add_argument("--prepare-only", action="store_true", help="Préparer sans démarrer le serveur")
+    parser.add_argument("--delivery-test", action="store_true", help="Essais d’envoi : simulation par défaut, destinataires réels limités à la liste de test")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
     check_runtime()
     python = prepare_python(root)
-    environment = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.demo_settings",
+    demo_settings = "config.delivery_test_settings" if args.delivery_test else "config.demo_settings"
+    environment = {**os.environ, "DJANGO_SETTINGS_MODULE": demo_settings,
                    "PIP_CACHE_DIR": str(root / "var" / "pip-cache")}
     def run(*command):
         subprocess.run([str(python), *command], cwd=root, env=environment, check=True)
     run("-m", "pip", "install", "-r", "requirements.txt", "--disable-pip-version-check")
-    run("manage.py", "prepare_sales_demo", "--settings=config.demo_settings")
+    run("manage.py", "prepare_sales_demo", f"--settings={demo_settings}")
     if not args.prepare_only:
         print(f"Ouvrez l’adresse locale http://127.0.0.1:{args.port}/ventes/nouvelle/", flush=True)
-        run("manage.py", "runserver", f"127.0.0.1:{args.port}", "--noreload", "--settings=config.demo_settings")
+        run("manage.py", "runserver", f"127.0.0.1:{args.port}", "--noreload", f"--settings={demo_settings}")
 
 
 if __name__ == "__main__":

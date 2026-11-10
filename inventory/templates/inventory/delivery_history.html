@@ -1,0 +1,7 @@
+{% extends "inventory/base.html" %}
+{% block title %}Mes essais d’envoi — LrStock{% endblock %}
+{% block content %}
+<section class="page-header"><div><h1 class="page-title">Mes essais d’envoi</h1><p class="lead">50 préparations récentes · vos envois uniquement.</p></div></section>
+<section class="surface"><p>Ouvrez un devis, l’aperçu d’une facture ou le rapport des ventes confirmées dans Analyses, puis choisissez <strong>Préparer un envoi</strong>.</p>
+{% for delivery in deliveries %}<p><a href="{% url 'inventory:delivery_detail' delivery.pk %}">{{ delivery.title }}</a> · {{ delivery.created_at|date:"d/m/Y H:i" }} · {% if delivery.simulated %}Simulation{% else %}Essai réel{% endif %}</p>{% empty %}<p>Aucun essai pour le moment.</p>{% endfor %}</section>
+{% endblock %}

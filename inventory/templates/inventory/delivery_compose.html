@@ -1,0 +1,16 @@
+{% extends "inventory/base.html" %}
+{% block title %}Préparer un envoi — LrStock{% endblock %}
+{% block content %}
+<section class="page-header"><div><h1 class="page-title">Préparer un envoi</h1><p class="lead">{{ document_title }}{% if report_site %} · {{ report_site.name }}{% endif %}</p></div><a class="btn secondary" href="{% url 'inventory:delivery_history' %}">Mes essais</a></section>
+<div class="message {% if simulation %}warning{% else %}error{% endif %}">{% if simulation %}<strong>Simulation</strong> : aucun email ni message WhatsApp ne sera envoyé. Vous pourrez télécharger et vérifier les pièces jointes.{% else %}<strong>Essai réel</strong> : seuls les destinataires de test autorisés peuvent recevoir un message. La confirmation suivante déclenchera l’envoi.{% endif %}</div>
+<section class="surface">
+<form method="post" class="stack" style="max-width:700px">
+{% csrf_token %}
+{{ form.non_field_errors }}
+{% for field in form %}<div class="field"><label{% if field.id_for_label %} for="{{ field.id_for_label }}"{% endif %}>{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+<p class="muted-text">Expéditeur email : <strong>LrStock &lt;info@label-ci.com&gt;</strong>. Sur WhatsApp, le nom et le numéro affichés dépendent du compte professionnel configuré.</p>
+<button class="btn" type="submit">Préparer et vérifier les pièces jointes</button>
+</form>
+</section>
+<style>.stack input[type=checkbox]{width:1rem;height:1rem;padding:0;align-self:flex-start;flex:0 0 auto}.stack ul.errorlist{color:var(--danger)}.stack textarea{min-height:110px}.stack #id_channels{display:flex;gap:1.25rem;flex-wrap:wrap}</style>
+{% endblock %}

@@ -115,6 +115,7 @@
             </div>
             <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                 <a class="btn secondary" href="{{ export_sales_pdf_url }}">Exporter PDF</a>
+                {% if document_delivery_enabled %}<a class="btn secondary" href="{% url 'inventory:delivery_report' %}?{{ request.GET.urlencode }}">Préparer un envoi</a>{% endif %}
                 <a class="btn secondary" href="{% url 'inventory:sales_list' %}">Voir les ventes</a>
             </div>
         </div>

@@ -56,3 +56,15 @@ Le menu utilisateur propose « Photo de profil » : chargement, remplacement ou 
 Migration requise : `0034_userprofile`. Sur PythonAnywhere, activer l’environnement virtuel puis récupérer `main`, exécuter `python manage.py migrate`, `python manage.py collectstatic --noinput` et `python manage.py check`, puis **Web → Reload**. Les photos utilisent la configuration des médias déjà employée pour les images des produits.
 
 Validation : 68 tests ciblés réussis, contrôles Django et migrations, `git diff --check`. Chromium : hauteur mesurée 59 px, chargement réel d’une photo, affichage dans le bandeau après changement de page, suppression et retour à l’icône, menus utilisateur accessibles sans débordement de 320 à 1440 px. Essais et migration limités à la démonstration isolée ; production PythonAnywhere non modifiée depuis cet environnement.
+
+## Envois de documents : branche de test — 10 novembre 2026
+
+Demande utilisateur : tester les envois par email et/ou WhatsApp avant intégration définitive. Branche isolée `test/envoi-documents`, sans fusion dans `main`. Premier rapport retenu : ventes confirmées. La boîte `info@label-ci.com` est hébergée chez Microsoft ; des numéros WhatsApp Business existent, mais aucun n’est encore choisi pour LrStock.
+
+Fonctionnalités : préparation et confirmation séparées, devis/factures PDF, rapport PDF ou PNG par page, instantanés privés, historique personnel, contrôle du site, simulation par défaut et listes obligatoires de destinataires pour les essais réels. Intégrations Microsoft Graph OAuth et Meta Cloud API avec modèles approuvés. Aucun lien public vers une facture. Prévention des doubles confirmations et conservation des succès partiels. Les confirmations prestataires sont distinguées de la réception réelle.
+
+Validation : 88 tests ciblés réussis, puis 21 tests spécifiques aux envois réussis après ajout du cas de modèle image WhatsApp (89 tests distincts au total). Contrôles Django, absence de migrations manquantes, `git diff --check`. Chromium : téléchargement d’un devis PDF et d’un rapport PNG, simulation email + WhatsApp, confirmation et résultats, absence d’erreurs JavaScript, affichage de 320 à 1440 px. Un cas de rapport de trois pages vérifie que les trois images sont conservées. Les tests des prestataires utilisent des réponses simulées ; aucun email ni message WhatsApp réel n’a été envoyé.
+
+Migration `0035_documentdelivery` appliquée exclusivement à la démonstration. Dépendance de conversion d’image : `pypdfium2==4.30.0`. Guide détaillé et configuration sans secrets : `TEST_ENVOIS.md`, `config/delivery.env.example`. Le lanceur conserve la simulation sans option ; `--delivery-test` permet des essais réels sur données fictives uniquement après configuration explicite.
+
+La configuration Microsoft Entra, les modèles/identifiants Meta et les destinataires de test restent à renseigner chez l’utilisateur. Le nom d’affichage LrStock et la réception réelle ne sont pas validés. Aucun changement sur PythonAnywhere ni publication de ces essais sur `main`.

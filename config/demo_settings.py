@@ -27,3 +27,7 @@ MIDDLEWARE = ["inventory.demo.DemoMiddleware", *MIDDLEWARE]
 TEMPLATES[0]["OPTIONS"]["context_processors"] = [
     *TEMPLATES[0]["OPTIONS"]["context_processors"], "inventory.demo.context",
 ]
+
+DOCUMENT_DELIVERY_ENABLED = True
+DOCUMENT_DELIVERY_SIMULATE = True
+DOCUMENT_DELIVERY_ROOT = DEMO_ROOT / "document-delivery"

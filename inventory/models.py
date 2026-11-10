@@ -1362,3 +1362,27 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.user.get_username()
+
+
+class DocumentDelivery(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    sale = models.ForeignKey(Sale, null=True, blank=True, on_delete=models.PROTECT)
+    site = models.ForeignKey(Site, null=True, blank=True, on_delete=models.PROTECT)
+    document_type = models.CharField(max_length=20)
+    file_format = models.CharField(max_length=5, default="pdf")
+    title = models.CharField(max_length=200)
+    subject = models.CharField(max_length=150)
+    message = models.TextField()
+    channels = models.JSONField(default=list)
+    destinations = models.JSONField(default=dict)
+    report_filters = models.JSONField(default=dict)
+    attachments = models.JSONField(default=list)
+    results = models.JSONField(default=list)
+    simulated = models.BooleanField(default=True)
+    status = models.CharField(max_length=20, default="preparing")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]

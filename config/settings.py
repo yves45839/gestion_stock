@@ -250,3 +250,19 @@ PRODUCT_BOT_INLINE_RUN = os.getenv('PRODUCT_BOT_INLINE_RUN', 'false').lower() in
     'true',
     'yes',
 )
+
+# Document delivery is opt-in; the normal application has no new outgoing sends.
+DOCUMENT_DELIVERY_ENABLED = os.getenv("LRSTOCK_DELIVERY_ENABLED", "false").lower() == "true"
+DOCUMENT_DELIVERY_SIMULATE = True
+DOCUMENT_DELIVERY_ROOT = BASE_DIR / "var" / "document-delivery"
+DOCUMENT_DELIVERY_EMAIL_ALLOWLIST = [v.strip().lower() for v in os.getenv("LRSTOCK_TEST_EMAILS", "").split(",") if v.strip()]
+DOCUMENT_DELIVERY_PHONE_ALLOWLIST = [v.strip() for v in os.getenv("LRSTOCK_TEST_PHONES", "").split(",") if v.strip()]
+DOCUMENT_MS_TENANT_ID = os.getenv("LRSTOCK_MS_TENANT_ID", "")
+DOCUMENT_MS_CLIENT_ID = os.getenv("LRSTOCK_MS_CLIENT_ID", "")
+DOCUMENT_MS_CLIENT_SECRET = os.getenv("LRSTOCK_MS_CLIENT_SECRET", "")
+DOCUMENT_WA_TOKEN = os.getenv("LRSTOCK_WA_TOKEN", "")
+DOCUMENT_WA_PHONE_ID = os.getenv("LRSTOCK_WA_PHONE_ID", "")
+DOCUMENT_WA_VERSION = os.getenv("LRSTOCK_WA_VERSION", "")
+DOCUMENT_WA_PDF_TEMPLATE = os.getenv("LRSTOCK_WA_PDF_TEMPLATE", "")
+DOCUMENT_WA_IMAGE_TEMPLATE = os.getenv("LRSTOCK_WA_IMAGE_TEMPLATE", "")
+DOCUMENT_WA_LANGUAGE = os.getenv("LRSTOCK_WA_LANGUAGE", "fr")

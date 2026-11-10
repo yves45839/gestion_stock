@@ -18,6 +18,7 @@
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <a href="{% url 'inventory:sale_document_preview' sale.pk 'quote' %}" class="btn secondary">Prévisualiser</a>
             <a href="{% url 'inventory:sale_document_pdf' sale.pk 'quote' %}" class="btn secondary">Exporter PDF</a>
+            {% if document_delivery_enabled %}<a href="{% url 'inventory:delivery_compose' sale.pk 'quote' %}" class="btn secondary">Préparer un envoi</a>{% endif %}
             {% if can_confirm %}
                 <a href="{% url 'inventory:quote_edit' sale.pk %}" class="btn secondary">Modifier</a>
                 <form method="post" action="{% url 'inventory:quote_confirm' sale.pk %}">
