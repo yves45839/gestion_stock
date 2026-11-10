@@ -31,3 +31,5 @@ TEMPLATES[0]["OPTIONS"]["context_processors"] = [
 DOCUMENT_DELIVERY_ENABLED = True
 DOCUMENT_DELIVERY_SIMULATE = True
 DOCUMENT_DELIVERY_ROOT = DEMO_ROOT / "document-delivery"
+
+DOCUMENT_MS_AUTH_CACHE = DEMO_ROOT / "outlook-auth.json"

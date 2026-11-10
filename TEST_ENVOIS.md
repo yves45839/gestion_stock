@@ -44,6 +44,38 @@ Le message demande `LrStock` et l’adresse `LRSTOCK_EMAIL_SENDER` comme expédi
 
 [Documentation Microsoft Graph sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0)
 
+## Compte personnel Outlook.com / Hotmail
+
+Une adresse personnelle `@outlook.com` n’est pas une boîte professionnelle Exchange Online, même si vous avez créé une inscription dans Microsoft Entra avec ce compte. Elle utilise une autorisation **déléguée**, après connexion de la personne. Le mode `application` précédent avec secret et autorisation d’application ne convient pas à cette boîte.
+
+Dans Microsoft Entra, préparer une inscription pour les essais Outlook qui accepte les **comptes Microsoft personnels** (par exemple « Comptes dans un annuaire organisationnel et comptes Microsoft personnels »). Dans **Autorisations API → Microsoft Graph → Autorisations déléguées**, ajouter `Mail.Send` et `User.Read`. Dans **Authentification → Paramètres avancés**, activer **Autoriser les flux de clients publics**. Le flux utilisé est un code à saisir sur la page officielle Microsoft ; il ne nécessite pas d’URL de redirection ni de secret client. Les permissions de l’application professionnelle précédente restent une configuration distincte.
+
+Dans `.env`, renseigner par exemple :
+
+```dotenv
+LRSTOCK_EMAIL_SENDER=votre-adresse@outlook.com
+LRSTOCK_MS_AUTH_MODE=personal
+LRSTOCK_MS_CLIENT_ID=ID_APPLICATION_QUI_ACCEPTE_LES_COMPTES_PERSONNELS
+LRSTOCK_DELIVERY_SIMULATE=false
+LRSTOCK_TEST_EMAILS=votre-adresse@outlook.com
+```
+
+En mode `personal`, le tenant et le secret d’application ne sont pas utilisés. Utiliser l’adresse principale du compte pour le premier essai, pas un alias. Après avoir téléchargé cette version et copié votre `.env` dans son dossier, exécuter dans PowerShell :
+
+```powershell
+py -3.12 start_demo.py --delivery-test --prepare-only
+.\.venv\Scripts\python.exe manage.py connect_outlook --settings=config.delivery_test_settings
+py -3.12 start_demo.py --delivery-test
+```
+
+La deuxième commande affiche un code temporaire. Ouvrir **https://microsoft.com/devicelogin**, saisir ce code **uniquement sur le site Microsoft**, se connecter avec l’expéditeur choisi et accepter les autorisations de LrStock. Cette procédure ne déclenche aucun email. Ne jamais envoyer ce code, votre mot de passe ou les jetons dans la discussion.
+
+La connexion est enregistrée dans `var/sales-demo/outlook-auth.json`, hors des médias publics et hors de Git. Ne pas partager ce fichier ni l’ancien dossier de démonstration en entier ; il contient une autorisation d’accès. L’application vérifie le compte connecté, renouvelle sa connexion si possible et demande de relancer `connect_outlook` lorsqu’elle a expiré ou été révoquée. Changer d’adresse ou d’ID client exige une nouvelle connexion. L’envoi passe par `/me/sendMail`, depuis la personne connectée, et conserve les mêmes limites de destinataires et de confirmation.
+
+Le diagnostic `delivery_status` indique **Outlook personnel : connexion enregistrée** sans afficher les jetons. Préparer ensuite un nouvel envoi, sélectionner uniquement Email, s’envoyer un document de test et vérifier sa réception. Les essais automatisés de ce mode simulent les réponses de Microsoft ; la réception réelle doit être validée sur votre compte.
+
+[Comptes personnels et autorisation déléguée Mail.Send](https://learn.microsoft.com/en-us/graph/permissions-reference) · [Flux de connexion par code Microsoft](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)
+
 ## 3. WhatsApp réel
 
 Les numéros déjà utilisés dans WhatsApp Business ne prouvent pas qu’une application peut envoyer via l’API. Pour les premiers essais, utiliser le numéro de test fourni dans le parcours WhatsApp Cloud API de Meta et ses destinataires de test vérifiés. Le choix et le rattachement d’un numéro professionnel pour LrStock viendront après les essais ; ne pas supprimer un compte WhatsApp existant pour ce prototype.

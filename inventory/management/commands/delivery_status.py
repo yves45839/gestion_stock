@@ -24,7 +24,13 @@ class Command(BaseCommand):
         self.stdout.write(f"Expéditeur email : {settings.DOCUMENT_EMAIL_SENDER}")
         self.stdout.write(f"Destinataires email de test autorisés : {len(settings.DOCUMENT_DELIVERY_EMAIL_ALLOWLIST)}")
         self.stdout.write(f"Numéros WhatsApp de test autorisés : {len(settings.DOCUMENT_DELIVERY_PHONE_ALLOWLIST)}")
-        microsoft_ready = all((settings.DOCUMENT_MS_TENANT_ID, settings.DOCUMENT_MS_CLIENT_ID, settings.DOCUMENT_MS_CLIENT_SECRET))
+        self.stdout.write(f"Type de connexion Microsoft : {settings.DOCUMENT_MS_AUTH_MODE}")
+        if settings.DOCUMENT_MS_AUTH_MODE == "personal":
+            from inventory.delivery.outlook_auth import connection_ready
+            self.stdout.write("Outlook personnel : " + ("connexion enregistrée (non vérifiée en ligne)" if connection_ready() else "NON CONNECTÉ — lancer connect_outlook"))
+            microsoft_ready = bool(settings.DOCUMENT_MS_CLIENT_ID)
+        else:
+            microsoft_ready = all((settings.DOCUMENT_MS_TENANT_ID, settings.DOCUMENT_MS_CLIENT_ID, settings.DOCUMENT_MS_CLIENT_SECRET))
         self.stdout.write("Paramètres Microsoft : " + ("renseignés (autorisation non vérifiée)" if microsoft_ready else "INCOMPLETS"))
         self.stdout.write("Aucun secret affiché. Aucune connexion Microsoft/Meta et aucun envoi effectués.")
         if settings.DOCUMENT_DELIVERY_ENABLED and settings.DOCUMENT_DELIVERY_SIMULATE:

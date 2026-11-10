@@ -86,3 +86,11 @@ L’expéditeur est configurable via `LRSTOCK_EMAIL_SENDER` (défaut historique 
 Le lanceur affiche automatiquement `delivery_status` : nom du fichier `.env`, mode, expéditeur, nombre de destinataires de test et présence de paramètres Microsoft. La commande signale `.env.txt` et ne montre aucune valeur de secret, ni ne contacte Microsoft/Meta. Une ancienne préparation conserve son mode d’origine.
 
 Validation : 32 tests ciblés réussis, contrôle Django et `git diff --check`. Chromium vérifie l’affichage « Essai réel », un expéditeur fictif configurable et l’écran de confirmation d’une nouvelle préparation ; aucune confirmation d’envoi réel effectuée. Aucun changement de base ni migration supplémentaire ; `main` et PythonAnywhere restent inchangés.
+
+## Outlook personnel après changement de compte — 10 novembre 2026
+
+La nouvelle boîte indiquée est une adresse Outlook.com personnelle. Elle ne peut pas employer le flux applicatif Microsoft 365 préparé initialement. Ajout du mode `LRSTOCK_MS_AUTH_MODE=personal`, réservé à la démonstration : autorisation déléguée par code sur le site officiel Microsoft, permissions `Mail.Send` et `User.Read`, sans secret client. La commande `connect_outlook` ne déclenche aucun envoi.
+
+Le compte connecté est comparé à `LRSTOCK_EMAIL_SENDER` via `/me` avant enregistrement. La connexion est liée à l’adresse et à l’ID client, stockée dans un fichier privé sous `var/sales-demo/`, ignoré par Git, avec écriture atomique et permissions 0600 sur les systèmes compatibles. Renouvellement de la connexion si possible ; demande de reconnexion si expiration/révocation. L’envoi utilise `/me/sendMail` en mode personnel ; le mode Microsoft 365 existant garde son flux applicatif et sa boîte configurée. Le diagnostic affiche le type de connexion et son état local sans révéler les jetons.
+
+Validation : 115 tests ciblés réussis, contrôle Django, absence de migrations manquantes et `git diff --check`. Tests de consentement, refus, expiration du code, erreur de compte, vérification de portée Mail.Send, cache lié au compte et au client, renouvellement sans secret, blocage hors démonstration et envoi délégué simulé. Aucun code d’authentification ni accès réel à une boîte personnelle obtenu ; réception réelle à tester par l’utilisateur. Aucun changement sur `main` ou PythonAnywhere.

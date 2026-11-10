@@ -38,9 +38,19 @@ def preflight(batch):
         allowed = {address.lower() for address in settings.DOCUMENT_DELIVERY_EMAIL_ALLOWLIST}
         if batch.destinations["email"].lower() not in allowed:
             raise DeliveryError("Cet email ne figure pas parmi les destinataires de test autorisés.")
-        identifier = r"[a-fA-F0-9]{8}-(?:[a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}"
-        if not re.fullmatch(identifier, settings.DOCUMENT_MS_TENANT_ID) or not re.fullmatch(identifier, settings.DOCUMENT_MS_CLIENT_ID) or not settings.DOCUMENT_MS_CLIENT_SECRET:
-            raise DeliveryError("La connexion Microsoft 365 de l’expéditeur n’est pas configurée.")
+        if settings.DOCUMENT_MS_AUTH_MODE == "personal":
+            from .outlook_auth import connection_ready
+            if not getattr(settings, "IS_SALES_DEMO", False) or not connection_ready():
+                raise DeliveryError("La boîte Outlook personnelle n’est pas connectée. Lancez connect_outlook, puis préparez un nouvel essai.")
+        elif settings.DOCUMENT_MS_AUTH_MODE == "application":
+            domain = sender.rsplit("@", 1)[-1].lower()
+            if domain in {"outlook.com", "outlook.fr", "hotmail.com", "hotmail.fr", "live.com", "msn.com"}:
+                raise DeliveryError("Cette boîte Outlook personnelle nécessite LRSTOCK_MS_AUTH_MODE=personal et la connexion connect_outlook.")
+            identifier = r"[a-fA-F0-9]{8}-(?:[a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}"
+            if not re.fullmatch(identifier, settings.DOCUMENT_MS_TENANT_ID) or not re.fullmatch(identifier, settings.DOCUMENT_MS_CLIENT_ID) or not settings.DOCUMENT_MS_CLIENT_SECRET:
+                raise DeliveryError("La connexion Microsoft 365 de l’expéditeur n’est pas configurée.")
+        else:
+            raise DeliveryError("Choisissez personal ou application pour LRSTOCK_MS_AUTH_MODE.")
         graph_payload(batch)  # Check attachment size before contacting either provider.
     if "whatsapp" in batch.channels:
         try:
@@ -73,23 +83,31 @@ def graph_payload(batch):
 
 def email_send(batch):
     payload = graph_payload(batch)
-    try:
-        response = requests.post(
-            f"https://login.microsoftonline.com/{settings.DOCUMENT_MS_TENANT_ID}/oauth2/v2.0/token",
-            data={"client_id": settings.DOCUMENT_MS_CLIENT_ID, "client_secret": settings.DOCUMENT_MS_CLIENT_SECRET,
-                  "scope": "https://graph.microsoft.com/.default", "grant_type": "client_credentials"},
-            timeout=20, allow_redirects=False,
-        )
-        if response.status_code != 200:
-            raise DeliveryError(f"Microsoft a refusé l’authentification (HTTP {response.status_code}).")
-        token = response.json()["access_token"]
-        if not isinstance(token, str) or not token:
-            raise ValueError("Missing token")
-    except (requests.RequestException, ValueError, KeyError):
-        raise DeliveryError("La connexion Microsoft a échoué ; aucun email n’a été envoyé.")
+    if settings.DOCUMENT_MS_AUTH_MODE == "personal":
+        from .outlook_auth import OutlookAuthError, access_token
+        try:
+            token = access_token()
+        except OutlookAuthError as error:
+            raise DeliveryError(str(error)) from None
+    else:
+        try:
+            response = requests.post(
+                f"https://login.microsoftonline.com/{settings.DOCUMENT_MS_TENANT_ID}/oauth2/v2.0/token",
+                data={"client_id": settings.DOCUMENT_MS_CLIENT_ID, "client_secret": settings.DOCUMENT_MS_CLIENT_SECRET,
+                      "scope": "https://graph.microsoft.com/.default", "grant_type": "client_credentials"},
+                timeout=20, allow_redirects=False,
+            )
+            if response.status_code != 200:
+                raise DeliveryError(f"Microsoft a refusé l’authentification (HTTP {response.status_code}).")
+            token = response.json()["access_token"]
+            if not isinstance(token, str) or not token:
+                raise ValueError("Missing token")
+        except (requests.RequestException, ValueError, KeyError):
+            raise DeliveryError("La connexion Microsoft a échoué ; aucun email n’a été envoyé.")
     try:
         mailbox = quote(batch.destinations.get("sender", "info@label-ci.com"), safe="@.")
-        response = requests.post(f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail",
+        endpoint = "https://graph.microsoft.com/v1.0/me/sendMail" if settings.DOCUMENT_MS_AUTH_MODE == "personal" else f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail"
+        response = requests.post(endpoint,
             headers={"Authorization": "Bearer " + token, "client-request-id": str(batch.pk)},
             json=payload, timeout=30, allow_redirects=False)
         if response.status_code != 202:

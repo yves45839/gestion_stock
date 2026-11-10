@@ -19,7 +19,7 @@ class DocumentDeliveryTests(DocumentFixtures, TestCase):
         super().setUp()
         self.folder = self.enterContext(TemporaryDirectory())
         self.enterContext(override_settings(DOCUMENT_DELIVERY_ENABLED=True,
-            DOCUMENT_DELIVERY_SIMULATE=True, DOCUMENT_DELIVERY_ROOT=self.folder))
+            DOCUMENT_DELIVERY_SIMULATE=True, DOCUMENT_DELIVERY_ROOT=self.folder, DOCUMENT_MS_AUTH_MODE="application"))
         self.sale = self.draft()
         self.compose_url = reverse("inventory:delivery_compose", args=[self.sale.pk, "quote"])
 
@@ -318,3 +318,22 @@ class DocumentDeliveryTests(DocumentFixtures, TestCase):
                     env={**os.environ, "DJANGO_SETTINGS_MODULE": module, "LRSTOCK_DELIVERY_SIMULATE": raw_value},
                     capture_output=True, text=True, check=True)
                 self.assertEqual(result.stdout.strip(), str(simulated))
+
+    def test_personal_outlook_uses_delegated_me_endpoint(self):
+        with override_settings(DOCUMENT_EMAIL_SENDER="person@outlook.com", DOCUMENT_MS_AUTH_MODE="personal"):
+            batch = self.prepare(channels=["email"])
+            accepted = Mock(status_code=202, headers={"request-id": "delegated-request"})
+            with patch("inventory.delivery.outlook_auth.access_token", return_value="delegated-token"), patch("inventory.delivery.providers.requests.post", return_value=accepted) as api:
+                self.assertEqual(email_send(batch), "delegated-request")
+            api.assert_called_once()
+            self.assertEqual(api.call_args.args[0], "https://graph.microsoft.com/v1.0/me/sendMail")
+            self.assertEqual(api.call_args.kwargs["headers"]["Authorization"], "Bearer delegated-token")
+
+    def test_personal_account_without_interactive_connection_is_blocked(self):
+        with override_settings(DOCUMENT_EMAIL_SENDER="person@outlook.com", DOCUMENT_MS_AUTH_MODE="personal", DOCUMENT_DELIVERY_SIMULATE=False):
+            batch = self.prepare(channels=["email"])
+            with patch("inventory.delivery.outlook_auth.connection_ready", return_value=False), patch("inventory.delivery.views.email_send") as email:
+                self.send(batch)
+                email.assert_not_called()
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, "ready")
