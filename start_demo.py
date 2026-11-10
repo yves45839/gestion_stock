@@ -102,6 +102,7 @@ def main():
     run("-m", "pip", "install", "-r", "requirements.txt", "--disable-pip-version-check")
     prepare_demo_pdf(python, root, environment)
     run("manage.py", "prepare_sales_demo", f"--settings={demo_settings}")
+    run("manage.py", "delivery_status", f"--settings={demo_settings}")
     if not args.prepare_only:
         print(f"Ouvrez l’adresse locale http://127.0.0.1:{args.port}/ventes/nouvelle/", flush=True)
         run("manage.py", "runserver", f"127.0.0.1:{args.port}", "--noreload", f"--settings={demo_settings}")

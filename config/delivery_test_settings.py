@@ -2,4 +2,4 @@
 import os
 from .demo_settings import *  # noqa: F403
 
-DOCUMENT_DELIVERY_SIMULATE = os.getenv("LRSTOCK_DELIVERY_SIMULATE", "true").lower() != "false"
+DOCUMENT_DELIVERY_SIMULATE = os.getenv("LRSTOCK_DELIVERY_SIMULATE", "true").strip().lower() != "false"

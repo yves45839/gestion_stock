@@ -257,6 +257,7 @@ DOCUMENT_DELIVERY_SIMULATE = True
 DOCUMENT_DELIVERY_ROOT = BASE_DIR / "var" / "document-delivery"
 DOCUMENT_DELIVERY_EMAIL_ALLOWLIST = [v.strip().lower() for v in os.getenv("LRSTOCK_TEST_EMAILS", "").split(",") if v.strip()]
 DOCUMENT_DELIVERY_PHONE_ALLOWLIST = [v.strip() for v in os.getenv("LRSTOCK_TEST_PHONES", "").split(",") if v.strip()]
+DOCUMENT_EMAIL_SENDER = os.getenv("LRSTOCK_EMAIL_SENDER", "info@label-ci.com").strip()
 DOCUMENT_MS_TENANT_ID = os.getenv("LRSTOCK_MS_TENANT_ID", "")
 DOCUMENT_MS_CLIENT_ID = os.getenv("LRSTOCK_MS_CLIENT_ID", "")
 DOCUMENT_MS_CLIENT_SECRET = os.getenv("LRSTOCK_MS_CLIENT_SECRET", "")

@@ -76,3 +76,13 @@ L’utilisateur a signalé le message « Le moteur PDF WeasyPrint doit être ins
 Le secours est strictement limité à `IS_SALES_DEMO`. Il traite les pièces jointes d’envoi, les exports PDF habituels des documents et le rapport PDF. Les modèles restent identiques ; le contenu n’est envoyé à aucun service de conversion, JavaScript et les chargements externes sont désactivés dans le navigateur. Les erreurs de préparation indiquent de relancer `start_demo.py` au lieu d’exiger simplement une installation pip.
 
 Validation : 97 tests ciblés réussis, plus le test existant de l’export PDF natif du rapport ; contrôle Django et `git diff --check` réussis. Tests avec WeasyPrint remplacé par `None`, rendu réel Chromium d’un devis PDF et d’un rapport PNG, exports habituels, cas d’import natif réussi avec secours forcé, garde interdisant ce secours en production et tests du lanceur. Les parcours automatisés simulent le défaut de bibliothèques natives sur l’exécuteur Linux ; un essai sur la machine Windows de l’utilisateur reste nécessaire.
+
+## Diagnostic du mode réel et changement d’expéditeur — 10 novembre 2026
+
+L’utilisateur utilise désormais un autre compte Microsoft Entra et une autre boîte ; il ne voit pas le bandeau « Essai réel ». Le mode dépend de `.env` (`LRSTOCK_DELIVERY_SIMULATE=false`) et du lancement avec `--delivery-test`, indépendamment de la configuration Entra. Les valeurs de mode sont maintenant nettoyées des espaces.
+
+L’expéditeur est configurable via `LRSTOCK_EMAIL_SENDER` (défaut historique `info@label-ci.com`). La boîte est mémorisée à la préparation, affichée sur les deux écrans et utilisée dans le contenu Microsoft Graph ainsi que dans le chemin `users/.../sendMail`. Un changement d’expéditeur entre préparation et confirmation exige une nouvelle préparation. L’application Entra et ses permissions doivent correspondre au tenant de cette boîte.
+
+Le lanceur affiche automatiquement `delivery_status` : nom du fichier `.env`, mode, expéditeur, nombre de destinataires de test et présence de paramètres Microsoft. La commande signale `.env.txt` et ne montre aucune valeur de secret, ni ne contacte Microsoft/Meta. Une ancienne préparation conserve son mode d’origine.
+
+Validation : 32 tests ciblés réussis, contrôle Django et `git diff --check`. Chromium vérifie l’affichage « Essai réel », un expéditeur fictif configurable et l’écran de confirmation d’une nouvelle préparation ; aucune confirmation d’envoi réel effectuée. Aucun changement de base ni migration supplémentaire ; `main` et PythonAnywhere restent inchangés.

@@ -55,7 +55,7 @@ def compose(request, pk=None, doc_type="report"):
         batch = DocumentDelivery.objects.create(requested_by=request.user, sale=sale, site=site,
             document_type=doc_type, file_format=data["file_format"], title=title, subject=data["subject"],
             message=data["message"], channels=data["channels"], report_filters=filters,
-            destinations={"email": data["email"], "phone": data["phone"]}, simulated=settings.DOCUMENT_DELIVERY_SIMULATE)
+            destinations={"email": data["email"], "phone": data["phone"], "sender": settings.DOCUMENT_EMAIL_SENDER}, simulated=settings.DOCUMENT_DELIVERY_SIMULATE)
         try:
             batch.attachments = prepare_attachments(request, batch)
             batch.status = "ready"
@@ -66,7 +66,7 @@ def compose(request, pk=None, doc_type="report"):
             batch.save(update_fields=["status", "updated_at"])
             form.add_error(None, str(error) if isinstance(error, DocumentError) else "La pièce jointe n’a pas pu être préparée. Réessayez ou contactez l’administrateur.")
     return render(request, "inventory/delivery_compose.html", {"form": form, "document_title": title,
-        "simulation": settings.DOCUMENT_DELIVERY_SIMULATE, "report_site": site})
+        "simulation": settings.DOCUMENT_DELIVERY_SIMULATE, "report_site": site, "sender_email": settings.DOCUMENT_EMAIL_SENDER})
 
 
 @never_cache

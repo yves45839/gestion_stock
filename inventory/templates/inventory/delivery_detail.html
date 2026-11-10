@@ -4,7 +4,7 @@
 <section class="page-header"><div><h1 class="page-title">{{ delivery.title }}</h1><p class="lead">{% if delivery.simulated %}Simulation · aucun message réel{% else %}Essai réel{% endif %} · {{ delivery.created_at|date:"d/m/Y H:i" }}</p></div><a class="btn secondary" href="{% url 'inventory:delivery_history' %}">Mes essais</a></section>
 <section class="surface">
 <h2 class="surface-title">Destinataires et message</h2>
-{% if 'email' in delivery.channels %}<p><strong>Email :</strong> {{ delivery.destinations.email }}<br><strong>Expéditeur :</strong> LrStock &lt;info@label-ci.com&gt;</p>{% endif %}
+{% if 'email' in delivery.channels %}<p><strong>Email :</strong> {{ delivery.destinations.email }}<br><strong>Expéditeur :</strong> LrStock &lt;{{ delivery.destinations.sender|default:"info@label-ci.com" }}&gt;</p>{% endif %}
 {% if 'whatsapp' in delivery.channels %}<p><strong>WhatsApp :</strong> {{ delivery.destinations.phone }}</p>{% endif %}
 <p><strong>Objet :</strong> {{ delivery.subject }}</p><div style="white-space:pre-wrap">{{ delivery.message }}</div>
 <h2 class="surface-title" style="margin-top:1.25rem">Pièces jointes à vérifier</h2>

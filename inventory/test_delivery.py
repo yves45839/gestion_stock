@@ -271,3 +271,50 @@ class DocumentDeliveryTests(DocumentFixtures, TestCase):
             payload = api.call_args_list[1].kwargs["json"]
         self.assertEqual(payload["template"]["name"], "lrstock_image")
         self.assertEqual(payload["template"]["components"][0]["parameters"][0], {"type": "image", "image": {"id": "image-123"}})
+
+    def test_custom_microsoft_sender_is_preserved_and_used_for_graph_endpoint(self):
+        with override_settings(DOCUMENT_EMAIL_SENDER="essais@example.org"):
+            batch = self.prepare(channels=["email"])
+            self.assertEqual(batch.destinations["sender"], "essais@example.org")
+            response = self.client.get(reverse("inventory:delivery_detail", args=[batch.pk]))
+            self.assertContains(response, "essais@example.org")
+            token = Mock(status_code=200)
+            token.json.return_value = {"access_token": "dummy-token"}
+            accepted = Mock(status_code=202, headers={"request-id": "graph-request-id"})
+            with self.live_settings(), patch("inventory.delivery.providers.requests.post", side_effect=[token, accepted]) as api:
+                self.assertEqual(email_send(batch), "graph-request-id")
+            self.assertEqual(api.call_args.args[0], "https://graph.microsoft.com/v1.0/users/essais@example.org/sendMail")
+            self.assertEqual(api.call_args.kwargs["json"]["message"]["from"]["emailAddress"]["address"], "essais@example.org")
+
+    def test_changing_sender_requires_new_confirmation_not_a_silent_switch(self):
+        batch = self.prepare(channels=["email"])
+        with override_settings(DOCUMENT_EMAIL_SENDER="essais@example.org"), patch("inventory.delivery.views.email_send") as email:
+            self.send(batch)
+            email.assert_not_called()
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, "ready")
+        self.assertEqual(batch.destinations["sender"], "info@label-ci.com")
+
+    def test_diagnostic_reports_mode_but_never_secret_values(self):
+        from django.core.management import call_command
+        from io import StringIO
+        output = StringIO()
+        with override_settings(DOCUMENT_MS_CLIENT_SECRET="SECRET-NEVER-PRINT", DOCUMENT_DELIVERY_SIMULATE=False):
+            call_command("delivery_status", stdout=output)
+        self.assertIn("ESSAI RÉEL", output.getvalue())
+        self.assertNotIn("SECRET-NEVER-PRINT", output.getvalue())
+
+    def test_live_mode_needs_test_settings_and_explicit_false(self):
+        import os
+        import subprocess
+        import sys
+        for module, raw_value, simulated in [
+            ("config.demo_settings", "false", True),
+            ("config.delivery_test_settings", "true", True),
+            ("config.delivery_test_settings", " false ", False),
+        ]:
+            with self.subTest(module=module, value=raw_value):
+                result = subprocess.run([sys.executable, "-c", "from django.conf import settings; print(settings.DOCUMENT_DELIVERY_SIMULATE)"],
+                    env={**os.environ, "DJANGO_SETTINGS_MODULE": module, "LRSTOCK_DELIVERY_SIMULATE": raw_value},
+                    capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout.strip(), str(simulated))

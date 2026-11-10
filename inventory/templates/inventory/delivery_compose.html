@@ -8,7 +8,7 @@
 {% csrf_token %}
 {{ form.non_field_errors }}
 {% for field in form %}<div class="field"><label{% if field.id_for_label %} for="{{ field.id_for_label }}"{% endif %}>{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
-<p class="muted-text">Expéditeur email : <strong>LrStock &lt;info@label-ci.com&gt;</strong>. Sur WhatsApp, le nom et le numéro affichés dépendent du compte professionnel configuré.</p>
+<p class="muted-text">Expéditeur email : <strong>LrStock &lt;{{ sender_email }}&gt;</strong>. Sur WhatsApp, le nom et le numéro affichés dépendent du compte professionnel configuré.</p>
 <button class="btn" type="submit">Préparer et vérifier les pièces jointes</button>
 </form>
 </section>

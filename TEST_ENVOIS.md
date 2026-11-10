@@ -32,15 +32,15 @@ Les pièces jointes sont des instantanés : modifier ensuite une vente ne modifi
 
 ## 2. Email réel avec Microsoft 365
 
-L’adresse choisie est **info@label-ci.com**. L’intégration utilise **Microsoft Graph et OAuth**, sans mot de passe de messagerie enregistré dans le code. L’existence de la boîte et de ses accès Outlook ne suffit pas à donner une autorisation d’envoi à l’application.
+L’adresse initiale est **info@label-ci.com**. Pour utiliser une autre boîte Microsoft, définir `LRSTOCK_EMAIL_SENDER=nouvelle-adresse@votre-domaine` dans `.env`. L’application Entra doit être autorisée pour cette boîte dans le même tenant que les identifiants renseignés. L’intégration utilise **Microsoft Graph et OAuth**, sans mot de passe de messagerie enregistré dans le code. L’existence de la boîte et de ses accès Outlook ne suffit pas à donner une autorisation d’envoi à l’application.
 
-Un administrateur Microsoft 365 doit préparer une application Entra pour LrStock, avec l’autorisation d’application `Mail.Send` et le consentement administrateur. Restreindre côté Exchange l’accès de cette application à la boîte `info@label-ci.com`, avec la politique d’accès ou le mécanisme RBAC pris en charge par votre tenant. Un compte utilisateur avec accès à la boîte ne remplace pas ce réglage.
+Un administrateur Microsoft 365 doit préparer une application Entra pour LrStock, avec l’autorisation d’application `Mail.Send` et le consentement administrateur. Restreindre côté Exchange l’accès de cette application à la boîte indiquée par `LRSTOCK_EMAIL_SENDER`, avec la politique d’accès ou le mécanisme RBAC pris en charge par votre tenant. Un compte utilisateur avec accès à la boîte ne remplace pas ce réglage.
 
 Renseigner les variables du fichier `config/delivery.env.example` dans un fichier `.env` local, ignoré par Git. Ne jamais transmettre de secret dans la discussion ou le dépôt. Les trois valeurs Microsoft sont l’identifiant du tenant, l’identifiant de l’application et son secret d’application. Un certificat peut être ajouté ultérieurement ; ce prototype utilise un secret dédié, à durée limitée.
 
 Pour les destinataires, définir `LRSTOCK_TEST_EMAILS` avec uniquement les adresses d’essai autorisées, séparées par des virgules. Il est impossible d’envoyer réellement à une autre adresse dans cette version.
 
-Le message demande `LrStock <info@label-ci.com>` comme expéditeur et conserve une copie dans les éléments envoyés. Vérifier dans le premier email reçu l’adresse, le nom affiché, le PDF ou les images, et l’absence de classement en courrier indésirable. Le nom visible peut dépendre de l’annuaire Microsoft et des contacts du destinataire ; configurer aussi le nom de la boîte dans Microsoft si nécessaire.
+Le message demande `LrStock` et l’adresse `LRSTOCK_EMAIL_SENDER` comme expéditeur et conserve une copie dans les éléments envoyés. Vérifier dans le premier email reçu l’adresse, le nom affiché, le PDF ou les images, et l’absence de classement en courrier indésirable. Le nom visible peut dépendre de l’annuaire Microsoft et des contacts du destinataire ; configurer aussi le nom de la boîte dans Microsoft si nécessaire.
 
 [Documentation Microsoft Graph sendMail](https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0)
 
@@ -60,6 +60,20 @@ Définir `LRSTOCK_TEST_PHONES` avec les numéros internationaux autorisés, sép
 **Affichage LrStock :** un nom commercial peut être proposé pour le profil, sous réserve des règles de Meta. Ce prototype ne peut pas garantir que le numéro sera masqué. La documentation officielle indique notamment qu’une entreprise qui contacte une personne peut afficher son numéro même avec un nom d’utilisateur.
 
 [FAQ officielle WhatsApp](https://www.whatsapp.com/usernames-faq/) · [Exemples Meta de messages avec pièces jointes](https://www.postman.com/meta/whatsapp-business-platform/request/2qbotrb/send-message-template-media)
+
+## Diagnostic si « Essai réel » n’apparaît pas
+
+Le paramétrage dans Microsoft Entra ne change pas le mode de la démonstration. Il faut **à la fois** `LRSTOCK_DELIVERY_SIMULATE=false` dans le fichier `.env` à côté de `manage.py` et le lancement `py -3.12 start_demo.py --delivery-test`. Le lancement sans option reste volontairement en simulation.
+
+Sous Windows, vérifier que le fichier ne s’appelle pas `.env.txt`. Arrêter tous les anciens serveurs avec Ctrl+C, relancer depuis le bon dossier et ouvrir l’adresse affichée dans cette console. Le lanceur affiche maintenant le fichier utilisé, le mode d’envoi, l’expéditeur et la présence des paramètres Microsoft, sans afficher leurs valeurs secrètes. Si une variable est déjà définie dans l’environnement Windows ou PowerShell, elle a priorité sur `.env` ; la console affiche le résultat réellement chargé.
+
+Pour un diagnostic sans envoi :
+
+```powershell
+.\.venv\Scripts\python.exe manage.py delivery_status --settings=config.delivery_test_settings
+```
+
+Préparer ensuite un **nouvel** envoi. Un ancien essai conserve son mode et son expéditeur. Le changement d’expéditeur entre préparation et confirmation bloque l’envoi au lieu de changer silencieusement de boîte.
 
 ## 4. Passer de la simulation aux essais réels
 

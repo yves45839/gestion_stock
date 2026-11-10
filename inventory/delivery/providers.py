@@ -2,14 +2,15 @@
 import re
 import base64
 import json
+from urllib.parse import quote
 
 import requests
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 
 from .documents import batch_folder
 from .forms import normalize_phone
-
-SENDER = "LrStock <info@label-ci.com>"
 
 
 class DeliveryError(Exception):
@@ -23,6 +24,14 @@ def preflight(batch):
         raise DeliveryError("Le mode d’envoi a changé. Préparez à nouveau le document.")
     if not batch.attachments or not all((batch_folder(batch) / item["name"]).is_file() for item in batch.attachments):
         raise DeliveryError("Une pièce jointe a expiré. Préparez à nouveau le document.")
+    if "email" in batch.channels:
+        sender = settings.DOCUMENT_EMAIL_SENDER
+        try:
+            validate_email(sender)
+        except ValidationError:
+            raise DeliveryError("L’adresse email de l’expéditeur configuré est invalide.")
+        if batch.destinations.get("sender", "info@label-ci.com").casefold() != sender.casefold():
+            raise DeliveryError("L’adresse d’expéditeur a changé. Préparez un nouvel envoi.")
     if batch.simulated:
         return
     if "email" in batch.channels:
@@ -31,7 +40,7 @@ def preflight(batch):
             raise DeliveryError("Cet email ne figure pas parmi les destinataires de test autorisés.")
         identifier = r"[a-fA-F0-9]{8}-(?:[a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}"
         if not re.fullmatch(identifier, settings.DOCUMENT_MS_TENANT_ID) or not re.fullmatch(identifier, settings.DOCUMENT_MS_CLIENT_ID) or not settings.DOCUMENT_MS_CLIENT_SECRET:
-            raise DeliveryError("La connexion Microsoft 365 de info@label-ci.com n’est pas configurée.")
+            raise DeliveryError("La connexion Microsoft 365 de l’expéditeur n’est pas configurée.")
         graph_payload(batch)  # Check attachment size before contacting either provider.
     if "whatsapp" in batch.channels:
         try:
@@ -54,7 +63,7 @@ def graph_payload(batch):
         for item in batch.attachments]
     payload = {"message": {"subject": batch.subject,
         "body": {"contentType": "Text", "content": batch.message},
-        "from": {"emailAddress": {"name": "LrStock", "address": "info@label-ci.com"}},
+        "from": {"emailAddress": {"name": "LrStock", "address": batch.destinations.get("sender", "info@label-ci.com")}},
         "toRecipients": [{"emailAddress": {"address": batch.destinations["email"]}}],
         "attachments": attachments}, "saveToSentItems": True}
     if len(json.dumps(payload).encode()) > 3 * 1024 * 1024:
@@ -79,7 +88,8 @@ def email_send(batch):
     except (requests.RequestException, ValueError, KeyError):
         raise DeliveryError("La connexion Microsoft a échoué ; aucun email n’a été envoyé.")
     try:
-        response = requests.post("https://graph.microsoft.com/v1.0/users/info@label-ci.com/sendMail",
+        mailbox = quote(batch.destinations.get("sender", "info@label-ci.com"), safe="@.")
+        response = requests.post(f"https://graph.microsoft.com/v1.0/users/{mailbox}/sendMail",
             headers={"Authorization": "Bearer " + token, "client-request-id": str(batch.pk)},
             json=payload, timeout=30, allow_redirects=False)
         if response.status_code != 202:
