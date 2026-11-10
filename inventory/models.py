@@ -1348,3 +1348,17 @@ class SaleScan(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"Scan {self.raw_code} -> {self.product}"
+
+
+def profile_avatar_path(instance, filename):
+    return f"profiles/{instance.user_id}/{uuid.uuid4().hex}.jpg"
+
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="stock_profile",
+    )
+    avatar = models.ImageField(upload_to=profile_avatar_path, blank=True)
+
+    def __str__(self):
+        return self.user.get_username()

@@ -36,15 +36,16 @@
                 </details>
             {% endif %}
             <details class="header-menu profile-menu">
-                <summary class="profile-toggle" aria-label="Menu utilisateur : {{ request.user.get_full_name|default:request.user.username|default:'Invité' }}">
-                    <span class="user-avatar">{% include "inventory/partials/header_icon.html" with icon="user" %}</span>
-                    <span class="profile-name">{{ request.user.get_full_name|default:request.user.username|default:"Invité" }}</span>
+                <summary class="profile-toggle" aria-label="Menu utilisateur : {{ request.user.username|default:'Invité' }}">
+                    <span class="user-avatar">{% if request.user.stock_profile.avatar %}<img src="{{ request.user.stock_profile.avatar.url }}" alt="" width="38" height="38">{% else %}{% include "inventory/partials/header_icon.html" with icon="user" %}{% endif %}</span>
+                    <span class="profile-name">{{ request.user.username|default:"Invité" }}</span>
                     {% include "inventory/partials/header_icon.html" with icon="chevron" %}
                 </summary>
                 <div class="header-dropdown">
                     <a href="{% url 'inventory:sale_create' %}">{% include "inventory/partials/header_icon.html" with icon="cart" %} Nouvelle vente</a>
                     <a href="{% url 'inventory:record_movement' %}">{% include "inventory/partials/header_icon.html" with icon="movement" %} Mouvement</a>
                     {% if request.user.is_authenticated %}
+                        <a href="{% url 'inventory:user_profile' %}">{% include "inventory/partials/header_icon.html" with icon="user" %} Photo de profil</a>
                         <form method="post" action="{% url 'logout' %}" class="logout-form">
                             {% csrf_token %}<button type="submit">{% include "inventory/partials/header_icon.html" with icon="logout" %} Déconnexion</button>
                         </form>

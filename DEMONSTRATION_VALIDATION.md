@@ -46,3 +46,13 @@ Tous les accès existants restent disponibles ; Analyses, Inventaire physique, V
 Validation : 61 tests ciblés réussis (navigation, plafonds de crédit, fiches clients, éditeur, références et lanceur), `manage.py check`, absence de migrations manquantes et `git diff --check`. Chromium : sélection du site, onglet actif, menus, fermeture par Échap et clic extérieur, absence d’erreurs JavaScript et de débordement du bandeau et des menus aux largeurs 320, 375, 390, 600, 768, 960 et 1440 pixels. Les essais utilisent exclusivement la base de démonstration isolée.
 
 Aucune migration supplémentaire. Sur PythonAnywhere : récupérer `main`, exécuter `python manage.py collectstatic --noinput` dans l’environnement virtuel de l’application, puis **Web → Reload** et actualiser le navigateur. Le rechargement est nécessaire pour charger les modèles HTML. Le déploiement PythonAnywhere reste distinct de l’envoi GitHub ; il n’a pas été réalisé depuis cet environnement.
+
+## Bandeau compact et photo de profil — 10 novembre 2026
+
+Première ligne réduite de 90 à 59 px sur ordinateur (−34,4 % mesurés dans Chromium). Le nom de connexion est affiché seul, au lieu du nom complet ; aucun site n’est ajouté au nom du compte.
+
+Le menu utilisateur propose « Photo de profil » : chargement, remplacement ou suppression de sa propre photo. Formats JPG, PNG et WebP, maximum 5 Mo et 20 millions de pixels. L’image est réencodée en JPEG, sans métadonnées, limitée à 512 px et enregistrée sous un nom aléatoire dans `MEDIA_ROOT/profiles/`. Une icône reste affichée sans photo. Les anciennes photos sont supprimées après validation de l’enregistrement. Aucun compte n’est créé ou modifié par la consultation du formulaire.
+
+Migration requise : `0034_userprofile`. Sur PythonAnywhere, activer l’environnement virtuel puis récupérer `main`, exécuter `python manage.py migrate`, `python manage.py collectstatic --noinput` et `python manage.py check`, puis **Web → Reload**. Les photos utilisent la configuration des médias déjà employée pour les images des produits.
+
+Validation : 68 tests ciblés réussis, contrôles Django et migrations, `git diff --check`. Chromium : hauteur mesurée 59 px, chargement réel d’une photo, affichage dans le bandeau après changement de page, suppression et retour à l’icône, menus utilisateur accessibles sans débordement de 320 à 1440 px. Essais et migration limités à la démonstration isolée ; production PythonAnywhere non modifiée depuis cet environnement.

@@ -2,10 +2,12 @@ from django.contrib.auth.decorators import login_required
 from django.urls import path
 
 from . import views
+from .profile import user_profile
 
 app_name = "inventory"
 
 urlpatterns = [
+    path("mon-profil/", login_required(user_profile), name="user_profile"),
     path("documents/apercu/", login_required(views.draft_document_preview), name="draft_document_preview"),
     path("", login_required(views.dashboard), name="dashboard"),
     path("site/actif/", login_required(views.set_active_site), name="set_active_site"),

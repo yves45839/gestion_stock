@@ -1,0 +1,28 @@
+{% extends "inventory/base.html" %}
+{% block title %}Photo de profil — Gestion Stock{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div>
+        <h1 class="page-title">Photo de profil</h1>
+        <p class="lead">{{ request.user.username }}</p>
+    </div>
+</section>
+<section class="surface">
+    <form method="post" enctype="multipart/form-data" class="profile-photo-form">
+        {% csrf_token %}
+        <span class="user-avatar profile-photo-preview">
+            {% if profile.avatar %}<img src="{{ profile.avatar.url }}" alt="Votre photo de profil" width="112" height="112">
+            {% else %}{% include "inventory/partials/header_icon.html" with icon="user" %}{% endif %}
+        </span>
+        {{ form.non_field_errors }}
+        <div>
+            {{ form.avatar.label_tag }}
+            {{ form.avatar }}
+            <small>{{ form.avatar.help_text }}</small>
+            {{ form.avatar.errors }}
+        </div>
+        {% if profile.avatar %}<label>{{ form.remove_avatar }} {{ form.remove_avatar.label }}</label>{% endif %}
+        <button type="submit" class="btn">Enregistrer</button>
+    </form>
+</section>
+{% endblock %}
