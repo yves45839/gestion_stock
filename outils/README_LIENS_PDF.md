@@ -22,7 +22,7 @@ Copier son contenu :
 Get-Content "$env:USERPROFILE\Downloads\LR-PDF\commande-liens-simulation.txt" -Raw -Encoding UTF8 | Set-Clipboard
 ```
 
-Coller dans la console Bash de PythonAnywhere. Le code s'exécute depuis l'entrée de la console : il n'est pas nécessaire de téléverser un script ou une archive sur le compte plein. La simulation ne crée aucun lien et ne modifie aucun PDF ni aucune donnée de base.
+Coller dans la console Bash de PythonAnywhere. Le code est envoyé par le `printf` intégré à Bash dans un tube, sans créer de fichier temporaire : il n'est pas nécessaire de téléverser un script ou une archive sur le compte plein. La simulation ne crée aucun lien et ne modifie aucun PDF ni aucune donnée de base.
 
 Si les chemins ou les contenus ne correspondent plus à la sauvegarde locale, le programme s'arrête avant tout remplacement. Si les permissions ou les systèmes de fichiers diffèrent, les copies concernées sont ignorées.
 

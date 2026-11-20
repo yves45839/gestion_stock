@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 import tempfile
 import json
+import shlex
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -98,8 +100,12 @@ class ShareTests(unittest.TestCase):
             command=prepare_command(path).read_text()
             self.assertIn('apply=False',command)
             self.assertIn(manifest_signature([('products/datasheets/a.pdf','a'*64)]),command)
-            body=command.split("<<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
+            tokens=shlex.split(command)
+            body=tokens[tokens.index('printf')+2]
             compile(body,'server-command','exec')
+            pipe_source=command.split('&&\n',1)[1].rsplit(' | ',1)[0]
+            output=subprocess.run(['bash','-c',pipe_source],capture_output=True,text=True,check=True).stdout
+            self.assertEqual(output,body+'\n')
 
     def test_report_data_cannot_inject_python_into_generated_command(self):
         with tempfile.TemporaryDirectory() as folder:

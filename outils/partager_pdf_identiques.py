@@ -11,6 +11,7 @@ import inspect
 import json
 import os
 from pathlib import Path
+import shlex
 import stat
 import uuid
 
@@ -110,15 +111,18 @@ def prepare_command(report_path, apply=False):
         pairs.append((name, value))
     expected = manifest_signature(pairs)
     core = '\n\n'.join(inspect.getsource(function) for function in (fingerprint, manifest_signature, share_pdfs))
-    command = (
-        "cd /home/samr/gestion_stock &&\n"
-        "PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python manage.py shell <<'PY'\n"
+    program = (
         "from collections import defaultdict\nimport hashlib, os, stat, uuid\nfrom pathlib import Path\n"
         "from django.conf import settings\nfrom inventory.models import Product\n\n"
         + core + '\n\n'
         + "noms = [str(n) for n in Product.objects.values_list('datasheet_pdf', flat=True) if n]\n"
-        + f"share_pdfs(settings.MEDIA_ROOT, noms, {expected!r}, apply={apply!r})\nPY\n"
+        + f"share_pdfs(settings.MEDIA_ROOT, noms, {expected!r}, apply={apply!r})\n"
     )
+    # Bash may put a long here-document in /tmp, which is also over quota.
+    # Its built-in printf feeds a pipe without creating a temporary file.
+    command = ("cd /home/samr/gestion_stock &&\n"
+               "printf '%s\\n' " + shlex.quote(program)
+               + " | PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python manage.py shell\n")
     destination = report_path.parent / ('commande-liens-appliquer.txt' if apply else 'commande-liens-simulation.txt')
     destination.write_text(command, encoding='utf-8', newline='\n')
     print('Commande préparée sur le PC :', destination)
