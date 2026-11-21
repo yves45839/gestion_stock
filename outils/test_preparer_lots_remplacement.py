@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -49,10 +50,12 @@ class BatchTests(unittest.TestCase):
         self.report['files']['deleted'] = {'status': 'absent_serveur_ne_pas_retablir'}
         for size in (tool.LIMIT, tool.LIMIT + 1):
             key = f'products/images/big{size}.png'
-            self.report['files'][key] = {'status': 'selectionne', 'kind': 'image', 'path': key, 'output_bytes': size}
+            self.add(key, original=b'A' * (size + 1), compressed=b'B' * size, kind='image')
         _, manifest = self.run_build()
         self.assertEqual(sum(len(b['files']) for b in manifest['batches']), 1)
         self.assertEqual(manifest['excluded'], {'non_selectionnes': 1, 'au_moins_1_mo': 2})
+        self.assertEqual(len(manifest['removals']), 2)
+        self.assertEqual(manifest['large_file_policy'], 'remove_backed_up_server_original')
 
     def test_one_byte_below_limit_included(self):
         self.add(original=b'A' * (tool.LIMIT + 1), compressed=b'B' * (tool.LIMIT - 1))
@@ -97,6 +100,77 @@ class BatchTests(unittest.TestCase):
         with patch.object(tool, 'BATCH_LIMIT', 3):
             _, manifest = self.run_build()
         self.assertEqual(len(manifest['batches']), 2)
+
+    def test_large_removal_requires_both_verified_local_copies(self):
+        self.add(original=b'A' * (tool.LIMIT + 1), compressed=b'B' * tool.LIMIT)
+        (self.root / 'LR-PDF/compresses/products/datasheets/a.pdf').write_bytes(b'bad')
+        with self.assertRaises(ValueError):
+            self.run_build()
+
+    def test_unchanged_large_file_is_removed_only_with_verified_backup(self):
+        row = self.add(original=b'A' * (tool.LIMIT + 1), compressed=b'B')
+        self.report['files'][row['path']] = {'path': row['path'], 'kind': 'pdf', 'status': 'sans_version_compressee'}
+        raw = {'site': tool.SITE, 'files': {row['path']: {'original_bytes': row['original_bytes'],
+                'original_sha256': row['original_sha256'], 'status': 'pas de gain — conserver original'}}}
+        (self.root / 'LR-PDF/rapport.json').write_text(json.dumps(raw))
+        _, manifest = self.run_build()
+        self.assertEqual(len(manifest['removals']), 1)
+        self.assertTrue(manifest['removals'][0]['server_existence_unverified'])
+        self.assertEqual(manifest['batches'], [])
+
+    def test_server_preflight_checks_all_before_deletion(self):
+        root = self.root / 'server'
+        rows = []
+        for name in ('a.pdf', 'b.pdf'):
+            key = 'products/datasheets/' + name
+            path = root / key
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'original')
+            rows.append({'path': key, 'original_bytes': 8, 'original_sha256': hashlib.sha256(b'original').hexdigest(),
+                         'output_bytes': tool.LIMIT})
+        (root / rows[1]['path']).write_bytes(b'changed!')
+        with self.assertRaises(ValueError):
+            tool.retire_server(root, rows, apply=True)
+        self.assertTrue(all((root / row['path']).exists() for row in rows))
+
+    def test_server_simulation_and_application_preserve_unlisted_hardlink(self):
+        root = self.root / 'server'
+        key = 'products/datasheets/a.pdf'
+        path = root / key
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b'original')
+        sibling = path.with_name('manual.pdf')
+        os.link(path, sibling)
+        rows = [{'path': key, 'original_bytes': 8, 'original_sha256': hashlib.sha256(b'original').hexdigest(),
+                 'output_bytes': tool.LIMIT}]
+        self.assertEqual(tool.retire_server(root, rows), 0)
+        self.assertTrue(path.exists())
+        self.assertEqual(tool.retire_server(root, rows, apply=True), 0)
+        self.assertFalse(path.exists())
+        self.assertEqual(sibling.read_bytes(), b'original')
+        self.assertEqual(tool.retire_server(root, rows, apply=True), 0)
+
+    def test_server_refuses_small_files_and_symlinks(self):
+        root = self.root / 'server'
+        root.mkdir()
+        with self.assertRaises(ValueError):
+            tool.retire_server(root, [{'path': 'products/images/a', 'output_bytes': 12}], apply=True)
+        outside = self.root / 'outside'
+        outside.write_bytes(b'x')
+        link = root / 'products/images/a'
+        link.parent.mkdir(parents=True)
+        link.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            tool.retire_server(root, [{'path': 'products/images/a', 'output_bytes': tool.LIMIT}], apply=True)
+        self.assertEqual(outside.read_bytes(), b'x')
+
+    def test_generated_command_is_standalone_and_simulates_by_default(self):
+        import subprocess
+        # Empty list makes a safe real shell check of quoting and standalone imports.
+        command = tool.removal_command([]).replace('/home/samr/gestion_stock/venv/bin/python', 'python')
+        result = subprocess.run(['bash', '-c', command], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Aucun fichier serveur modifié', result.stdout)
 
 
 if __name__ == '__main__':
