@@ -45,7 +45,17 @@ class SpaceTests(unittest.TestCase):
         copy[0] = 'products/datasheets/b.pdf'
         result = self.check([row, copy])
         self.assertEqual(result['freed'], file.stat().st_blocks * 512)
-        self.assertEqual(result['new_blocks'], os.statvfs(self.media).f_frsize)
+        self.assertEqual(result['new_blocks'], result['allocation_unit'])
+        self.assertEqual(result['logical_bytes'], 3)
+
+    def test_virtual_one_mib_filesystem_unit_does_not_inflate_payloads(self):
+        from types import SimpleNamespace
+        file, row = self.add()
+        with patch('os.statvfs', return_value=SimpleNamespace(f_frsize=1048576)):
+            result = self.check([row])
+        self.assertEqual(result['logical_bytes'], 3)
+        self.assertEqual(result['allocation_unit'], max(4096, file.stat().st_blocks * 512))
+        self.assertLess(result['new_blocks'], 1048576)
 
     def test_unlisted_hardlink_prevents_reclaim(self):
         file, row = self.add()

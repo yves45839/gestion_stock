@@ -15,7 +15,11 @@ Cette commande ne crée, ne retire et ne remplace aucun fichier. Elle vérifie l
 présence et le SHA256 des originaux des 736 remplacements. Les absences et modifications
 sont signalées, sans restauration. Elle mesure le compte par `du -s -B1`, calcule les
 blocs récupérables seulement quand tous les liens d'un inode figurent dans la liste,
-et arrondit la taille de chaque contenu compressé au bloc du système de fichiers.
+et affiche séparément la taille logique des contenus compressés et leur allocation
+estimée. L'arrondi est déduit du PGCD des allocations observées (`st_blocks * 512`),
+avec un minimum prudent de 4 Kio. `statvfs.f_frsize` n'est pas utilisé : sur certains
+systèmes hébergés, cette valeur comptable virtuelle vaut 1 Mio alors que les fichiers
+occupent des blocs beaucoup plus petits. L'allocation future reste une estimation.
 Les contenus de sortie identiques sont comptés une seule fois : cette projection
 suppose qu'un installateur préserve effectivement leur partage par liens physiques.
 

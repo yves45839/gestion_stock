@@ -12,8 +12,8 @@ import zlib
 
 def server_check(rows, root='/home/samr/gestion_stock/media', home='/home/samr'):
     import hashlib
+    import math
     from pathlib import Path
-    import os
     import stat
     import subprocess
 
@@ -58,8 +58,17 @@ def server_check(rows, root='/home/samr/gestion_stock/media', home='/home/samr')
             raise ValueError('Taille incohérente pour un contenu compressé.')
         payloads[new_hash] = new_size
     freed = sum(info.st_blocks * 512 for info, count in inode_counts.values() if info.st_nlink == count)
-    fs_block = os.statvfs(root).f_frsize or 4096
-    new_blocks = sum(((size + fs_block - 1) // fs_block) * fs_block for size in payloads.values())
+    # Some hosted filesystems report statvfs.f_frsize=1 MiB although existing
+    # regular files are allocated in 4 KiB units. Do not round every payload to
+    # that virtual accounting unit. Infer an estimate from observed allocations;
+    # it remains an estimate, not a measured allocation of the future files.
+    allocation_unit = 0
+    for info, count in inode_counts.values():
+        if info.st_blocks:
+            allocation_unit = math.gcd(allocation_unit, info.st_blocks * 512)
+    allocation_unit = max(4096, allocation_unit)
+    logical_bytes = sum(payloads.values())
+    new_blocks = sum(((size + allocation_unit - 1) // allocation_unit) * allocation_unit for size in payloads.values())
     # du counts hardlinks once across the entire home and includes dotfiles.
     result = subprocess.run(['du', '-s', '-B1', str(home)], capture_output=True, text=True, check=True)
     used = int(result.stdout.split()[0])
@@ -74,7 +83,10 @@ def server_check(rows, root='/home/samr/gestion_stock/media', home='/home/samr')
         print('MODIFIÉ :', path)
     print('Occupation actuelle exacte : %.2f Mo' % (used / 1048576))
     print('Blocs libérables des originaux conformes : %.2f Mo' % (freed / 1048576))
-    print('Blocs des versions compressées partagées : %.2f Mo' % (new_blocks / 1048576))
+    print('Contenus compressés uniques :', len(payloads))
+    print('Taille réelle des contenus compressés partagés : %.2f Mo' % (logical_bytes / 1048576))
+    print('Pas d’allocation estimé d’après les fichiers existants :', allocation_unit, 'octets')
+    print('Blocs estimés des versions compressées partagées : %.2f Mo' % (new_blocks / 1048576))
     print('Occupation finale estimée hors journaux et staging : %.2f Mo' % (projected / 1048576))
     print('Marge estimée sur 512 Mo : %.2f Mo' % ((quota - projected) / 1048576))
     if missing or changed:
@@ -85,7 +97,8 @@ def server_check(rows, root='/home/samr/gestion_stock/media', home='/home/samr')
         print('Marge estimée suffisante ; la capacité de staging reste à organiser par lots.')
     print('AUCUN fichier supprimé, transféré ou modifié.')
     return {'valid': valid, 'missing': missing, 'changed': changed, 'used': used,
-            'freed': freed, 'new_blocks': new_blocks, 'projected': projected}
+            'freed': freed, 'new_blocks': new_blocks, 'projected': projected,
+            'logical_bytes': logical_bytes, 'allocation_unit': allocation_unit}
 
 
 def prepare(manifest_path):
