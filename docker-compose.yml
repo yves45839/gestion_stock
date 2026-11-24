@@ -1,0 +1,63 @@
+# Déploiement complet : application web, worker Celery, PostgreSQL et Redis.
+# Usage : cp .env.production.example .env   (puis remplir les valeurs)
+#         docker compose up -d --build
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_ENGINE: django.db.backends.postgresql
+      DATABASE_HOST: db
+      DATABASE_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    volumes:
+      - media:/app/media
+      - appvar:/app/var
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_ENGINE: django.db.backends.postgresql
+      DATABASE_HOST: db
+      DATABASE_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      RUN_MIGRATIONS: "false"
+    command: celery -A config worker --loglevel=info --pool=solo
+    volumes:
+      - media:/app/media
+      - appvar:/app/var
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-gestion_stock}
+      POSTGRES_USER: ${DATABASE_USER:-gestion_stock}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Definir DATABASE_PASSWORD dans .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  media:
+  appvar:
