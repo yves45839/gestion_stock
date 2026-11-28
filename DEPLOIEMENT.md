@@ -57,6 +57,33 @@ docker compose cp media/. web:/app/media/
 
 ## Sauvegardes
 
+Le script `scripts/sauvegarde.sh` exporte la base PostgreSQL (compressée, 14 jours
+conservés) et copie le dossier `media/` dans `~/sauvegardes`.
+
+Lancer une sauvegarde à la main :
 ```bash
-docker compose exec db pg_dump -U gestion_stock gestion_stock > sauvegarde.sql
+~/gestion_stock/scripts/sauvegarde.sh
+```
+
+Planifier une sauvegarde chaque nuit à 2 h 15 (UTC) :
+```bash
+mkdir -p ~/sauvegardes
+(crontab -l 2>/dev/null | grep -v sauvegarde.sh; \
+ echo "15 2 * * * $HOME/gestion_stock/scripts/sauvegarde.sh >> $HOME/sauvegardes/journal.log 2>&1") | crontab -
+```
+
+Ces sauvegardes sont sur la même machine que l'application : elles protègent d'une
+erreur de manipulation, pas de la perte de la machine. En récupérer une copie ailleurs
+régulièrement, par exemple depuis un PC :
+```bash
+scp -P 22000 -r ubuntu@<relais>:sauvegardes/base .
+```
+
+Restaurer une sauvegarde de la base (remplace les données actuelles) :
+```bash
+cd ~/gestion_stock
+docker compose stop web worker
+gunzip -c ~/sauvegardes/base/base-AAAAMMJJ-HHMMSS.sql.gz | \
+  docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE \"$POSTGRES_DB\" WITH (FORCE)" -c "CREATE DATABASE \"$POSTGRES_DB\"" && psql -U "$POSTGRES_USER" "$POSTGRES_DB"'
+docker compose start web worker
 ```
