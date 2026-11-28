@@ -263,7 +263,7 @@ class Product(VersionedModelMixin, TimeStampedModel):
         blank=True,
         null=True,
     )
-    barcode = models.CharField("Code-barres", max_length=128, blank=True, null=True, unique=True)
+    barcode = models.CharField("Code-barres", max_length=255, blank=True, null=True, unique=True)
     minimum_stock = models.PositiveIntegerField("Stock minimal", default=0)
     purchase_price = models.DecimalField(
         "Prix d'achat", max_digits=10, decimal_places=2, blank=True, null=True
@@ -297,6 +297,7 @@ class Product(VersionedModelMixin, TimeStampedModel):
     )
     datasheet_url = models.URLField(
         "Fiche technique (URL)",
+        max_length=1000,
         blank=True,
         null=True,
     )
@@ -421,7 +422,7 @@ class ProductBrochure(TimeStampedModel):
         related_name="brochures",
     )
     title = models.CharField("Titre", max_length=255, blank=True)
-    source_url = models.URLField("Source", blank=True)
+    source_url = models.URLField("Source", max_length=1000, blank=True)
     file = models.FileField(
         "Brochure (PDF)",
         upload_to="products/brochures",
@@ -459,7 +460,7 @@ class ProductAsset(TimeStampedModel):
     )
     asset_type = models.CharField(max_length=20, choices=AssetType.choices)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
-    source_url = models.URLField(blank=True)
+    source_url = models.URLField(max_length=1000, blank=True)
     file = models.FileField(
         upload_to="products/assets",
         blank=True,

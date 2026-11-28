@@ -1,0 +1,13 @@
+.git
+.venv
+.venv-*
+__pycache__
+*.py[cod]
+.env
+db.sqlite3
+/media
+/backups
+/staticfiles
+/var
+*.log
+forms_old.txt

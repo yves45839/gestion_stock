@@ -60,6 +60,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Sert les fichiers statiques collectés en production (Gunicorn/Docker).
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -115,15 +117,20 @@ else:
     if not p.is_absolute():
         database_name = BASE_DIR / database_name
 
+DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", "django.db.backends.sqlite3")
+
 DATABASES = {
     "default": {
-        "ENGINE": os.getenv("DATABASE_ENGINE", "django.db.backends.sqlite3"),
-        "NAME": database_name,
+        "ENGINE": DATABASE_ENGINE,
+        # Pour SQLite, NAME est un chemin ; pour PostgreSQL, le nom de la base.
+        "NAME": database_name if DATABASE_ENGINE.endswith("sqlite3") else os.getenv("DATABASE_NAME"),
         "USER": os.getenv("DATABASE_USER", ""),
         "PASSWORD": os.getenv("DATABASE_PASSWORD", ""),
         "HOST": os.getenv("DATABASE_HOST", ""),
         "PORT": os.getenv("DATABASE_PORT", ""),
-        "OPTIONS": {"timeout": 20},
+        # « timeout » est propre à SQLite : PostgreSQL le refuserait.
+        "OPTIONS": {"timeout": 20} if DATABASE_ENGINE.endswith("sqlite3") else {},
+        "CONN_MAX_AGE": int(os.getenv("DATABASE_CONN_MAX_AGE", "0")),
     }
 }
 
@@ -166,8 +173,29 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {
+        'BACKEND': (
+            'django.contrib.staticfiles.storage.StaticFilesStorage'
+            if DEBUG
+            else 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+        ),
+    },
+}
+
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = Path(os.getenv('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
+
+# En production sans serveur web dédié aux fichiers envoyés (cas d'un
+# conteneur seul), Django sert lui-même /media/ si cette option est active.
+SERVE_MEDIA = os.getenv('DJANGO_SERVE_MEDIA', 'False').lower() in ('1', 'true', 'yes')
+
+# Derrière le proxy HTTPS de l'hébergeur cloud.
+if os.getenv('DJANGO_BEHIND_HTTPS_PROXY', 'False').lower() in ('1', 'true', 'yes'):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
